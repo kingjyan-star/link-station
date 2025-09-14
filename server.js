@@ -16,7 +16,18 @@ const io = socketIo(server, {
 const PORT = process.env.PORT || 3001;
 
 // 정적 파일 서빙 (React 빌드 파일)
-app.use(express.static(path.join(__dirname, 'client/build')));
+app.use(express.static(path.join(__dirname, 'client/build'), {
+  index: false,
+  setHeaders: (res, path) => {
+    if (path.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    } else if (path.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    } else if (path.endsWith('.json')) {
+      res.setHeader('Content-Type', 'application/json');
+    }
+  }
+}));
 
 // 게임 방 관리
 const rooms = new Map();
@@ -174,6 +185,15 @@ io.on('connection', (socket) => {
       }
     }
   });
+});
+
+// 정적 파일 명시적 라우트
+app.get('/static/*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'client/build', req.path));
+});
+
+app.get('/*.(js|css|json)', (req, res) => {
+  res.sendFile(path.join(__dirname, 'client/build', req.path));
 });
 
 // React 앱 라우트 - 모든 경로에 대해 React 앱 서빙
