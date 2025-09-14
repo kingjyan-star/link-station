@@ -6,7 +6,7 @@ import './App.css';
 
 const SERVER_URL = process.env.NODE_ENV === 'production' 
   ? window.location.origin 
-  : 'http://localhost:3001';
+  : 'http://localhost:3002';
 
 function App() {
   const [socket, setSocket] = useState(null);
@@ -25,7 +25,15 @@ function App() {
   console.log('NODE_ENV:', process.env.NODE_ENV);
 
   useEffect(() => {
-    const newSocket = io(SERVER_URL);
+    console.log('App component mounted');
+    console.log('SERVER_URL:', SERVER_URL);
+    
+    const newSocket = io(SERVER_URL, {
+      transports: ['websocket', 'polling'],
+      timeout: 20000,
+      forceNew: true
+    });
+    
     setSocket(newSocket);
 
     // URL에서 방 ID 가져오기
@@ -35,22 +43,22 @@ function App() {
       setRoomId(roomFromUrl);
     }
 
-    // 디버깅을 위한 로그
-    console.log('App component mounted');
-    console.log('SERVER_URL:', SERVER_URL);
-    console.log('Socket connected:', newSocket.connected);
-    
     // Socket 연결 상태 모니터링
     newSocket.on('connect', () => {
-      console.log('Socket connected successfully');
+      console.log('✅ Socket connected successfully');
+      console.log('Socket ID:', newSocket.id);
     });
     
-    newSocket.on('disconnect', () => {
-      console.log('Socket disconnected');
+    newSocket.on('disconnect', (reason) => {
+      console.log('❌ Socket disconnected:', reason);
     });
     
     newSocket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
+      console.error('❌ Socket connection error:', error);
+    });
+    
+    newSocket.on('error', (error) => {
+      console.error('❌ Socket error:', error);
     });
 
     // 사용자 목록 업데이트
@@ -295,13 +303,6 @@ function App() {
   return (
     <ErrorBoundary>
       <div className="App">
-        <div style={{ padding: '20px', backgroundColor: '#f0f0f0', minHeight: '100vh' }}>
-          <h1 style={{ color: 'red', fontSize: '24px' }}>🔧 디버깅 모드 - 링크 스테이션</h1>
-          <p>현재 뷰: {currentView}</p>
-          <p>NODE_ENV: {process.env.NODE_ENV}</p>
-          <p>SERVER_URL: {SERVER_URL}</p>
-          <p>Socket 연결 상태: {socket ? (socket.connected ? '연결됨' : '연결 안됨') : '없음'}</p>
-        </div>
         {currentView === 'login' && renderLogin()}
         {currentView === 'matching' && renderMatching()}
         {currentView === 'result' && renderResult()}

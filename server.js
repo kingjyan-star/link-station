@@ -13,7 +13,7 @@ const io = socketIo(server, {
   }
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
 
 // 정적 파일 서빙 (React 빌드 파일)
 app.use(express.static(path.join(__dirname, 'client/build')));
@@ -177,7 +177,7 @@ io.on('connection', (socket) => {
 });
 
 // React 앱 라우트 (모든 경로)
-app.get('*', (req, res) => {
+app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
 });
 
