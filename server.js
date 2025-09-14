@@ -18,11 +18,6 @@ const PORT = process.env.PORT || 3001;
 // 정적 파일 서빙 (React 빌드 파일)
 app.use(express.static(path.join(__dirname, 'client/build')));
 
-// 정적 파일 우선 처리
-app.use('/static', express.static(path.join(__dirname, 'client/build/static')));
-app.use('/favicon.ico', express.static(path.join(__dirname, 'client/build/favicon.ico')));
-app.use('/manifest.json', express.static(path.join(__dirname, 'client/build/manifest.json')));
-
 // 게임 방 관리
 const rooms = new Map();
 
