@@ -19,6 +19,11 @@ function App() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [showQR, setShowQR] = useState(false);
 
+  // 디버깅을 위한 강제 렌더링 확인
+  console.log('App component rendering...');
+  console.log('currentView:', currentView);
+  console.log('NODE_ENV:', process.env.NODE_ENV);
+
   useEffect(() => {
     const newSocket = io(SERVER_URL);
     setSocket(newSocket);
@@ -290,6 +295,13 @@ function App() {
   return (
     <ErrorBoundary>
       <div className="App">
+        <div style={{ padding: '20px', backgroundColor: '#f0f0f0', minHeight: '100vh' }}>
+          <h1 style={{ color: 'red', fontSize: '24px' }}>🔧 디버깅 모드 - 링크 스테이션</h1>
+          <p>현재 뷰: {currentView}</p>
+          <p>NODE_ENV: {process.env.NODE_ENV}</p>
+          <p>SERVER_URL: {SERVER_URL}</p>
+          <p>Socket 연결 상태: {socket ? (socket.connected ? '연결됨' : '연결 안됨') : '없음'}</p>
+        </div>
         {currentView === 'login' && renderLogin()}
         {currentView === 'matching' && renderMatching()}
         {currentView === 'result' && renderResult()}
