@@ -16,18 +16,7 @@ const io = socketIo(server, {
 const PORT = process.env.PORT || 3001;
 
 // 정적 파일 서빙 (React 빌드 파일)
-app.use(express.static(path.join(__dirname, 'client/build'), {
-  index: false,
-  setHeaders: (res, path) => {
-    if (path.endsWith('.js')) {
-      res.setHeader('Content-Type', 'application/javascript');
-    } else if (path.endsWith('.css')) {
-      res.setHeader('Content-Type', 'text/css');
-    } else if (path.endsWith('.json')) {
-      res.setHeader('Content-Type', 'application/json');
-    }
-  }
-}));
+app.use(express.static(path.join(__dirname, 'client/build')));
 
 // 게임 방 관리
 const rooms = new Map();
@@ -185,19 +174,6 @@ io.on('connection', (socket) => {
       }
     }
   });
-});
-
-// 정적 파일 라우트 (우선순위 높음)
-app.get('/static/*', (req, res) => {
-  const filePath = path.join(__dirname, 'client/build', req.path);
-  console.log('Static file request:', req.path, '->', filePath);
-  res.sendFile(filePath);
-});
-
-app.get('/*.(js|css|json)', (req, res) => {
-  const filePath = path.join(__dirname, 'client/build', req.path);
-  console.log('Asset file request:', req.path, '->', filePath);
-  res.sendFile(filePath);
 });
 
 // React 앱 라우트 (모든 경로)
