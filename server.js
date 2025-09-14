@@ -187,16 +187,20 @@ io.on('connection', (socket) => {
   });
 });
 
-// 정적 파일 명시적 라우트
+// 정적 파일 라우트 (우선순위 높음)
 app.get('/static/*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'client/build', req.path));
+  const filePath = path.join(__dirname, 'client/build', req.path);
+  console.log('Static file request:', req.path, '->', filePath);
+  res.sendFile(filePath);
 });
 
 app.get('/*.(js|css|json)', (req, res) => {
-  res.sendFile(path.join(__dirname, 'client/build', req.path));
+  const filePath = path.join(__dirname, 'client/build', req.path);
+  console.log('Asset file request:', req.path, '->', filePath);
+  res.sendFile(filePath);
 });
 
-// React 앱 라우트 - 모든 경로에 대해 React 앱 서빙
+// React 앱 라우트 (모든 경로)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
 });
