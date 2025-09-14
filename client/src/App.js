@@ -34,6 +34,19 @@ function App() {
     console.log('App component mounted');
     console.log('SERVER_URL:', SERVER_URL);
     console.log('Socket connected:', newSocket.connected);
+    
+    // Socket 연결 상태 모니터링
+    newSocket.on('connect', () => {
+      console.log('Socket connected successfully');
+    });
+    
+    newSocket.on('disconnect', () => {
+      console.log('Socket disconnected');
+    });
+    
+    newSocket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
+    });
 
     // 사용자 목록 업데이트
     newSocket.on('userList', (data) => {
@@ -62,8 +75,16 @@ function App() {
 
   const handleJoinRoom = (e) => {
     e.preventDefault();
+    console.log('handleJoinRoom called');
+    console.log('nickname:', nickname);
+    console.log('roomId:', roomId);
+    console.log('socket:', socket);
+    
     if (nickname && roomId && socket) {
+      console.log('Sending joinRoom event');
       socket.emit('joinRoom', { roomId, nickname });
+    } else {
+      console.log('Missing required data:', { nickname, roomId, socket: !!socket });
     }
   };
 
