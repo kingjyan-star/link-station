@@ -8,7 +8,7 @@
     "dev": "nodemon server.js",
     "build": "cd client && npm run build",
     "deploy": "npm run build && npm start",
-    "vercel-build": "cd client && npm run build && xcopy /E /I /Y build ..\\build",
+    "vercel-build": "cd client && npm run build && cp -r build ../build",
     "build:client": "cd client && npm run build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
