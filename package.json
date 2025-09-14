@@ -8,7 +8,8 @@
     "dev": "nodemon server.js",
     "build": "cd client && npm run build",
     "deploy": "npm run build && npm start",
-    "vercel-build": "cd client && npm run build",
+    "vercel-build": "cd client && npm run build && npm run build:server",
+    "build:server": "echo 'Server build complete'",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
