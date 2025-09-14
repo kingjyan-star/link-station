@@ -16,7 +16,7 @@ const io = socketIo(server, {
 const PORT = process.env.PORT || 3001;
 
 // 정적 파일 서빙 (React 빌드 파일)
-app.use(express.static(path.join(__dirname, 'client/build')));
+app.use(express.static(path.join(__dirname, 'build')));
 
 // 게임 방 관리
 const rooms = new Map();
@@ -178,7 +178,7 @@ io.on('connection', (socket) => {
 
 // React 앱 라우트 - 모든 경로에 대해 React 앱 서빙
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
+  res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
 
 server.listen(PORT, () => {
