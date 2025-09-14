@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 import { QRCodeSVG } from 'qrcode.react';
+import ErrorBoundary from './ErrorBoundary';
 import './App.css';
 
 const SERVER_URL = process.env.NODE_ENV === 'production' 
@@ -28,6 +29,11 @@ function App() {
     if (roomFromUrl) {
       setRoomId(roomFromUrl);
     }
+
+    // 디버깅을 위한 로그
+    console.log('App component mounted');
+    console.log('SERVER_URL:', SERVER_URL);
+    console.log('Socket connected:', newSocket.connected);
 
     // 사용자 목록 업데이트
     newSocket.on('userList', (data) => {
@@ -261,11 +267,13 @@ function App() {
   );
 
   return (
-    <div className="App">
-      {currentView === 'login' && renderLogin()}
-      {currentView === 'matching' && renderMatching()}
-      {currentView === 'result' && renderResult()}
-    </div>
+    <ErrorBoundary>
+      <div className="App">
+        {currentView === 'login' && renderLogin()}
+        {currentView === 'matching' && renderMatching()}
+        {currentView === 'result' && renderResult()}
+      </div>
+    </ErrorBoundary>
   );
 }
 

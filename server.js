@@ -179,7 +179,7 @@ io.on('connection', (socket) => {
 });
 
 // React 앱 라우트 - 모든 경로에 대해 React 앱 서빙
-app.use((req, res) => {
+app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
 });
 
