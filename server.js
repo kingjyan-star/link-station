@@ -16,9 +16,7 @@ const io = socketIo(server, {
 const PORT = process.env.PORT || 3001;
 
 // 정적 파일 서빙 (React 빌드 파일)
-app.use(express.static(path.join(__dirname, 'client/build'), {
-  index: false
-}));
+app.use(express.static(path.join(__dirname, 'client/build')));
 
 // 게임 방 관리
 const rooms = new Map();
@@ -176,17 +174,6 @@ io.on('connection', (socket) => {
       }
     }
   });
-});
-
-// 정적 파일 명시적 라우트 (우선순위 높음)
-app.get('/static/*', (req, res) => {
-  console.log('Static file request:', req.path);
-  res.sendFile(path.join(__dirname, 'client/build', req.path));
-});
-
-app.get('/*.(js|css|json|ico|png|jpg|jpeg|gif|svg)', (req, res) => {
-  console.log('Asset file request:', req.path);
-  res.sendFile(path.join(__dirname, 'client/build', req.path));
 });
 
 // React 앱 라우트 (모든 경로)
