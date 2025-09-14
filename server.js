@@ -53,9 +53,13 @@ function processMatching(roomId) {
 
   const matches = [];
   const unmatched = [];
+  const processedUsers = new Set(); // 이미 처리된 사용자 추적
   
   // 선택 결과를 분석하여 매칭 처리
   for (const [userId, selectedUserId] of selections) {
+    // 이미 처리된 사용자는 건너뛰기
+    if (processedUsers.has(userId)) continue;
+    
     const user = room.users.get(userId);
     const selectedUser = room.users.get(selectedUserId);
     
@@ -65,9 +69,14 @@ function processMatching(roomId) {
         user1: user,
         user2: selectedUser
       });
+      
+      // 두 사용자 모두 처리됨으로 표시
+      processedUsers.add(userId);
+      processedUsers.add(selectedUserId);
     } else {
       // 매칭 실패
       unmatched.push(user);
+      processedUsers.add(userId);
     }
   }
 
@@ -94,8 +103,13 @@ function processMatching(roomId) {
       roomId
     });
   } else {
-    // 방이 비었으면 삭제
-    rooms.delete(roomId);
+    // 방이 비었으면 5분 후 삭제 (새 게임을 위한 대기 시간)
+    setTimeout(() => {
+      if (rooms.has(roomId) && rooms.get(roomId).users.size === 0) {
+        rooms.delete(roomId);
+        console.log(`방 ${roomId}이 5분 후 삭제되었습니다.`);
+      }
+    }, 5 * 60 * 1000); // 5분
   }
 }
 

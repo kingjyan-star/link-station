@@ -69,12 +69,42 @@ function App() {
   };
 
   const handleNewGame = () => {
+    // 소켓 연결 해제 후 재연결
+    if (socket) {
+      socket.disconnect();
+    }
+    
+    // 상태 초기화
     setCurrentView('login');
     setUsers([]);
     setMatches([]);
     setUnmatched([]);
     setSelectedUser(null);
     setShowQR(false);
+    
+    // 새로운 소켓 연결
+    const newSocket = io(SERVER_URL);
+    setSocket(newSocket);
+    
+    // 이벤트 리스너 재설정
+    newSocket.on('userList', (data) => {
+      setUsers(data.users);
+      setCurrentView('matching');
+    });
+
+    newSocket.on('matchResult', (data) => {
+      setMatches(data.matches);
+      setUnmatched(data.unmatched);
+      setCurrentView('result');
+    });
+
+    newSocket.on('nextRound', (data) => {
+      setUsers(data.users);
+      setCurrentView('matching');
+      setSelectedUser(null);
+      setMatches([]);
+      setUnmatched([]);
+    });
   };
 
   const generateRoomURL = () => {
@@ -117,22 +147,6 @@ function App() {
           </button>
         </form>
 
-        {roomId && (
-          <div className="qr-section">
-            <button 
-              className="qr-button"
-              onClick={() => setShowQR(!showQR)}
-            >
-              {showQR ? 'QR코드 숨기기' : 'QR코드로 공유하기'}
-            </button>
-            {showQR && (
-              <div className="qr-container">
-                <QRCodeSVG value={generateRoomURL()} size={200} />
-                <p className="qr-text">QR코드를 스캔하여 같은 방에 참여하세요!</p>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -142,6 +156,21 @@ function App() {
       <div className="matching-header">
         <h2>🔗 링크 스테이션</h2>
         <p>방 ID: {roomId} | 참여자: {users.length}명</p>
+        
+        <div className="qr-section">
+          <button 
+            className="qr-button"
+            onClick={() => setShowQR(!showQR)}
+          >
+            {showQR ? 'QR코드 숨기기' : 'QR코드로 공유하기'}
+          </button>
+          {showQR && (
+            <div className="qr-container">
+              <QRCodeSVG value={generateRoomURL()} size={200} />
+              <p className="qr-text">QR코드를 스캔하여 같은 방에 참여하세요!</p>
+            </div>
+          )}
+        </div>
       </div>
       
       <div className="users-list">
@@ -180,6 +209,21 @@ function App() {
       <div className="result-header">
         <h2>🎉 매칭 결과</h2>
         <p>방 ID: {roomId}</p>
+        
+        <div className="qr-section">
+          <button 
+            className="qr-button"
+            onClick={() => setShowQR(!showQR)}
+          >
+            {showQR ? 'QR코드 숨기기' : 'QR코드로 공유하기'}
+          </button>
+          {showQR && (
+            <div className="qr-container">
+              <QRCodeSVG value={generateRoomURL()} size={200} />
+              <p className="qr-text">QR코드를 스캔하여 같은 방에 참여하세요!</p>
+            </div>
+          )}
+        </div>
       </div>
       
       {matches.length > 0 && (
