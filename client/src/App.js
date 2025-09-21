@@ -1,23 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import io from 'socket.io-client';
+import React, { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import ErrorBoundary from './ErrorBoundary';
 import './App.css';
 
-const SERVER_URL = process.env.NODE_ENV === 'production' 
+const API_URL = process.env.NODE_ENV === 'production' 
   ? window.location.origin 
-  : 'http://localhost:3002';
+  : 'http://localhost:3000';
 
 function App() {
-  const [socket, setSocket] = useState(null);
   const [currentView, setCurrentView] = useState('login'); // login, matching, result
   const [nickname, setNickname] = useState('');
   const [roomId, setRoomId] = useState('');
+  const [userId, setUserId] = useState('');
   const [users, setUsers] = useState([]);
   const [matches, setMatches] = useState([]);
   const [unmatched, setUnmatched] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [showQR, setShowQR] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const pollingInterval = useRef(null);
 
   // 디버깅을 위한 강제 렌더링 확인
   console.log('App component rendering...');
@@ -26,16 +28,8 @@ function App() {
 
   useEffect(() => {
     console.log('App component mounted');
-    console.log('SERVER_URL:', SERVER_URL);
+    console.log('API_URL:', API_URL);
     
-    const newSocket = io(SERVER_URL, {
-      transports: ['websocket', 'polling'],
-      timeout: 20000,
-      forceNew: true
-    });
-    
-    setSocket(newSocket);
-
     // URL에서 방 ID 가져오기
     const urlParams = new URLSearchParams(window.location.search);
     const roomFromUrl = urlParams.get('room');
@@ -43,77 +37,135 @@ function App() {
       setRoomId(roomFromUrl);
     }
 
-    // Socket 연결 상태 모니터링
-    newSocket.on('connect', () => {
-      console.log('✅ Socket connected successfully');
-      console.log('Socket ID:', newSocket.id);
-    });
-    
-    newSocket.on('disconnect', (reason) => {
-      console.log('❌ Socket disconnected:', reason);
-    });
-    
-    newSocket.on('connect_error', (error) => {
-      console.error('❌ Socket connection error:', error);
-    });
-    
-    newSocket.on('error', (error) => {
-      console.error('❌ Socket error:', error);
-    });
-
-    // 사용자 목록 업데이트
-    newSocket.on('userList', (data) => {
-      setUsers(data.users);
-      setCurrentView('matching');
-    });
-
-    // 매칭 결과
-    newSocket.on('matchResult', (data) => {
-      setMatches(data.matches);
-      setUnmatched(data.unmatched);
-      setCurrentView('result');
-    });
-
-    // 다음 라운드
-    newSocket.on('nextRound', (data) => {
-      setUsers(data.users);
-      setCurrentView('matching');
-      setSelectedUser(null);
-      setMatches([]);
-      setUnmatched([]);
-    });
-
-    return () => newSocket.close();
+    return () => {
+      // 컴포넌트 언마운트 시 폴링 정리
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current);
+      }
+    };
   }, []);
 
-  const handleJoinRoom = (e) => {
+  // 방 상태 폴링
+  const pollRoomStatus = async () => {
+    if (!roomId) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/api/room/${roomId}`);
+      const data = await response.json();
+      
+      if (data.success && data.room) {
+        setUsers(data.room.users);
+        if (data.room.users.length > 0) {
+          setCurrentView('matching');
+        }
+      }
+    } catch (error) {
+      console.error('Error polling room status:', error);
+    }
+  };
+
+  // 폴링 시작
+  const startPolling = () => {
+    if (pollingInterval.current) {
+      clearInterval(pollingInterval.current);
+    }
+    pollingInterval.current = setInterval(pollRoomStatus, 2000); // 2초마다 폴링
+  };
+
+  // 폴링 중지
+  const stopPolling = () => {
+    if (pollingInterval.current) {
+      clearInterval(pollingInterval.current);
+      pollingInterval.current = null;
+    }
+  };
+
+  const handleJoinRoom = async (e) => {
     e.preventDefault();
     console.log('handleJoinRoom called');
     console.log('nickname:', nickname);
     console.log('roomId:', roomId);
-    console.log('socket:', socket);
     
-    if (nickname && roomId && socket) {
-      console.log('Sending joinRoom event');
-      socket.emit('joinRoom', { roomId, nickname });
-    } else {
-      console.log('Missing required data:', { nickname, roomId, socket: !!socket });
+    if (!nickname || !roomId) {
+      setError('닉네임과 방 ID를 모두 입력해주세요.');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch(`${API_URL}/api/join`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomId,
+          nickname
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setUserId(data.userId);
+        setUsers(data.users);
+        setCurrentView('matching');
+        startPolling();
+      } else {
+        setError(data.message || '방 참여에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Error joining room:', error);
+      setError('방 참여 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleSelectUser = (userId) => {
-    if (socket && roomId) {
-      socket.emit('selectUser', { roomId, selectedUserId: userId });
-      setSelectedUser(userId);
+  const handleSelectUser = async (selectedUserId) => {
+    if (!userId || !roomId) return;
+
+    setIsLoading(true);
+    
+    try {
+      const response = await fetch(`${API_URL}/api/select`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomId,
+          userId,
+          selectedUserId
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setSelectedUser(selectedUserId);
+        
+        if (data.matches || data.unmatched) {
+          // 매칭 결과가 있음
+          setMatches(data.matches || []);
+          setUnmatched(data.unmatched || []);
+          setCurrentView('result');
+          stopPolling();
+        }
+      } else {
+        setError(data.message || '선택에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Error selecting user:', error);
+      setError('선택 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleNewGame = () => {
-    // 소켓 연결 해제 후 재연결
-    if (socket) {
-      socket.disconnect();
-    }
-    
     // 상태 초기화
     setCurrentView('login');
     setUsers([]);
@@ -121,30 +173,9 @@ function App() {
     setUnmatched([]);
     setSelectedUser(null);
     setShowQR(false);
-    
-    // 새로운 소켓 연결
-    const newSocket = io(SERVER_URL);
-    setSocket(newSocket);
-    
-    // 이벤트 리스너 재설정
-    newSocket.on('userList', (data) => {
-      setUsers(data.users);
-      setCurrentView('matching');
-    });
-
-    newSocket.on('matchResult', (data) => {
-      setMatches(data.matches);
-      setUnmatched(data.unmatched);
-      setCurrentView('result');
-    });
-
-    newSocket.on('nextRound', (data) => {
-      setUsers(data.users);
-      setCurrentView('matching');
-      setSelectedUser(null);
-      setMatches([]);
-      setUnmatched([]);
-    });
+    setUserId('');
+    setError('');
+    stopPolling();
   };
 
   const generateRoomURL = () => {
@@ -157,6 +188,8 @@ function App() {
         <h1 className="app-title">🔗 링크 스테이션</h1>
         <p className="app-subtitle">3:3 또는 4:4 매칭 게임</p>
         
+        {error && <div className="error-message">{error}</div>}
+        
         <form onSubmit={handleJoinRoom} className="login-form">
           <div className="input-group">
             <label htmlFor="nickname">닉네임</label>
@@ -167,6 +200,7 @@ function App() {
               onChange={(e) => setNickname(e.target.value)}
               placeholder="닉네임을 입력하세요"
               required
+              disabled={isLoading}
             />
           </div>
           
@@ -179,14 +213,14 @@ function App() {
               onChange={(e) => setRoomId(e.target.value)}
               placeholder="방 ID를 입력하세요"
               required
+              disabled={isLoading}
             />
           </div>
           
-          <button type="submit" className="join-button">
-            게임 시작
+          <button type="submit" className="join-button" disabled={isLoading}>
+            {isLoading ? '참여 중...' : '게임 시작'}
           </button>
         </form>
-
       </div>
     </div>
   );
@@ -220,13 +254,13 @@ function App() {
             <div key={user.id} className="user-card">
               <div className="user-info">
                 <span className="user-nickname">{user.nickname}</span>
-                {user.id === socket?.id && <span className="you-badge">나</span>}
+                {user.id === userId && <span className="you-badge">나</span>}
               </div>
-              {user.id !== socket?.id && (
+              {user.id !== userId && (
                 <button
                   className={`select-button ${selectedUser === user.id ? 'selected' : ''}`}
                   onClick={() => handleSelectUser(user.id)}
-                  disabled={selectedUser !== null}
+                  disabled={selectedUser !== null || isLoading}
                 >
                   {selectedUser === user.id ? '선택됨' : '선택'}
                 </button>
@@ -239,6 +273,12 @@ function App() {
       {selectedUser && (
         <div className="selection-info">
           <p>✅ 선택을 완료했습니다. 다른 참여자들의 선택을 기다리는 중...</p>
+        </div>
+      )}
+      
+      {isLoading && (
+        <div className="loading-info">
+          <p>처리 중...</p>
         </div>
       )}
     </div>
