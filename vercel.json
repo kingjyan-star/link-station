@@ -15,19 +15,15 @@
   ],
   "rewrites": [
     {
-      "source": "/static/(.*)",
-      "destination": "/client/build/static/$1"
+      "source": "/static/:path*",
+      "destination": "/client/build/static/:path*"
     },
     {
-      "source": "/(.*\\.(js|css|json|ico|png|jpg|jpeg|gif|svg))",
-      "destination": "/client/build/$1"
-    },
-    {
-      "source": "/socket.io/(.*)",
+      "source": "/socket.io/:path*",
       "destination": "/server.js"
     },
     {
-      "source": "/(.*)",
+      "source": "/:path*",
       "destination": "/client/build/index.html"
     }
   ]
