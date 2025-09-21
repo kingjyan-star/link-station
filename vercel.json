@@ -8,5 +8,19 @@
         "distDir": "build"
       }
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/static/:path*",
+      "destination": "/build/static/:path*"
+    },
+    {
+      "source": "/:file",
+      "destination": "/build/:file"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/build/index.html"
+    }
   ]
 }
