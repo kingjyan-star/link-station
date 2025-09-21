@@ -13,18 +13,22 @@
       "use": "@vercel/node"
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/static/(.*)",
-      "dest": "/build/static/$1"
+      "source": "/static/(.*)",
+      "destination": "/client/build/static/$1"
     },
     {
-      "src": "/(.*\\.(js|css|json|ico|png|jpg|jpeg|gif|svg))",
-      "dest": "/build/$1"
+      "source": "/(.*\\.(js|css|json|ico|png|jpg|jpeg|gif|svg))",
+      "destination": "/client/build/$1"
     },
     {
-      "src": "/(.*)",
-      "dest": "server.js"
+      "source": "/socket.io/(.*)",
+      "destination": "/server.js"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/client/build/index.html"
     }
   ]
 }
