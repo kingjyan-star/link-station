@@ -34,13 +34,25 @@ app.post('/api/join', (req, res) => {
   const room = rooms.get(roomId);
   const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
+  // 같은 닉네임이 이미 있는지 확인하고 고유하게 만들기
+  let displayName = nickname;
+  let nameCount = 1;
+  while (Array.from(room.users.values()).some(u => u.displayName === displayName)) {
+    displayName = `${nickname}(${nameCount})`;
+    nameCount++;
+  }
+  
   const user = {
     id: userId,
     nickname,
+    displayName,
     joinedAt: new Date().toISOString()
   };
   
   room.users.set(userId, user);
+  
+  console.log(`User joined: ${displayName} in room ${roomId}`);
+  console.log(`Room now has ${room.users.size} users`);
   
   res.json({
     success: true,
@@ -53,6 +65,8 @@ app.post('/api/join', (req, res) => {
 app.post('/api/select', (req, res) => {
   const { roomId, userId, selectedUserId } = req.body;
   
+  console.log(`Selection: ${userId} selects ${selectedUserId} in room ${roomId}`);
+  
   const room = rooms.get(roomId);
   if (!room) {
     return res.status(404).json({ success: false, message: 'Room not found' });
@@ -60,9 +74,13 @@ app.post('/api/select', (req, res) => {
   
   room.selections.set(userId, selectedUserId);
   
+  console.log(`Selections so far: ${room.selections.size}/${room.users.size}`);
+  
   // 매칭 처리
   const users = Array.from(room.users.values());
   if (room.selections.size === users.length) {
+    console.log('All users have selected, processing matches...');
+    
     const matches = [];
     const unmatched = [];
     const processedUsers = new Set();
@@ -80,9 +98,11 @@ app.post('/api/select', (req, res) => {
         });
         processedUsers.add(userId);
         processedUsers.add(selectedUserId);
+        console.log(`Match found: ${user.displayName} <-> ${selectedUser.displayName}`);
       } else {
         unmatched.push(user);
         processedUsers.add(userId);
+        console.log(`No match for: ${user.displayName}`);
       }
     }
     
@@ -93,6 +113,8 @@ app.post('/api/select', (req, res) => {
       room.selections.delete(match.user1.id);
       room.selections.delete(match.user2.id);
     });
+    
+    console.log(`Results: ${matches.length} matches, ${unmatched.length} unmatched`);
     
     res.json({
       success: true,

@@ -253,7 +253,7 @@ function App() {
           {users.map(user => (
             <div key={user.id} className="user-card">
               <div className="user-info">
-                <span className="user-nickname">{user.nickname}</span>
+                <span className="user-nickname">{user.displayName || user.nickname}</span>
                 {user.id === userId && <span className="you-badge">나</span>}
               </div>
               {user.id !== userId && (
@@ -312,9 +312,9 @@ function App() {
           {matches.map((match, index) => (
             <div key={index} className="match-card success">
               <div className="match-pair">
-                <span className="user-name">{match.user1.nickname}</span>
+                <span className="user-name">{match.user1.displayName || match.user1.nickname}</span>
                 <span className="match-arrow">↔️</span>
-                <span className="user-name">{match.user2.nickname}</span>
+                <span className="user-name">{match.user2.displayName || match.user2.nickname}</span>
               </div>
               <p className="match-message">축하합니다! 파트너가 되셨습니다! 🎊</p>
             </div>
@@ -327,7 +327,7 @@ function App() {
           <h3>😔 매칭 실패</h3>
           {unmatched.map((user, index) => (
             <div key={index} className="match-card fail">
-              <span className="user-name">{user.nickname}</span>
+              <span className="user-name">{user.displayName || user.nickname}</span>
               <p className="match-message">아쉽네요. 다음 라운드에 도전하세요!</p>
             </div>
           ))}
