@@ -54,6 +54,8 @@ function App() {
       const data = await response.json();
       
       if (data.success && data.room) {
+        console.log('Polling update - Room users:', data.room.users);
+        console.log('My userId:', userId);
         setUsers(data.room.users);
         if (data.room.users.length > 0) {
           setCurrentView('matching');
@@ -108,7 +110,11 @@ function App() {
 
       const data = await response.json();
       
+      console.log('Join response:', data);
+      
       if (data.success) {
+        console.log('Setting userId:', data.userId);
+        console.log('Setting users:', data.users);
         setUserId(data.userId);
         setUsers(data.users);
         setCurrentView('matching');
