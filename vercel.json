@@ -4,6 +4,16 @@
     {
       "src": "**/*",
       "use": "@vercel/static"
+    },
+    {
+      "src": "server.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/socket.io/(.*)",
+      "destination": "/server.js"
     }
   ]
 }
