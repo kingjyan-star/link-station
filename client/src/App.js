@@ -148,8 +148,7 @@ function App() {
         setCurrentView('waiting');
         setDebugInfo(`Joined: ${data.users.length} users, Host: ${data.isHost}, State: ${data.gameState}`);
         
-        // 대기실에서도 실시간 폴링 (2초마다)
-        startPolling(2000);
+        // 대기실에서는 폴링하지 않음 (게임 시작 시에만 폴링 시작)
       } else {
         setError(data.message || '방 참여에 실패했습니다.');
       }
@@ -202,6 +201,30 @@ function App() {
     }
   };
 
+
+  const handleRefreshRoom = async () => {
+    if (!roomId) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/api/room/${roomId}`);
+      const data = await response.json();
+      
+      if (data.success && data.room) {
+        console.log('Room refreshed - Users:', data.room.users);
+        setUsers(data.room.users);
+        setGameState(data.room.gameState);
+        
+        // 호스트 정보 업데이트
+        if (data.room.hostId) {
+          setIsHost(data.room.hostId === userId);
+        }
+        
+        setDebugInfo(`Refreshed: ${data.room.users.length} users, Host: ${data.room.hostId === userId}, State: ${data.room.gameState}`);
+      }
+    } catch (error) {
+      console.error('Error refreshing room:', error);
+    }
+  };
 
   const handleStartGame = async () => {
     if (!isHost) return;
@@ -376,6 +399,15 @@ function App() {
             </div>
           ))}
         </div>
+      </div>
+      
+      <div className="room-controls">
+        <button 
+          className="refresh-button"
+          onClick={handleRefreshRoom}
+        >
+          새로고침
+        </button>
       </div>
       
       {isHost && (
