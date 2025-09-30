@@ -63,10 +63,15 @@ function App() {
         setUsers(data.room.users);
         setGameState(data.room.gameState);
         
-        // 게임 상태에 따라 뷰 변경
-        if (data.room.gameState === 'waiting') {
+        // 호스트 정보 업데이트
+        if (data.room.hostId) {
+          setIsHost(data.room.hostId === userId);
+        }
+        
+        // 게임 상태에 따라 뷰 변경 (단, 이미 결과 화면이면 변경하지 않음)
+        if (data.room.gameState === 'waiting' && currentView !== 'result') {
           setCurrentView('waiting');
-        } else if (data.room.gameState === 'matching') {
+        } else if (data.room.gameState === 'matching' && currentView !== 'result') {
           setCurrentView('matching');
         } else if (data.room.gameState === 'completed' && data.matchResult) {
           console.log('Match result received via polling:', data.matchResult);
@@ -356,7 +361,7 @@ function App() {
               <div className="user-info">
                 <span className="user-nickname">{user.displayName || user.nickname}</span>
                 {user.id === userId && <span className="you-badge">나</span>}
-                {user.id === users.find(u => u.id === userId)?.id && isHost && <span className="host-badge">방장</span>}
+                {user.id === userId && isHost && <span className="host-badge">방장</span>}
               </div>
             </div>
           ))}
@@ -419,7 +424,7 @@ function App() {
                 <span className="user-nickname">{user.displayName || user.nickname}</span>
                 {user.id === userId && <span className="you-badge">나</span>}
               </div>
-              {user.id !== userId && (
+              {user.id !== userId && gameState === 'matching' && (
                 <button
                   className={`select-button ${selectedUser === user.id ? 'selected' : ''}`}
                   onClick={() => handleSelectUser(user.id)}
@@ -433,7 +438,13 @@ function App() {
         </div>
       </div>
       
-      {selectedUser && (
+      {gameState === 'waiting' && (
+        <div className="waiting-message">
+          <p>방장이 게임을 시작할 때까지 기다려주세요...</p>
+        </div>
+      )}
+      
+      {selectedUser && gameState === 'matching' && (
         <div className="selection-info">
           <p>✅ 선택을 완료했습니다. 다른 참여자들의 선택을 기다리는 중...</p>
         </div>
