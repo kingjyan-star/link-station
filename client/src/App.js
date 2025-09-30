@@ -22,6 +22,7 @@ function App() {
   const [isHost, setIsHost] = useState(false);
   const [gameState, setGameState] = useState('waiting');
   const pollingInterval = useRef(null);
+  const [debugInfo, setDebugInfo] = useState('');
 
   // 디버깅을 위한 강제 렌더링 확인
   console.log('App component rendering...');
@@ -68,6 +69,8 @@ function App() {
         if (data.room.hostId) {
           setIsHost(data.room.hostId === userId);
         }
+        
+        setDebugInfo(`Polling: ${data.room.users.length} users, Host: ${data.room.hostId === userId}, State: ${data.room.gameState}`);
         
         // 게임 상태에 따라 뷰 변경
         if (data.room.gameState === 'matching' && currentView === 'waiting') {
@@ -143,6 +146,7 @@ function App() {
         setIsHost(data.isHost);
         setGameState(data.gameState);
         setCurrentView('waiting');
+        setDebugInfo(`Joined: ${data.users.length} users, Host: ${data.isHost}, State: ${data.gameState}`);
         
         // 대기실에서도 실시간 폴링 (2초마다)
         startPolling(2000);
@@ -396,6 +400,15 @@ function App() {
       )}
       
       {error && <div className="error-message">{error}</div>}
+      
+      <div style={{position: 'fixed', top: '10px', right: '10px', background: 'rgba(0,0,0,0.8)', color: 'white', padding: '10px', fontSize: '12px', zIndex: 1000}}>
+        <div>View: {currentView}</div>
+        <div>Users: {users.length}</div>
+        <div>IsHost: {isHost.toString()}</div>
+        <div>GameState: {gameState}</div>
+        <div>UserId: {userId}</div>
+        <div>{debugInfo}</div>
+      </div>
     </div>
   );
 
