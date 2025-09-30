@@ -68,10 +68,8 @@ function App() {
           setIsHost(data.room.hostId === userId);
         }
         
-        // 게임 상태에 따라 뷰 변경 (단, 이미 결과 화면이면 변경하지 않음)
-        if (data.room.gameState === 'waiting' && currentView !== 'result') {
-          setCurrentView('waiting');
-        } else if (data.room.gameState === 'matching' && currentView !== 'result') {
+        // 게임 상태에 따라 뷰 변경 (대기실에서는 뷰 변경하지 않음)
+        if (data.room.gameState === 'matching' && currentView === 'waiting') {
           setCurrentView('matching');
         } else if (data.room.gameState === 'completed' && data.matchResult) {
           console.log('Match result received via polling:', data.matchResult);
@@ -142,7 +140,11 @@ function App() {
         setIsHost(data.isHost);
         setGameState(data.gameState);
         setCurrentView('waiting');
-        startPolling();
+        
+        // 대기실에서는 폴링하지 않음 (게임 시작 시에만 폴링 시작)
+        if (data.gameState !== 'waiting') {
+          startPolling();
+        }
       } else {
         setError(data.message || '방 참여에 실패했습니다.');
       }
@@ -219,6 +221,7 @@ function App() {
         console.log('Game started successfully');
         setGameState('matching');
         setCurrentView('matching');
+        startPolling(); // 게임 시작 시 폴링 시작
       } else {
         setError(data.message || '게임 시작에 실패했습니다.');
       }
@@ -257,6 +260,7 @@ function App() {
         setMatches([]);
         setUnmatched([]);
         setSelectedUser(null);
+        stopPolling(); // 대기실로 돌아가면 폴링 중지
       } else {
         setError(data.message || '대기실로 돌아가기에 실패했습니다.');
       }
