@@ -62,13 +62,11 @@ function App() {
         console.log('Game state:', data.room.gameState);
         console.log('Current users state before update:', users);
         
-        // 대기실에서는 사용자 목록만 업데이트
+        // 대기실에서는 사용자 목록만 업데이트 (호스트 상태는 변경하지 않음)
         if (currentView === 'waiting') {
           setUsers(data.room.users);
-          if (data.room.hostId) {
-            setIsHost(data.room.hostId === userId);
-          }
-          setDebugInfo(`Waiting room update: ${data.room.users.length} users, Host: ${data.room.hostId === userId}`);
+          // 호스트 상태는 초기 join에서만 설정하고, 폴링에서는 변경하지 않음
+          setDebugInfo(`Waiting room update: ${data.room.users.length} users, Host: ${isHost}, MyUserId: ${userId}`);
         } else {
           // 게임 중에는 모든 상태 업데이트
           setUsers(data.room.users);
@@ -157,8 +155,7 @@ function App() {
         setCurrentView('waiting');
         setDebugInfo(`Joined: ${data.users.length} users, Host: ${data.isHost}, State: ${data.gameState}`);
         
-        // 대기실에서 가벼운 폴링 (5초마다, 사용자 목록만 업데이트)
-        startPolling(5000);
+        // 대기실에서는 폴링하지 않음 - 사용자가 수동으로 새로고침해야 함
       } else {
         setError(data.message || '방 참여에 실패했습니다.');
       }
@@ -212,6 +209,26 @@ function App() {
   };
 
 
+
+  const handleRefreshRoom = async () => {
+    if (!roomId) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/api/room/${roomId}`);
+      const data = await response.json();
+      
+      if (data.success && data.room) {
+        console.log('Room refreshed - Users:', data.room.users);
+        setUsers(data.room.users);
+        setGameState(data.room.gameState);
+        
+        // 호스트 정보는 변경하지 않음 (초기 설정 유지)
+        setDebugInfo(`Refreshed: ${data.room.users.length} users, Host: ${isHost}, MyUserId: ${userId}`);
+      }
+    } catch (error) {
+      console.error('Error refreshing room:', error);
+    }
+  };
 
   const handleStartGame = async () => {
     if (!isHost) return;
@@ -388,6 +405,14 @@ function App() {
         </div>
       </div>
       
+      <div className="room-controls">
+        <button 
+          className="refresh-button"
+          onClick={handleRefreshRoom}
+        >
+          새로고침
+        </button>
+      </div>
       
       {isHost && (
         <div className="host-controls">
