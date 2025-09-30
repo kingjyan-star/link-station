@@ -404,6 +404,26 @@ body {
   font-style: italic;
 }
 
+.refresh-button {
+  background: #ff9ff3;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 15px;
+  font-size: 0.9rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 10px;
+  box-shadow: 0 2px 8px rgba(255, 159, 243, 0.3);
+}
+
+.refresh-button:hover {
+  background: #ff7eb3;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 159, 243, 0.4);
+}
+
 /* Result Actions */
 .result-actions {
   display: flex;

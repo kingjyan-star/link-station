@@ -69,8 +69,9 @@ function App() {
           setIsHost(data.room.hostId === userId);
         }
         
-        // 게임 상태에 따라 뷰 변경 (대기실에서는 뷰 변경하지 않음)
+        // 게임 상태에 따라 뷰 변경
         if (data.room.gameState === 'matching' && currentView === 'waiting') {
+          console.log('Game started by host, moving to matching view');
           setCurrentView('matching');
         } else if (data.room.gameState === 'completed' && data.matchResult) {
           console.log('Match result received via polling:', data.matchResult);
@@ -143,8 +144,8 @@ function App() {
         setGameState(data.gameState);
         setCurrentView('waiting');
         
-        // 대기실과 게임 중 모두 빠른 폴링 (2초마다)
-        startPolling(2000); // 2초마다 폴링
+        // 대기실에서도 실시간 폴링 (2초마다)
+        startPolling(2000);
       } else {
         setError(data.message || '방 참여에 실패했습니다.');
       }
@@ -196,6 +197,7 @@ function App() {
       setIsLoading(false);
     }
   };
+
 
   const handleStartGame = async () => {
     if (!isHost) return;
