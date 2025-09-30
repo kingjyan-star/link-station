@@ -151,7 +151,7 @@ function App() {
         setIsHost(data.isHost);
         setGameState(data.gameState);
         setCurrentView('waiting');
-        setDebugInfo(`Joined: ${data.users.length} users, Host: ${data.isHost}, State: ${data.gameState}`);
+        setDebugInfo(`Joined: ${data.users.length} users, Host: ${data.isHost}, State: ${data.gameState}, UserId: ${data.userId}, HostId: ${data.isHost ? 'ME' : 'OTHER'}`);
         
         // 대기실에서는 폴링하지 않음 - 사용자가 수동으로 새로고침해야 함
         // 폴링 완전 비활성화
@@ -411,6 +411,11 @@ function App() {
         >
           새로고침
         </button>
+      </div>
+      
+      {/* Debug: Show host status */}
+      <div style={{background: 'yellow', padding: '10px', margin: '10px', color: 'black'}}>
+        DEBUG: isHost = {isHost.toString()}, users.length = {users.length}
       </div>
       
       {isHost && (
