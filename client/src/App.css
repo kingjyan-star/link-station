@@ -342,6 +342,96 @@ body {
   transform: translateY(-2px);
 }
 
+/* Waiting Room Styles */
+.waiting-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  color: white;
+}
+
+.waiting-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.host-badge {
+  background: #ff6b6b;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  margin-left: 8px;
+  font-weight: bold;
+}
+
+.host-controls {
+  text-align: center;
+  margin-top: 30px;
+}
+
+.start-game-button {
+  background: #4ecdc4;
+  color: white;
+  border: none;
+  padding: 15px 30px;
+  border-radius: 25px;
+  font-size: 1.1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(78, 205, 196, 0.3);
+}
+
+.start-game-button:hover:not(:disabled) {
+  background: #45b7b8;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(78, 205, 196, 0.4);
+}
+
+.start-game-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.waiting-message {
+  text-align: center;
+  margin-top: 20px;
+  color: #f0f0f0;
+  font-style: italic;
+}
+
+/* Result Actions */
+.result-actions {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  margin-top: 30px;
+  flex-wrap: wrap;
+}
+
+.return-waiting-button {
+  background: #ff9ff3;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 20px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(255, 159, 243, 0.3);
+}
+
+.return-waiting-button:hover {
+  background: #ff7eb3;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 159, 243, 0.4);
+}
+
 /* 반응형 디자인 */
 @media (max-width: 768px) {
   .App {

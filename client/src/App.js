@@ -8,7 +8,7 @@ const API_URL = process.env.NODE_ENV === 'production'
   : 'http://localhost:3000';
 
 function App() {
-  const [currentView, setCurrentView] = useState('login'); // login, matching, result
+  const [currentView, setCurrentView] = useState('login'); // login, waiting, matching, result
   const [nickname, setNickname] = useState('');
   const [roomId, setRoomId] = useState('');
   const [userId, setUserId] = useState('');
@@ -19,6 +19,8 @@ function App() {
   const [showQR, setShowQR] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isHost, setIsHost] = useState(false);
+  const [gameState, setGameState] = useState('waiting');
   const pollingInterval = useRef(null);
 
   // 디버깅을 위한 강제 렌더링 확인
@@ -56,18 +58,21 @@ function App() {
       if (data.success && data.room) {
         console.log('Polling update - Room users:', data.room.users);
         console.log('My userId:', userId);
-        setUsers(data.room.users);
-        if (data.room.users.length > 0) {
-          setCurrentView('matching');
-        }
+        console.log('Game state:', data.room.gameState);
         
-        // 매칭 결과가 있으면 처리
-        if (data.matchResult) {
+        setUsers(data.room.users);
+        setGameState(data.room.gameState);
+        
+        // 게임 상태에 따라 뷰 변경
+        if (data.room.gameState === 'waiting') {
+          setCurrentView('waiting');
+        } else if (data.room.gameState === 'matching') {
+          setCurrentView('matching');
+        } else if (data.room.gameState === 'completed' && data.matchResult) {
           console.log('Match result received via polling:', data.matchResult);
           setMatches(data.matchResult.matches || []);
           setUnmatched(data.matchResult.unmatched || []);
           setCurrentView('result');
-          stopPolling();
         }
       }
     } catch (error) {
@@ -124,9 +129,14 @@ function App() {
       if (data.success) {
         console.log('Setting userId:', data.userId);
         console.log('Setting users:', data.users);
+        console.log('Is host:', data.isHost);
+        console.log('Game state:', data.gameState);
+        
         setUserId(data.userId);
         setUsers(data.users);
-        setCurrentView('matching');
+        setIsHost(data.isHost);
+        setGameState(data.gameState);
+        setCurrentView('waiting');
         startPolling();
       } else {
         setError(data.message || '방 참여에 실패했습니다.');
@@ -180,21 +190,80 @@ function App() {
     }
   };
 
-  const handleNewGame = async () => {
-    // 서버에서 방 초기화
-    if (roomId) {
-      try {
-        await fetch(`${API_URL}/api/reset/${roomId}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        });
-      } catch (error) {
-        console.error('Error resetting room:', error);
-      }
-    }
+  const handleStartGame = async () => {
+    if (!isHost) return;
     
+    setIsLoading(true);
+    setError('');
+    
+    try {
+      const response = await fetch(`${API_URL}/api/start-game`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomId,
+          userId
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log('Game started successfully');
+        setGameState('matching');
+        setCurrentView('matching');
+      } else {
+        setError(data.message || '게임 시작에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Error starting game:', error);
+      setError('게임 시작 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleReturnToWaiting = async () => {
+    if (!isHost) return;
+    
+    setIsLoading(true);
+    setError('');
+    
+    try {
+      const response = await fetch(`${API_URL}/api/return-to-waiting`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomId,
+          userId
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log('Returned to waiting room');
+        setGameState('waiting');
+        setCurrentView('waiting');
+        setMatches([]);
+        setUnmatched([]);
+        setSelectedUser(null);
+      } else {
+        setError(data.message || '대기실로 돌아가기에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Error returning to waiting room:', error);
+      setError('대기실로 돌아가는 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleNewGame = async () => {
     // 상태 초기화
     setCurrentView('login');
     setUsers([]);
@@ -203,6 +272,8 @@ function App() {
     setSelectedUser(null);
     setShowQR(false);
     setUserId('');
+    setIsHost(false);
+    setGameState('waiting');
     setError('');
     stopPolling();
   };
@@ -251,6 +322,69 @@ function App() {
           </button>
         </form>
       </div>
+    </div>
+  );
+
+  const renderWaiting = () => (
+    <div className="waiting-container">
+      <div className="waiting-header">
+        <h2>🔗 링크 스테이션</h2>
+        <p>방 ID: {roomId} | 참여자: {users.length}명</p>
+        {isHost && <span className="host-badge">방장</span>}
+        
+        <div className="qr-section">
+          <button 
+            className="qr-button"
+            onClick={() => setShowQR(!showQR)}
+          >
+            {showQR ? 'QR코드 숨기기' : 'QR코드로 공유하기'}
+          </button>
+          {showQR && (
+            <div className="qr-container">
+              <QRCodeSVG value={generateRoomURL()} size={200} />
+              <p className="qr-text">QR코드를 스캔하여 같은 방에 참여하세요!</p>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <div className="users-list">
+        <h3>참여자 목록</h3>
+        <div className="users-grid">
+          {users.map(user => (
+            <div key={user.id} className="user-card">
+              <div className="user-info">
+                <span className="user-nickname">{user.displayName || user.nickname}</span>
+                {user.id === userId && <span className="you-badge">나</span>}
+                {user.id === users.find(u => u.id === userId)?.id && isHost && <span className="host-badge">방장</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {isHost && (
+        <div className="host-controls">
+          <button 
+            className="start-game-button"
+            onClick={handleStartGame}
+            disabled={users.length < 2 || isLoading}
+          >
+            {isLoading ? '게임 시작 중...' : `게임 시작 (${users.length}명)`}
+          </button>
+          {users.length < 2 && (
+            <p className="waiting-message">최소 2명 이상 필요합니다.</p>
+          )}
+        </div>
+      )}
+      
+      {!isHost && (
+        <div className="waiting-message">
+          <p>방장이 게임을 시작할 때까지 기다려주세요...</p>
+        </div>
+      )}
+      
+      {error && <div className="error-message">{error}</div>}
     </div>
   );
 
@@ -363,9 +497,16 @@ function App() {
         </div>
       )}
       
-      <button className="new-game-button" onClick={handleNewGame}>
-        새 게임 시작
-      </button>
+      <div className="result-actions">
+        {isHost && (
+          <button className="return-waiting-button" onClick={handleReturnToWaiting}>
+            대기실로 돌아가기
+          </button>
+        )}
+        <button className="new-game-button" onClick={handleNewGame}>
+          새 게임 시작
+        </button>
+      </div>
     </div>
   );
 
@@ -373,6 +514,7 @@ function App() {
     <ErrorBoundary>
       <div className="App">
         {currentView === 'login' && renderLogin()}
+        {currentView === 'waiting' && renderWaiting()}
         {currentView === 'matching' && renderMatching()}
         {currentView === 'result' && renderResult()}
       </div>

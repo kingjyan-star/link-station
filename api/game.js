@@ -27,8 +27,9 @@ app.post('/api/join', (req, res) => {
     rooms.set(roomId, {
       users: new Map(),
       selections: new Map(),
-      isMatching: false,
-      matchResult: null
+      gameState: 'waiting', // waiting, started, matching, completed
+      matchResult: null,
+      hostId: null
     });
   }
   
@@ -43,6 +44,14 @@ app.post('/api/join', (req, res) => {
     nameCount++;
   }
   
+  // 게임이 진행 중이면 참여 불가
+  if (room.gameState !== 'waiting') {
+    return res.status(400).json({ 
+      success: false, 
+      message: '게임이 진행 중입니다. 게임이 끝난 후 다시 시도해주세요.' 
+    });
+  }
+
   const user = {
     id: userId,
     nickname,
@@ -52,13 +61,50 @@ app.post('/api/join', (req, res) => {
   
   room.users.set(userId, user);
   
+  // 첫 번째 사용자를 호스트로 설정
+  if (!room.hostId) {
+    room.hostId = userId;
+    console.log(`Host set: ${displayName} (${userId})`);
+  }
+  
   console.log(`User joined: ${displayName} in room ${roomId}`);
   console.log(`Room now has ${room.users.size} users`);
   
   res.json({
     success: true,
     userId,
-    users: Array.from(room.users.values())
+    users: Array.from(room.users.values()),
+    isHost: room.hostId === userId,
+    gameState: room.gameState
+  });
+});
+
+// 게임 시작
+app.post('/api/start-game', (req, res) => {
+  const { roomId, userId } = req.body;
+  
+  const room = rooms.get(roomId);
+  if (!room) {
+    return res.status(404).json({ success: false, message: 'Room not found' });
+  }
+  
+  // 호스트만 게임을 시작할 수 있음
+  if (room.hostId !== userId) {
+    return res.status(403).json({ success: false, message: 'Only host can start the game' });
+  }
+  
+  // 최소 2명 이상 필요
+  if (room.users.size < 2) {
+    return res.status(400).json({ success: false, message: 'At least 2 players needed to start' });
+  }
+  
+  room.gameState = 'matching';
+  console.log(`Game started in room ${roomId} by ${userId}`);
+  
+  res.json({
+    success: true,
+    message: 'Game started!',
+    gameState: room.gameState
   });
 });
 
@@ -71,6 +117,11 @@ app.post('/api/select', (req, res) => {
   const room = rooms.get(roomId);
   if (!room) {
     return res.status(404).json({ success: false, message: 'Room not found' });
+  }
+  
+  // 게임이 매칭 단계가 아니면 선택 불가
+  if (room.gameState !== 'matching') {
+    return res.status(400).json({ success: false, message: 'Game is not in matching phase' });
   }
   
   room.selections.set(userId, selectedUserId);
@@ -111,7 +162,8 @@ app.post('/api/select', (req, res) => {
     
     console.log(`Results: ${matches.length} matches, ${unmatched.length} unmatched`);
     
-    // 매칭 결과를 방에 저장 (사용자 삭제하지 않음)
+    // 게임 상태를 완료로 변경하고 매칭 결과 저장
+    room.gameState = 'completed';
     room.matchResult = {
       matches,
       unmatched,
@@ -150,25 +202,38 @@ app.get('/api/room/:roomId', (req, res) => {
       id: roomId,
       users: Array.from(room.users.values()),
       selections: Object.fromEntries(room.selections),
-      isMatching: room.isMatching
+      gameState: room.gameState,
+      hostId: room.hostId
     },
     matchResult
   });
 });
 
-// 새 게임 시작 (방 초기화)
-app.post('/api/reset/:roomId', (req, res) => {
-  const { roomId } = req.params;
+// 대기실로 돌아가기 (새 게임 준비)
+app.post('/api/return-to-waiting', (req, res) => {
+  const { roomId, userId } = req.body;
   const room = rooms.get(roomId);
   
-  if (room) {
-    room.selections.clear();
-    room.matchResult = null;
-    room.isMatching = false;
-    console.log(`Room ${roomId} reset for new game`);
+  if (!room) {
+    return res.status(404).json({ success: false, message: 'Room not found' });
   }
   
-  res.json({ success: true });
+  // 호스트만 대기실로 돌아갈 수 있음
+  if (room.hostId !== userId) {
+    return res.status(403).json({ success: false, message: 'Only host can return to waiting room' });
+  }
+  
+  // 게임 상태를 대기로 변경하고 선택 초기화
+  room.gameState = 'waiting';
+  room.selections.clear();
+  room.matchResult = null;
+  console.log(`Room ${roomId} returned to waiting room`);
+  
+  res.json({ 
+    success: true, 
+    message: 'Returned to waiting room',
+    gameState: room.gameState
+  });
 });
 
 module.exports = app;
