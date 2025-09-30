@@ -48,9 +48,15 @@ function App() {
     };
   }, []);
 
-  // 방 상태 폴링
+  // 방 상태 폴링 (대기실에서는 실행하지 않음)
   const pollRoomStatus = async () => {
     if (!roomId) return;
+    
+    // 대기실에서는 폴링하지 않음
+    if (currentView === 'waiting') {
+      console.log('Skipping poll in waiting room');
+      return;
+    }
     
     try {
       const response = await fetch(`${API_URL}/api/room/${roomId}`);
@@ -60,34 +66,26 @@ function App() {
         console.log('Polling update - Room users:', data.room.users);
         console.log('My userId:', userId);
         console.log('Game state:', data.room.gameState);
-        console.log('Current users state before update:', users);
         
-        // 대기실에서는 사용자 목록만 업데이트 (호스트 상태는 변경하지 않음)
-        if (currentView === 'waiting') {
-          setUsers(data.room.users);
-          // 호스트 상태는 초기 join에서만 설정하고, 폴링에서는 변경하지 않음
-          setDebugInfo(`Waiting room update: ${data.room.users.length} users, Host: ${isHost}, MyUserId: ${userId}`);
-        } else {
-          // 게임 중에는 모든 상태 업데이트
-          setUsers(data.room.users);
-          setGameState(data.room.gameState);
-          
-          if (data.room.hostId) {
-            setIsHost(data.room.hostId === userId);
-          }
-          
-          setDebugInfo(`Game update: ${data.room.users.length} users, Host: ${data.room.hostId === userId}, State: ${data.room.gameState}`);
-          
-          // 게임 상태에 따라 뷰 변경
-          if (data.room.gameState === 'matching' && currentView === 'waiting') {
-            console.log('Game started by host, moving to matching view');
-            setCurrentView('matching');
-          } else if (data.room.gameState === 'completed' && data.matchResult) {
-            console.log('Match result received via polling:', data.matchResult);
-            setMatches(data.matchResult.matches || []);
-            setUnmatched(data.matchResult.unmatched || []);
-            setCurrentView('result');
-          }
+        // 게임 중에는 모든 상태 업데이트
+        setUsers(data.room.users);
+        setGameState(data.room.gameState);
+        
+        if (data.room.hostId) {
+          setIsHost(data.room.hostId === userId);
+        }
+        
+        setDebugInfo(`Game update: ${data.room.users.length} users, Host: ${data.room.hostId === userId}, State: ${data.room.gameState}`);
+        
+        // 게임 상태에 따라 뷰 변경
+        if (data.room.gameState === 'matching' && currentView === 'waiting') {
+          console.log('Game started by host, moving to matching view');
+          setCurrentView('matching');
+        } else if (data.room.gameState === 'completed' && data.matchResult) {
+          console.log('Match result received via polling:', data.matchResult);
+          setMatches(data.matchResult.matches || []);
+          setUnmatched(data.matchResult.unmatched || []);
+          setCurrentView('result');
         }
       }
     } catch (error) {
@@ -156,6 +154,7 @@ function App() {
         setDebugInfo(`Joined: ${data.users.length} users, Host: ${data.isHost}, State: ${data.gameState}`);
         
         // 대기실에서는 폴링하지 않음 - 사용자가 수동으로 새로고침해야 함
+        // 폴링 완전 비활성화
       } else {
         setError(data.message || '방 참여에 실패했습니다.');
       }
@@ -436,15 +435,6 @@ function App() {
       )}
       
       {error && <div className="error-message">{error}</div>}
-      
-      <div style={{position: 'fixed', top: '10px', right: '10px', background: 'rgba(0,0,0,0.8)', color: 'white', padding: '10px', fontSize: '12px', zIndex: 1000}}>
-        <div>View: {currentView}</div>
-        <div>Users: {users.length}</div>
-        <div>IsHost: {isHost.toString()}</div>
-        <div>GameState: {gameState}</div>
-        <div>UserId: {userId}</div>
-        <div>{debugInfo}</div>
-      </div>
     </div>
   );
 
@@ -583,6 +573,16 @@ function App() {
         {currentView === 'waiting' && renderWaiting()}
         {currentView === 'matching' && renderMatching()}
         {currentView === 'result' && renderResult()}
+        
+        {/* Debug panel for all views */}
+        <div style={{position: 'fixed', top: '10px', right: '10px', background: 'rgba(0,0,0,0.8)', color: 'white', padding: '10px', fontSize: '12px', zIndex: 1000}}>
+          <div>View: {currentView}</div>
+          <div>Users: {users.length}</div>
+          <div>IsHost: {isHost.toString()}</div>
+          <div>GameState: {gameState}</div>
+          <div>UserId: {userId}</div>
+          <div>{debugInfo}</div>
+        </div>
       </div>
     </ErrorBoundary>
   );
