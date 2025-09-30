@@ -139,6 +139,41 @@ app.get('/api/room/:roomId', (req, res) => {
     return res.status(404).json({ success: false, message: 'Room not found' });
   }
   
+  // 매칭 결과가 있는지 확인
+  const users = Array.from(room.users.values());
+  let matchResult = null;
+  
+  if (room.selections.size === users.length && users.length > 0) {
+    const matches = [];
+    const unmatched = [];
+    const processedUsers = new Set();
+    
+    for (const [userId, selectedUserId] of room.selections) {
+      if (processedUsers.has(userId)) continue;
+      
+      const user = room.users.get(userId);
+      const selectedUser = room.users.get(selectedUserId);
+      
+      if (selectedUser && room.selections.get(selectedUserId) === userId) {
+        matches.push({
+          user1: user,
+          user2: selectedUser
+        });
+        processedUsers.add(userId);
+        processedUsers.add(selectedUserId);
+      } else {
+        unmatched.push(user);
+        processedUsers.add(userId);
+      }
+    }
+    
+    matchResult = {
+      matches,
+      unmatched,
+      users: Array.from(room.users.values())
+    };
+  }
+  
   res.json({
     success: true,
     room: {
@@ -146,7 +181,8 @@ app.get('/api/room/:roomId', (req, res) => {
       users: Array.from(room.users.values()),
       selections: Object.fromEntries(room.selections),
       isMatching: room.isMatching
-    }
+    },
+    matchResult
   });
 });
 

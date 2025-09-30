@@ -60,6 +60,15 @@ function App() {
         if (data.room.users.length > 0) {
           setCurrentView('matching');
         }
+        
+        // 매칭 결과가 있으면 처리
+        if (data.matchResult) {
+          console.log('Match result received via polling:', data.matchResult);
+          setMatches(data.matchResult.matches || []);
+          setUnmatched(data.matchResult.unmatched || []);
+          setCurrentView('result');
+          stopPolling();
+        }
       }
     } catch (error) {
       console.error('Error polling room status:', error);
