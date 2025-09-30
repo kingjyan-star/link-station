@@ -143,12 +143,8 @@ function App() {
         setGameState(data.gameState);
         setCurrentView('waiting');
         
-        // 대기실에서는 느린 폴링 (30초마다), 게임 중에는 빠른 폴링 (2초마다)
-        if (data.gameState === 'waiting') {
-          startPolling(30000); // 30초마다 폴링
-        } else {
-          startPolling(2000); // 2초마다 폴링
-        }
+        // 대기실과 게임 중 모두 빠른 폴링 (2초마다)
+        startPolling(2000); // 2초마다 폴링
       } else {
         setError(data.message || '방 참여에 실패했습니다.');
       }
@@ -225,7 +221,7 @@ function App() {
         console.log('Game started successfully');
         setGameState('matching');
         setCurrentView('matching');
-        startPolling(); // 게임 시작 시 폴링 시작
+        startPolling(2000); // 게임 시작 시 폴링 시작
       } else {
         setError(data.message || '게임 시작에 실패했습니다.');
       }
