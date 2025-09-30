@@ -72,6 +72,10 @@ app.post('/api/join', (req, res) => {
   console.log('All users in room:', Array.from(room.users.values()));
   console.log('Host ID:', room.hostId);
   
+  // 모든 기존 사용자에게 새 사용자 참여 알림 (간단한 방법)
+  // 실제로는 WebSocket이나 Server-Sent Events를 사용해야 하지만,
+  // 여기서는 폴링을 사용하여 기존 사용자들이 새 사용자를 발견할 수 있도록 함
+  
   res.json({
     success: true,
     userId,

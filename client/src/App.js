@@ -62,25 +62,34 @@ function App() {
         console.log('Game state:', data.room.gameState);
         console.log('Current users state before update:', users);
         
-        setUsers(data.room.users);
-        setGameState(data.room.gameState);
-        
-        // 호스트 정보 업데이트
-        if (data.room.hostId) {
-          setIsHost(data.room.hostId === userId);
-        }
-        
-        setDebugInfo(`Polling: ${data.room.users.length} users, Host: ${data.room.hostId === userId}, State: ${data.room.gameState}`);
-        
-        // 게임 상태에 따라 뷰 변경
-        if (data.room.gameState === 'matching' && currentView === 'waiting') {
-          console.log('Game started by host, moving to matching view');
-          setCurrentView('matching');
-        } else if (data.room.gameState === 'completed' && data.matchResult) {
-          console.log('Match result received via polling:', data.matchResult);
-          setMatches(data.matchResult.matches || []);
-          setUnmatched(data.matchResult.unmatched || []);
-          setCurrentView('result');
+        // 대기실에서는 사용자 목록만 업데이트
+        if (currentView === 'waiting') {
+          setUsers(data.room.users);
+          if (data.room.hostId) {
+            setIsHost(data.room.hostId === userId);
+          }
+          setDebugInfo(`Waiting room update: ${data.room.users.length} users, Host: ${data.room.hostId === userId}`);
+        } else {
+          // 게임 중에는 모든 상태 업데이트
+          setUsers(data.room.users);
+          setGameState(data.room.gameState);
+          
+          if (data.room.hostId) {
+            setIsHost(data.room.hostId === userId);
+          }
+          
+          setDebugInfo(`Game update: ${data.room.users.length} users, Host: ${data.room.hostId === userId}, State: ${data.room.gameState}`);
+          
+          // 게임 상태에 따라 뷰 변경
+          if (data.room.gameState === 'matching' && currentView === 'waiting') {
+            console.log('Game started by host, moving to matching view');
+            setCurrentView('matching');
+          } else if (data.room.gameState === 'completed' && data.matchResult) {
+            console.log('Match result received via polling:', data.matchResult);
+            setMatches(data.matchResult.matches || []);
+            setUnmatched(data.matchResult.unmatched || []);
+            setCurrentView('result');
+          }
         }
       }
     } catch (error) {
@@ -148,7 +157,8 @@ function App() {
         setCurrentView('waiting');
         setDebugInfo(`Joined: ${data.users.length} users, Host: ${data.isHost}, State: ${data.gameState}`);
         
-        // 대기실에서는 폴링하지 않음 (게임 시작 시에만 폴링 시작)
+        // 대기실에서 가벼운 폴링 (5초마다, 사용자 목록만 업데이트)
+        startPolling(5000);
       } else {
         setError(data.message || '방 참여에 실패했습니다.');
       }
@@ -202,29 +212,6 @@ function App() {
   };
 
 
-  const handleRefreshRoom = async () => {
-    if (!roomId) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/api/room/${roomId}`);
-      const data = await response.json();
-      
-      if (data.success && data.room) {
-        console.log('Room refreshed - Users:', data.room.users);
-        setUsers(data.room.users);
-        setGameState(data.room.gameState);
-        
-        // 호스트 정보 업데이트
-        if (data.room.hostId) {
-          setIsHost(data.room.hostId === userId);
-        }
-        
-        setDebugInfo(`Refreshed: ${data.room.users.length} users, Host: ${data.room.hostId === userId}, State: ${data.room.gameState}`);
-      }
-    } catch (error) {
-      console.error('Error refreshing room:', error);
-    }
-  };
 
   const handleStartGame = async () => {
     if (!isHost) return;
@@ -401,14 +388,6 @@ function App() {
         </div>
       </div>
       
-      <div className="room-controls">
-        <button 
-          className="refresh-button"
-          onClick={handleRefreshRoom}
-        >
-          새로고침
-        </button>
-      </div>
       
       {isHost && (
         <div className="host-controls">
