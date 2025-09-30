@@ -180,7 +180,21 @@ function App() {
     }
   };
 
-  const handleNewGame = () => {
+  const handleNewGame = async () => {
+    // 서버에서 방 초기화
+    if (roomId) {
+      try {
+        await fetch(`${API_URL}/api/reset/${roomId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+      } catch (error) {
+        console.error('Error resetting room:', error);
+      }
+    }
+    
     // 상태 초기화
     setCurrentView('login');
     setUsers([]);

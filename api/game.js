@@ -27,7 +27,8 @@ app.post('/api/join', (req, res) => {
     rooms.set(roomId, {
       users: new Map(),
       selections: new Map(),
-      isMatching: false
+      isMatching: false,
+      matchResult: null
     });
   }
   
@@ -106,15 +107,16 @@ app.post('/api/select', (req, res) => {
       }
     }
     
-    // 매칭된 사용자들 제거
-    matches.forEach(match => {
-      room.users.delete(match.user1.id);
-      room.users.delete(match.user2.id);
-      room.selections.delete(match.user1.id);
-      room.selections.delete(match.user2.id);
-    });
+    // 사용자들은 그대로 유지 (매칭 결과만 저장)
     
     console.log(`Results: ${matches.length} matches, ${unmatched.length} unmatched`);
+    
+    // 매칭 결과를 방에 저장 (사용자 삭제하지 않음)
+    room.matchResult = {
+      matches,
+      unmatched,
+      completedAt: new Date().toISOString()
+    };
     
     res.json({
       success: true,
@@ -139,40 +141,8 @@ app.get('/api/room/:roomId', (req, res) => {
     return res.status(404).json({ success: false, message: 'Room not found' });
   }
   
-  // 매칭 결과가 있는지 확인
-  const users = Array.from(room.users.values());
-  let matchResult = null;
-  
-  if (room.selections.size === users.length && users.length > 0) {
-    const matches = [];
-    const unmatched = [];
-    const processedUsers = new Set();
-    
-    for (const [userId, selectedUserId] of room.selections) {
-      if (processedUsers.has(userId)) continue;
-      
-      const user = room.users.get(userId);
-      const selectedUser = room.users.get(selectedUserId);
-      
-      if (selectedUser && room.selections.get(selectedUserId) === userId) {
-        matches.push({
-          user1: user,
-          user2: selectedUser
-        });
-        processedUsers.add(userId);
-        processedUsers.add(selectedUserId);
-      } else {
-        unmatched.push(user);
-        processedUsers.add(userId);
-      }
-    }
-    
-    matchResult = {
-      matches,
-      unmatched,
-      users: Array.from(room.users.values())
-    };
-  }
+  // 저장된 매칭 결과가 있으면 반환
+  const matchResult = room.matchResult;
   
   res.json({
     success: true,
@@ -184,6 +154,21 @@ app.get('/api/room/:roomId', (req, res) => {
     },
     matchResult
   });
+});
+
+// 새 게임 시작 (방 초기화)
+app.post('/api/reset/:roomId', (req, res) => {
+  const { roomId } = req.params;
+  const room = rooms.get(roomId);
+  
+  if (room) {
+    room.selections.clear();
+    room.matchResult = null;
+    room.isMatching = false;
+    console.log(`Room ${roomId} reset for new game`);
+  }
+  
+  res.json({ success: true });
 });
 
 module.exports = app;
