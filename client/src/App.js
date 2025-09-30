@@ -59,6 +59,7 @@ function App() {
         console.log('Polling update - Room users:', data.room.users);
         console.log('My userId:', userId);
         console.log('Game state:', data.room.gameState);
+        console.log('Current users state before update:', users);
         
         setUsers(data.room.users);
         setGameState(data.room.gameState);
@@ -84,11 +85,11 @@ function App() {
   };
 
   // 폴링 시작
-  const startPolling = () => {
+  const startPolling = (interval = 2000) => {
     if (pollingInterval.current) {
       clearInterval(pollingInterval.current);
     }
-    pollingInterval.current = setInterval(pollRoomStatus, 2000); // 2초마다 폴링
+    pollingInterval.current = setInterval(pollRoomStatus, interval);
   };
 
   // 폴링 중지
@@ -134,6 +135,7 @@ function App() {
         console.log('Setting users:', data.users);
         console.log('Is host:', data.isHost);
         console.log('Game state:', data.gameState);
+        console.log('Number of users in response:', data.users.length);
         
         setUserId(data.userId);
         setUsers(data.users);
@@ -141,9 +143,11 @@ function App() {
         setGameState(data.gameState);
         setCurrentView('waiting');
         
-        // 대기실에서는 폴링하지 않음 (게임 시작 시에만 폴링 시작)
-        if (data.gameState !== 'waiting') {
-          startPolling();
+        // 대기실에서는 느린 폴링 (30초마다), 게임 중에는 빠른 폴링 (2초마다)
+        if (data.gameState === 'waiting') {
+          startPolling(30000); // 30초마다 폴링
+        } else {
+          startPolling(2000); // 2초마다 폴링
         }
       } else {
         setError(data.message || '방 참여에 실패했습니다.');

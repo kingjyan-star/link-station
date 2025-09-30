@@ -69,6 +69,8 @@ app.post('/api/join', (req, res) => {
   
   console.log(`User joined: ${displayName} in room ${roomId}`);
   console.log(`Room now has ${room.users.size} users`);
+  console.log('All users in room:', Array.from(room.users.values()));
+  console.log('Host ID:', room.hostId);
   
   res.json({
     success: true,
@@ -195,6 +197,12 @@ app.get('/api/room/:roomId', (req, res) => {
   
   // 저장된 매칭 결과가 있으면 반환
   const matchResult = room.matchResult;
+  
+  console.log(`Room status request for ${roomId}:`);
+  console.log(`Users in room: ${room.users.size}`);
+  console.log(`All users:`, Array.from(room.users.values()));
+  console.log(`Game state: ${room.gameState}`);
+  console.log(`Host ID: ${room.hostId}`);
   
   res.json({
     success: true,
