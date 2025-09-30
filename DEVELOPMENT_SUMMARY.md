@@ -168,18 +168,51 @@ link-station/
 4. **Real-time Notifications**: Add push notifications for better UX
 5. **Mobile App**: Create native mobile applications
 
-## 📊 Current Status
+## 📊 Current Status (Updated - Last Session Issues)
 
-✅ **Fully Functional**: All core features working
-✅ **Multi-device Support**: Works across different devices
-✅ **Real-time Updates**: Polling-based synchronization
-✅ **Match Results**: Proper broadcasting to all devices
-✅ **QR Code Sharing**: Easy room invitation system
-✅ **Responsive Design**: Works on mobile and desktop
+⚠️ **Partially Functional**: Core matching logic works but UI flow broken
+❌ **Waiting Room Broken**: Players skip waiting room, go directly to matching
+❌ **Host Detection Failing**: No "게임 시작" button visible
+❌ **Match Results Not Working**: Selections work but results don't display
+❌ **State Management Issues**: Polling overriding initial states
+
+## 🚨 Critical Issues Identified (Last Session)
+
+### 1. Waiting Room Not Displaying
+- **Problem**: Players join room but see matching state instead of waiting room
+- **Impact**: No host controls, no proper game flow
+- **Debug Info**: Debug panel shows incorrect view state
+
+### 2. Host Detection Failing
+- **Problem**: First player not recognized as host
+- **Impact**: No "게임 시작" button, no host badge
+- **Debug Info**: `isHost` state not being set correctly
+
+### 3. Match Results Not Showing
+- **Problem**: Players can select each other but no results displayed
+- **Impact**: Game flow incomplete
+- **Debug Info**: Match processing works but results not broadcast
+
+### 4. State Management Broken
+- **Problem**: Polling overriding initial states
+- **Impact**: Inconsistent UI behavior
+- **Debug Info**: State changes not properly managed
+
+## 🔧 Debugging Tools Added
+- **Debug Panel**: Top-right corner showing all state information
+- **Yellow Debug Box**: Waiting room showing host status
+- **Console Logging**: Detailed state change tracking
+- **Error Tracking**: Comprehensive error logging
+
+## 🎯 Immediate Action Required
+1. **Fix waiting room display logic**
+2. **Fix host detection in API response**
+3. **Fix match result broadcasting**
+4. **Fix state management in polling**
 
 ## 🚀 Deployment URL
 **Production**: https://link-station-pro.vercel.app
 
 ---
 
-*This summary captures the complete development journey from initial Socket.IO implementation through API migration to final working deployment on Vercel.*
+*This summary captures the complete development journey including recent critical issues that need immediate attention in the next session.*

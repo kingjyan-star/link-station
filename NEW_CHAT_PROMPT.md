@@ -39,11 +39,17 @@ link-station/
 3. **User conflicts** → Added unique display names (e.g., "박수형(1)")
 4. **Match result broadcasting** → All devices see results via polling
 
+## 🚨 Current Critical Issues (Last Session)
+- ❌ **Waiting room not showing** - Players go directly to matching state
+- ❌ **No "게임 시작" button visible** - Host detection failing
+- ❌ **No match results** - Players select each other but no results shown
+- ❌ **State management broken** - Polling overriding initial states
+
 ## 📊 Current Status
-- ✅ **Fully functional** matching game
-- ✅ **Multi-device tested** and working
-- ✅ **Match results sync** across all devices
-- ✅ **No known issues** - app is stable
+- ⚠️ **Partially functional** - Core matching logic works but UI flow broken
+- ⚠️ **Multi-device issues** - State synchronization problems
+- ❌ **Match results not working** - Selection works but results don't show
+- ❌ **Waiting room broken** - Players skip waiting room phase
 
 ## 🎯 Potential Improvements
 - Database integration (replace in-memory storage)
@@ -57,7 +63,19 @@ link-station/
 - Serverless functions handle API requests
 - React app with QRCode.react for room sharing
 
-The project was built from scratch in previous conversations and is now fully deployed and working. Ready for new features or improvements!
+## 🔧 Recent Debugging Added
+- Debug panel in top-right corner showing state information
+- Yellow debug box in waiting room showing host status
+- Console logging for all state changes
+- Detailed error tracking
+
+## 🎯 Immediate Next Steps Needed
+1. **Fix waiting room display** - Players should see waiting room, not matching
+2. **Fix host detection** - First player should see "게임 시작" button
+3. **Fix match results** - Results should display after selections
+4. **Fix state management** - Polling should not override initial states
+
+The project has core functionality but critical UI flow issues need immediate attention!
 
 ## 📚 Additional Context
 For complete technical details, see `DEVELOPMENT_SUMMARY.md` in the project root.
