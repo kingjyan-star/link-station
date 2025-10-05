@@ -94,9 +94,12 @@ function App() {
             setCurrentView('matching');
           } else if (data.room.gameState === 'completed' && data.matchResult) {
             console.log('Match result received via polling:', data.matchResult);
+            console.log('Matches:', data.matchResult.matches);
+            console.log('Unmatched:', data.matchResult.unmatched);
             setMatches(data.matchResult.matches || []);
             setUnmatched(data.matchResult.unmatched || []);
             setCurrentView('result');
+            setDebugInfo(`Match results: ${data.matchResult.matches?.length || 0} matches, ${data.matchResult.unmatched?.length || 0} unmatched`);
           }
         }
       }
@@ -200,15 +203,22 @@ function App() {
 
       const data = await response.json();
       
+      console.log('Select response:', data);
+      
       if (data.success) {
         setSelectedUser(selectedUserId);
         
         if (data.matches || data.unmatched) {
           // 매칭 결과가 있음
+          console.log('Match results received in select response:', data);
           setMatches(data.matches || []);
           setUnmatched(data.unmatched || []);
           setCurrentView('result');
           stopPolling();
+          setDebugInfo(`Direct match results: ${data.matches?.length || 0} matches, ${data.unmatched?.length || 0} unmatched`);
+        } else {
+          console.log('Selection recorded, waiting for others');
+          setDebugInfo('Selection recorded, waiting for others...');
         }
       } else {
         setError(data.message || '선택에 실패했습니다.');
