@@ -66,8 +66,11 @@ function App() {
         setUsers(data.room.users);
         
         if (currentView === 'waiting') {
-          // 대기실에서는 사용자 목록만 업데이트, 호스트 상태는 변경하지 않음
-          setDebugInfo(`Waiting room update: ${data.room.users.length} users, Host: ${isHost}, MyUserId: ${userId}`);
+          // 대기실에서는 사용자 목록과 호스트 상태 업데이트
+          if (data.room.hostId) {
+            setIsHost(data.room.hostId === userId);
+          }
+          setDebugInfo(`Waiting room update: ${data.room.users.length} users, Host: ${data.room.hostId === userId}, MyUserId: ${userId}`);
           
           // 게임이 시작되었을 때만 뷰 변경
           if (data.room.gameState === 'matching' && data.room.gameState !== gameState) {
