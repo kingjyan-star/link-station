@@ -68,6 +68,13 @@ function App() {
         if (currentView === 'waiting') {
           // 대기실에서는 사용자 목록만 업데이트, 호스트 상태는 변경하지 않음
           setDebugInfo(`Waiting room update: ${data.room.users.length} users, Host: ${isHost}, MyUserId: ${userId}`);
+          
+          // 게임이 시작되었을 때만 뷰 변경
+          if (data.room.gameState === 'matching' && data.room.gameState !== gameState) {
+            console.log('Game started by host, moving to matching view');
+            setGameState(data.room.gameState);
+            setCurrentView('matching');
+          }
         } else {
           // 게임 중에는 모든 상태 업데이트
           setGameState(data.room.gameState);
@@ -155,8 +162,10 @@ function App() {
         setCurrentView('waiting');
         setDebugInfo(`Joined: ${data.users.length} users, Host: ${data.isHost}, State: ${data.gameState}, UserId: ${data.userId}, HostId: ${data.isHost ? 'ME' : 'OTHER'}`);
         
-        // 대기실에서도 폴링 시작 (실시간 업데이트용)
-        startPolling(2000);
+        // 대기실에서 폴링 시작 (실시간 업데이트용) - 3초 후에 시작하여 초기 상태 안정화
+        setTimeout(() => {
+          startPolling(2000);
+        }, 3000);
       } else {
         setError(data.message || '방 참여에 실패했습니다.');
       }
