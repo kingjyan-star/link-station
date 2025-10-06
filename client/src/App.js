@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import ErrorBoundary from './ErrorBoundary';
 import './App.css';
 
 const API_URL = process.env.NODE_ENV === 'production' 
@@ -8,204 +7,374 @@ const API_URL = process.env.NODE_ENV === 'production'
   : 'http://localhost:3000';
 
 function App() {
-  const [currentView, setCurrentView] = useState('login'); // login, waiting, matching, result
-  const [nickname, setNickname] = useState('');
+  // State management
+  const [currentState, setCurrentState] = useState('enter'); // enter, makeroom, enterroom, checkpassword, enterroomwithqr, waitingroom, linking, linkresult
+  const [username, setUsername] = useState('');
+  const [roomName, setRoomName] = useState('');
+  const [roomPassword, setRoomPassword] = useState('');
+  const [memberLimit, setMemberLimit] = useState(8);
+  const [enteredRoomName, setEnteredRoomName] = useState('');
+  const [enteredPassword, setEnteredPassword] = useState('');
+  
+  // Room and user data
   const [roomId, setRoomId] = useState('');
   const [userId, setUserId] = useState('');
   const [users, setUsers] = useState([]);
+  const [isMaster, setIsMaster] = useState(false);
+  const [roomData, setRoomData] = useState(null);
+  
+  // Game data
   const [matches, setMatches] = useState([]);
   const [unmatched, setUnmatched] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [hasVoted, setHasVoted] = useState(false);
+  
+  // UI state
   const [showQR, setShowQR] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [isHost, setIsHost] = useState(false);
-  const [gameState, setGameState] = useState('waiting');
+  const [success, setSuccess] = useState('');
+  
+  // Polling
   const pollingInterval = useRef(null);
-  const [debugInfo, setDebugInfo] = useState('');
 
-  // 디버깅을 위한 강제 렌더링 확인
-  console.log('App component rendering...');
-  console.log('currentView:', currentView);
-  console.log('NODE_ENV:', process.env.NODE_ENV);
-
+  // Cleanup polling on unmount
   useEffect(() => {
-    console.log('App component mounted');
-    console.log('API_URL:', API_URL);
-    
-    // URL에서 방 ID 가져오기
-    const urlParams = new URLSearchParams(window.location.search);
-    const roomFromUrl = urlParams.get('room');
-    if (roomFromUrl) {
-      setRoomId(roomFromUrl);
-    }
-
     return () => {
-      // 컴포넌트 언마운트 시 폴링 정리
       if (pollingInterval.current) {
         clearInterval(pollingInterval.current);
       }
     };
   }, []);
 
-  // 방 상태 폴링 (대기실에서는 실행하지 않음)
-  const pollRoomStatus = async () => {
-    if (!roomId) return;
-    
-    // 대기실에서는 폴링하지 않음
-    if (currentView === 'waiting') {
-      console.log('Skipping poll in waiting room');
-      return;
+  // Validation functions
+  const validateUsername = (name) => {
+    if (!name || name.trim() === '') {
+      return { valid: false, message: '사용자 이름을 입력해주세요.' };
     }
-    
+    if (name.length > 32) {
+      return { valid: false, message: '사용자 이름은 32자 이하여야 합니다.' };
+    }
+    return { valid: true };
+  };
+
+  const validateRoomName = (name) => {
+    if (!name || name.trim() === '') {
+      return { valid: false, message: '방 이름을 입력해주세요.' };
+    }
+    if (name.length > 128) {
+      return { valid: false, message: '방 이름은 128자 이하여야 합니다.' };
+    }
+    return { valid: true };
+  };
+
+  const validatePassword = (password) => {
+    if (password && password.length > 16) {
+      return { valid: false, message: '비밀번호는 16자 이하여야 합니다.' };
+    }
+    return { valid: true };
+  };
+
+  const validateMemberLimit = (limit) => {
+    if (!limit || limit < 2) {
+      return { valid: false, message: '최소 2명 이상이어야 합니다.' };
+    }
+    if (limit > 99) {
+      return { valid: false, message: '최대 99명까지 가능합니다.' };
+    }
+    return { valid: true };
+  };
+
+  // API functions
+  const checkUsernameDuplication = async (name) => {
     try {
-      const response = await fetch(`${API_URL}/api/room/${roomId}`);
-      const data = await response.json();
-      
-      if (data.success && data.room) {
-        console.log('Polling update - Room users:', data.room.users);
-        console.log('My userId:', userId);
-        console.log('Game state:', data.room.gameState);
-        console.log('Current view:', currentView);
-        
-        // 게임 중에는 모든 상태 업데이트
-        setUsers(data.room.users);
-        setGameState(data.room.gameState);
-        
-        if (data.room.hostId) {
-          setIsHost(data.room.hostId === userId);
-        }
-        
-        setDebugInfo(`Game update: ${data.room.users.length} users, Host: ${data.room.hostId === userId}, State: ${data.room.gameState}`);
-        
-        // 게임 상태에 따라 뷰 변경
-        if (data.room.gameState === 'matching' && currentView === 'waiting') {
-          console.log('Game started by host, moving to matching view');
-          setCurrentView('matching');
-        } else if (data.room.gameState === 'completed' && data.matchResult) {
-          console.log('Match result received via polling:', data.matchResult);
-          console.log('Matches:', data.matchResult.matches);
-          console.log('Unmatched:', data.matchResult.unmatched);
-          setMatches(data.matchResult.matches || []);
-          setUnmatched(data.matchResult.unmatched || []);
-          setCurrentView('result');
-          setDebugInfo(`Match results: ${data.matchResult.matches?.length || 0} matches, ${data.matchResult.unmatched?.length || 0} unmatched`);
-        }
-      }
-    } catch (error) {
-      console.error('Error polling room status:', error);
-    }
-  };
-
-  // 폴링 시작
-  const startPolling = (interval = 2000) => {
-    if (pollingInterval.current) {
-      clearInterval(pollingInterval.current);
-    }
-    pollingInterval.current = setInterval(pollRoomStatus, interval);
-  };
-
-  // 폴링 중지
-  const stopPolling = () => {
-    if (pollingInterval.current) {
-      clearInterval(pollingInterval.current);
-      pollingInterval.current = null;
-    }
-  };
-
-  const handleJoinRoom = async (e) => {
-    e.preventDefault();
-    console.log('handleJoinRoom called');
-    console.log('nickname:', nickname);
-    console.log('roomId:', roomId);
-    
-    if (!nickname || !roomId) {
-      setError('닉네임과 방 ID를 모두 입력해주세요.');
-      return;
-    }
-
-    setIsLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch(`${API_URL}/api/join`, {
+      const response = await fetch(`${API_URL}/api/check-username`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: name })
+      });
+      const data = await response.json();
+      return data.duplicate;
+    } catch (error) {
+      console.error('Error checking username:', error);
+      return false;
+    }
+  };
+
+  const createRoom = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/create-room`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          roomId,
-          nickname
+          roomName,
+          roomPassword: roomPassword || null,
+          memberLimit,
+          username
         })
       });
-
       const data = await response.json();
       
-      console.log('Join response:', data);
-      
       if (data.success) {
-        console.log('Setting userId:', data.userId);
-        console.log('Setting users:', data.users);
-        console.log('Is host:', data.isHost);
-        console.log('Game state:', data.gameState);
-        console.log('Number of users in response:', data.users.length);
-        
+        setRoomId(data.roomId);
         setUserId(data.userId);
         setUsers(data.users);
-        setIsHost(data.isHost);
-        setGameState(data.gameState);
-        setCurrentView('waiting');
-        setDebugInfo(`Joined: ${data.users.length} users, Host: ${data.isHost}, State: ${data.gameState}, UserId: ${data.userId}, HostId: ${data.isHost ? 'ME' : 'OTHER'}`);
-        
-        // 대기실에서는 폴링 비활성화 - 초기 상태 유지
-        // 폴링은 게임 시작 시에만 활성화
+        setIsMaster(true);
+        setRoomData(data.roomData);
+        setCurrentState('waitingroom');
+        setSuccess('방이 생성되었습니다!');
+      } else {
+        setError(data.message || '방 생성에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Error creating room:', error);
+      setError('방 생성 중 오류가 발생했습니다.');
+    }
+  };
+
+  const joinRoom = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/join-room`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomName: enteredRoomName,
+          username
+        })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        if (data.requiresPassword) {
+          setCurrentState('checkpassword');
+        } else {
+          setRoomId(data.roomId);
+          setUserId(data.userId);
+          setUsers(data.users);
+          setIsMaster(data.isMaster);
+          setRoomData(data.roomData);
+          setCurrentState('waitingroom');
+          setSuccess('방에 참여했습니다!');
+        }
       } else {
         setError(data.message || '방 참여에 실패했습니다.');
       }
     } catch (error) {
       console.error('Error joining room:', error);
       setError('방 참여 중 오류가 발생했습니다.');
+    }
+  };
+
+  const checkPassword = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/check-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomName: enteredRoomName,
+          password: enteredPassword,
+          username
+        })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setRoomId(data.roomId);
+        setUserId(data.userId);
+        setUsers(data.users);
+        setIsMaster(data.isMaster);
+        setRoomData(data.roomData);
+        setCurrentState('waitingroom');
+        setSuccess('방에 참여했습니다!');
+      } else {
+        setError(data.message || '비밀번호가 올바르지 않습니다.');
+      }
+    } catch (error) {
+      console.error('Error checking password:', error);
+      setError('비밀번호 확인 중 오류가 발생했습니다.');
+    }
+  };
+
+  const joinRoomWithQR = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/join-room-qr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId,
+          username
+        })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setUserId(data.userId);
+        setUsers(data.users);
+        setIsMaster(data.isMaster);
+        setRoomData(data.roomData);
+        setCurrentState('waitingroom');
+        setSuccess('방에 참여했습니다!');
+      } else {
+        setError(data.message || '방 참여에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Error joining room with QR:', error);
+      setError('방 참여 중 오류가 발생했습니다.');
+    }
+  };
+
+  // Event handlers
+  const handleMakeRoom = async () => {
+    const validation = validateUsername(username);
+    if (!validation.valid) {
+      setError(validation.message);
+      return;
+    }
+
+    const isDuplicate = await checkUsernameDuplication(username);
+    if (isDuplicate) {
+      setError('이미 사용 중인 사용자 이름입니다.');
+      return;
+    }
+
+    setCurrentState('makeroom');
+    setError('');
+  };
+
+  const handleEnterRoom = async () => {
+    const validation = validateUsername(username);
+    if (!validation.valid) {
+      setError(validation.message);
+      return;
+    }
+
+    const isDuplicate = await checkUsernameDuplication(username);
+    if (isDuplicate) {
+      setError('이미 사용 중인 사용자 이름입니다.');
+      return;
+    }
+
+    setCurrentState('enterroom');
+    setError('');
+  };
+
+  const handleCreateRoom = async () => {
+    const roomNameValidation = validateRoomName(roomName);
+    if (!roomNameValidation.valid) {
+      setError(roomNameValidation.message);
+      return;
+    }
+
+    const passwordValidation = validatePassword(roomPassword);
+    if (!passwordValidation.valid) {
+      setError(passwordValidation.message);
+      return;
+    }
+
+    const memberLimitValidation = validateMemberLimit(memberLimit);
+    if (!memberLimitValidation.valid) {
+      setError(memberLimitValidation.message);
+      return;
+    }
+
+    setIsLoading(true);
+    await createRoom();
+    setIsLoading(false);
+  };
+
+  const handleJoinRoom = async () => {
+    const roomNameValidation = validateRoomName(enteredRoomName);
+    if (!roomNameValidation.valid) {
+      setError(roomNameValidation.message);
+      return;
+    }
+
+    setIsLoading(true);
+    await joinRoom();
+    setIsLoading(false);
+  };
+
+  const handleCheckPassword = async () => {
+    const passwordValidation = validatePassword(enteredPassword);
+    if (!passwordValidation.valid) {
+      setError(passwordValidation.message);
+      return;
+    }
+
+    setIsLoading(true);
+    await checkPassword();
+    setIsLoading(false);
+  };
+
+  const handleJoinWithQR = async () => {
+    const validation = validateUsername(username);
+    if (!validation.valid) {
+      setError(validation.message);
+      return;
+    }
+
+    const isDuplicate = await checkUsernameDuplication(username);
+    if (isDuplicate) {
+      setError('이미 사용 중인 사용자 이름입니다.');
+      return;
+    }
+
+    setIsLoading(true);
+    await joinRoomWithQR();
+    setIsLoading(false);
+  };
+
+  const handleStartGame = async () => {
+    if (!isMaster) return;
+    
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/start-game`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, userId })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setCurrentState('linking');
+        startPolling();
+      } else {
+        setError(data.message || '게임 시작에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Error starting game:', error);
+      setError('게임 시작 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleSelectUser = async (selectedUserId) => {
-    if (!userId || !roomId) return;
-
-    setIsLoading(true);
+    if (hasVoted) return;
     
+    setIsLoading(true);
     try {
       const response = await fetch(`${API_URL}/api/select`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           roomId,
           userId,
           selectedUserId
         })
       });
-
       const data = await response.json();
-      
-      console.log('Select response:', data);
       
       if (data.success) {
         setSelectedUser(selectedUserId);
+        setHasVoted(true);
         
         if (data.matches || data.unmatched) {
-          // 매칭 결과가 있음
-          console.log('Match results received in select response:', data);
           setMatches(data.matches || []);
           setUnmatched(data.unmatched || []);
-          setCurrentView('result');
+          setCurrentState('linkresult');
           stopPolling();
-          setDebugInfo(`Direct match results: ${data.matches?.length || 0} matches, ${data.unmatched?.length || 0} unmatched`);
-        } else {
-          console.log('Selection recorded, waiting for others');
-          setDebugInfo('Selection recorded, waiting for others...');
         }
       } else {
         setError(data.message || '선택에 실패했습니다.');
@@ -218,7 +387,46 @@ function App() {
     }
   };
 
-  const handleRefreshRoom = async () => {
+  const handleNextRound = () => {
+    setMatches([]);
+    setUnmatched([]);
+    setSelectedUser(null);
+    setHasVoted(false);
+    setCurrentState('linking');
+    startPolling();
+  };
+
+  const handleLeaveRoom = () => {
+    setCurrentState('enter');
+    setUsername('');
+    setRoomId('');
+    setUserId('');
+    setUsers([]);
+    setIsMaster(false);
+    setRoomData(null);
+    setMatches([]);
+    setUnmatched([]);
+    setSelectedUser(null);
+    setHasVoted(false);
+    stopPolling();
+  };
+
+  // Polling functions
+  const startPolling = () => {
+    if (pollingInterval.current) {
+      clearInterval(pollingInterval.current);
+    }
+    pollingInterval.current = setInterval(pollRoomStatus, 2000);
+  };
+
+  const stopPolling = () => {
+    if (pollingInterval.current) {
+      clearInterval(pollingInterval.current);
+      pollingInterval.current = null;
+    }
+  };
+
+  const pollRoomStatus = async () => {
     if (!roomId) return;
     
     try {
@@ -226,176 +434,275 @@ function App() {
       const data = await response.json();
       
       if (data.success && data.room) {
-        console.log('Room refreshed - Users:', data.room.users);
         setUsers(data.room.users);
-        setGameState(data.room.gameState);
         
-        // 호스트 정보는 변경하지 않음 (초기 설정 유지)
-        setDebugInfo(`Refreshed: ${data.room.users.length} users, Host: ${isHost}, MyUserId: ${userId}`);
+        if (currentState === 'linking') {
+          if (data.room.gameState === 'completed' && data.matchResult) {
+            setMatches(data.matchResult.matches || []);
+            setUnmatched(data.matchResult.unmatched || []);
+            setCurrentState('linkresult');
+            stopPolling();
+          }
+        }
       }
     } catch (error) {
-      console.error('Error refreshing room:', error);
+      console.error('Error polling room status:', error);
     }
   };
 
-  const handleStartGame = async () => {
-    if (!isHost) return;
-    
-    setIsLoading(true);
-    setError('');
-    
-    try {
-      const response = await fetch(`${API_URL}/api/start-game`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          roomId,
-          userId
-        })
-      });
-
-      const data = await response.json();
+  // Render functions
+  const renderEnter = () => (
+    <div className="enter-container">
+      <div className="enter-header">
+        <h1>🔗 링크 스테이션</h1>
+        <p>사용자 이름을 입력하고 방을 만들거나 참여하세요</p>
+      </div>
       
-      if (data.success) {
-        console.log('Game started successfully');
-        setGameState('matching');
-        setCurrentView('matching');
-        startPolling(2000); // 게임 시작 시 폴링 시작
-      } else {
-        setError(data.message || '게임 시작에 실패했습니다.');
-      }
-    } catch (error) {
-      console.error('Error starting game:', error);
-      setError('게임 시작 중 오류가 발생했습니다.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleReturnToWaiting = async () => {
-    if (!isHost) return;
-    
-    setIsLoading(true);
-    setError('');
-    
-    try {
-      const response = await fetch(`${API_URL}/api/return-to-waiting`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          roomId,
-          userId
-        })
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        console.log('Returned to waiting room');
-        setGameState('waiting');
-        setCurrentView('waiting');
-        setMatches([]);
-        setUnmatched([]);
-        setSelectedUser(null);
-        stopPolling(); // 대기실로 돌아가면 폴링 중지
-      } else {
-        setError(data.message || '대기실로 돌아가기에 실패했습니다.');
-      }
-    } catch (error) {
-      console.error('Error returning to waiting room:', error);
-      setError('대기실로 돌아가는 중 오류가 발생했습니다.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleNewGame = async () => {
-    // 상태 초기화
-    setCurrentView('login');
-    setUsers([]);
-    setMatches([]);
-    setUnmatched([]);
-    setSelectedUser(null);
-    setShowQR(false);
-    setUserId('');
-    setIsHost(false);
-    setGameState('waiting');
-    setError('');
-    stopPolling();
-  };
-
-  const generateRoomURL = () => {
-    return `${window.location.origin}?room=${roomId}`;
-  };
-
-  const renderLogin = () => (
-    <div className="login-container">
-      <div className="login-box">
-        <h1 className="app-title">🔗 링크 스테이션</h1>
-        <p className="app-subtitle">3:3 또는 4:4 매칭 게임</p>
+      <div className="enter-form">
+        <div className="input-group">
+          <label htmlFor="username">사용자 이름 (최대 32자)</label>
+          <input
+            id="username"
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="사용자 이름을 입력하세요"
+            maxLength={32}
+          />
+        </div>
         
-        {error && <div className="error-message">{error}</div>}
-        
-        <form onSubmit={handleJoinRoom} className="login-form">
-          <div className="input-group">
-            <label htmlFor="nickname">닉네임</label>
-            <input
-              type="text"
-              id="nickname"
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              placeholder="닉네임을 입력하세요"
-              required
-              disabled={isLoading}
-            />
-          </div>
-          
-          <div className="input-group">
-            <label htmlFor="roomId">방 ID</label>
-            <input
-              type="text"
-              id="roomId"
-              value={roomId}
-              onChange={(e) => setRoomId(e.target.value)}
-              placeholder="방 ID를 입력하세요"
-              required
-              disabled={isLoading}
-            />
-          </div>
-          
-          <button type="submit" className="join-button" disabled={isLoading}>
-            {isLoading ? '참여 중...' : '게임 시작'}
+        <div className="button-group">
+          <button 
+            className="make-room-button"
+            onClick={handleMakeRoom}
+            disabled={!username.trim()}
+          >
+            방 만들기
           </button>
-        </form>
+          <button 
+            className="enter-room-button"
+            onClick={handleEnterRoom}
+            disabled={!username.trim()}
+          >
+            방 참여하기
+          </button>
+        </div>
       </div>
     </div>
   );
 
-  const renderWaiting = () => (
-    <div className="waiting-container">
-      <div className="waiting-header">
-        <h2>🔗 링크 스테이션</h2>
-        <p>방 ID: {roomId} | 참여자: {users.length}명</p>
-        {isHost && <span className="host-badge">방장</span>}
-        
-        <div className="qr-section">
-          <button 
-            className="qr-button"
-            onClick={() => setShowQR(!showQR)}
-          >
-            {showQR ? 'QR코드 숨기기' : 'QR코드로 공유하기'}
-          </button>
-          {showQR && (
-            <div className="qr-container">
-              <QRCodeSVG value={generateRoomURL()} size={200} />
-              <p className="qr-text">QR코드를 스캔하여 같은 방에 참여하세요!</p>
-            </div>
-          )}
+  const renderMakeRoom = () => (
+    <div className="makeroom-container">
+      <div className="makeroom-header">
+        <h2>방 만들기</h2>
+        <p>방 설정을 입력하세요</p>
+      </div>
+      
+      <div className="makeroom-form">
+        <div className="input-group">
+          <label htmlFor="roomName">방 이름 (최대 128자)</label>
+          <input
+            id="roomName"
+            type="text"
+            value={roomName}
+            onChange={(e) => setRoomName(e.target.value)}
+            placeholder="방 이름을 입력하세요"
+            maxLength={128}
+          />
         </div>
+        
+        <div className="input-group">
+          <label htmlFor="roomPassword">방 비밀번호 (선택사항, 최대 16자)</label>
+          <input
+            id="roomPassword"
+            type="password"
+            value={roomPassword}
+            onChange={(e) => setRoomPassword(e.target.value)}
+            placeholder="비밀번호를 입력하세요 (선택사항)"
+            maxLength={16}
+          />
+        </div>
+        
+        <div className="input-group">
+          <label htmlFor="memberLimit">최대 인원 (2-99명)</label>
+          <input
+            id="memberLimit"
+            type="number"
+            value={memberLimit}
+            onChange={(e) => setMemberLimit(parseInt(e.target.value) || 8)}
+            min="2"
+            max="99"
+          />
+        </div>
+        
+        <div className="button-group">
+          <button 
+            className="create-room-button"
+            onClick={handleCreateRoom}
+            disabled={isLoading || !roomName.trim() || memberLimit < 2}
+          >
+            {isLoading ? '방 생성 중...' : '방 생성하기'}
+          </button>
+          <button 
+            className="cancel-button"
+            onClick={() => {
+              setCurrentState('enter');
+              setRoomName('');
+              setRoomPassword('');
+              setMemberLimit(8);
+            }}
+          >
+            취소
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderEnterRoom = () => (
+    <div className="enterroom-container">
+      <div className="enterroom-header">
+        <h2>방 참여하기</h2>
+        <p>참여할 방의 이름을 입력하세요</p>
+      </div>
+      
+      <div className="enterroom-form">
+        <div className="input-group">
+          <label htmlFor="enteredRoomName">방 이름 (최대 128자)</label>
+          <input
+            id="enteredRoomName"
+            type="text"
+            value={enteredRoomName}
+            onChange={(e) => setEnteredRoomName(e.target.value)}
+            placeholder="방 이름을 입력하세요"
+            maxLength={128}
+          />
+        </div>
+        
+        <div className="button-group">
+          <button 
+            className="join-room-button"
+            onClick={handleJoinRoom}
+            disabled={isLoading || !enteredRoomName.trim()}
+          >
+            {isLoading ? '참여 중...' : '방 참여하기'}
+          </button>
+          <button 
+            className="cancel-button"
+            onClick={() => {
+              setCurrentState('enter');
+              setEnteredRoomName('');
+            }}
+          >
+            취소
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderCheckPassword = () => (
+    <div className="checkpassword-container">
+      <div className="checkpassword-header">
+        <h2>비밀번호 확인</h2>
+        <p>방 "{enteredRoomName}"의 비밀번호를 입력하세요</p>
+      </div>
+      
+      <div className="checkpassword-form">
+        <div className="input-group">
+          <label htmlFor="enteredPassword">방 비밀번호 (최대 16자)</label>
+          <input
+            id="enteredPassword"
+            type="password"
+            value={enteredPassword}
+            onChange={(e) => setEnteredPassword(e.target.value)}
+            placeholder="비밀번호를 입력하세요"
+            maxLength={16}
+          />
+        </div>
+        
+        <div className="button-group">
+          <button 
+            className="enter-button"
+            onClick={handleCheckPassword}
+            disabled={isLoading}
+          >
+            {isLoading ? '확인 중...' : '입장하기'}
+          </button>
+          <button 
+            className="cancel-button"
+            onClick={() => {
+              setCurrentState('enterroom');
+              setEnteredPassword('');
+            }}
+          >
+            취소
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderEnterRoomWithQR = () => (
+    <div className="enterroomwithqr-container">
+      <div className="enterroomwithqr-header">
+        <h2>QR 코드로 참여하기</h2>
+        <p>사용자 이름을 입력하고 방에 참여하세요</p>
+      </div>
+      
+      <div className="enterroomwithqr-form">
+        <div className="input-group">
+          <label htmlFor="qrUsername">사용자 이름 (최대 32자)</label>
+          <input
+            id="qrUsername"
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="사용자 이름을 입력하세요"
+            maxLength={32}
+          />
+        </div>
+        
+        <div className="button-group">
+          <button 
+            className="join-button"
+            onClick={handleJoinWithQR}
+            disabled={isLoading || !username.trim()}
+          >
+            {isLoading ? '참여 중...' : '참여하기'}
+          </button>
+          <button 
+            className="cancel-button"
+            onClick={() => setCurrentState('enterroom')}
+          >
+            취소
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderWaitingRoom = () => (
+    <div className="waitingroom-container">
+      <div className="waitingroom-header">
+        <h2>🔗 링크 스테이션</h2>
+        <p>방: {roomData?.roomName} | 참여자: {users.length}/{roomData?.memberLimit}명</p>
+        {isMaster && <span className="master-badge">방장</span>}
+      </div>
+      
+      <div className="qr-section">
+        <button 
+          className="qr-button"
+          onClick={() => setShowQR(!showQR)}
+        >
+          {showQR ? 'QR코드 숨기기' : 'QR코드로 공유하기'}
+        </button>
+        {showQR && (
+          <div className="qr-container">
+            <QRCodeSVG value={`${window.location.origin}?room=${roomId}`} size={200} />
+            <p className="qr-text">QR코드를 스캔하여 같은 방에 참여하세요!</p>
+          </div>
+        )}
       </div>
       
       <div className="users-list">
@@ -406,29 +713,15 @@ function App() {
               <div className="user-info">
                 <span className="user-nickname">{user.displayName || user.nickname}</span>
                 {user.id === userId && <span className="you-badge">나</span>}
-                {user.id === userId && isHost && <span className="host-badge">방장</span>}
+                {user.id === userId && isMaster && <span className="master-badge">방장</span>}
               </div>
             </div>
           ))}
         </div>
       </div>
       
-      <div className="room-controls">
-        <button 
-          className="refresh-button"
-          onClick={handleRefreshRoom}
-        >
-          새로고침
-        </button>
-      </div>
-      
-      {/* Debug: Show host status */}
-      <div style={{background: 'yellow', padding: '10px', margin: '10px', color: 'black'}}>
-        DEBUG: isHost = {isHost.toString()}, users.length = {users.length}
-      </div>
-      
-      {isHost && (
-        <div className="host-controls">
+      {isMaster && (
+        <div className="master-controls">
           <button 
             className="start-game-button"
             onClick={handleStartGame}
@@ -442,36 +735,19 @@ function App() {
         </div>
       )}
       
-      {!isHost && (
-        <div className="waiting-message">
-          <p>방장이 게임을 시작할 때까지 기다려주세요...</p>
-        </div>
-      )}
-      
-      {error && <div className="error-message">{error}</div>}
+      <div className="room-actions">
+        <button className="leave-room-button" onClick={handleLeaveRoom}>
+          방 나가기
+        </button>
+      </div>
     </div>
   );
 
-  const renderMatching = () => (
-    <div className="matching-container">
-      <div className="matching-header">
-        <h2>🔗 링크 스테이션</h2>
-        <p>방 ID: {roomId} | 참여자: {users.length}명</p>
-        
-        <div className="qr-section">
-          <button 
-            className="qr-button"
-            onClick={() => setShowQR(!showQR)}
-          >
-            {showQR ? 'QR코드 숨기기' : 'QR코드로 공유하기'}
-          </button>
-          {showQR && (
-            <div className="qr-container">
-              <QRCodeSVG value={generateRoomURL()} size={200} />
-              <p className="qr-text">QR코드를 스캔하여 같은 방에 참여하세요!</p>
-            </div>
-          )}
-        </div>
+  const renderLinking = () => (
+    <div className="linking-container">
+      <div className="linking-header">
+        <h2>🔗 링크하기</h2>
+        <p>연결하고 싶은 사람을 선택하세요</p>
       </div>
       
       <div className="users-list">
@@ -482,14 +758,15 @@ function App() {
               <div className="user-info">
                 <span className="user-nickname">{user.displayName || user.nickname}</span>
                 {user.id === userId && <span className="you-badge">나</span>}
+                {user.hasVoted && <span className="voted-badge">투표완료</span>}
               </div>
-              {user.id !== userId && gameState === 'matching' && (
-                <button
-                  className={`select-button ${selectedUser === user.id ? 'selected' : ''}`}
+              {!hasVoted && user.id !== userId && (
+                <button 
+                  className="select-button"
                   onClick={() => handleSelectUser(user.id)}
-                  disabled={selectedUser !== null || isLoading}
+                  disabled={isLoading}
                 >
-                  {selectedUser === user.id ? '선택됨' : '선택'}
+                  선택
                 </button>
               )}
             </div>
@@ -497,46 +774,19 @@ function App() {
         </div>
       </div>
       
-      {gameState === 'waiting' && (
-        <div className="waiting-message">
-          <p>방장이 게임을 시작할 때까지 기다려주세요...</p>
-        </div>
-      )}
-      
-      {selectedUser && gameState === 'matching' && (
-        <div className="selection-info">
-          <p>✅ 선택을 완료했습니다. 다른 참여자들의 선택을 기다리는 중...</p>
-        </div>
-      )}
-      
-      {isLoading && (
-        <div className="loading-info">
-          <p>처리 중...</p>
+      {hasVoted && (
+        <div className="voted-message">
+          <p>투표가 완료되었습니다. 다른 참여자들의 선택을 기다리는 중...</p>
         </div>
       )}
     </div>
   );
 
-  const renderResult = () => (
-    <div className="result-container">
-      <div className="result-header">
-        <h2>🎉 매칭 결과</h2>
-        <p>방 ID: {roomId}</p>
-        
-        <div className="qr-section">
-          <button 
-            className="qr-button"
-            onClick={() => setShowQR(!showQR)}
-          >
-            {showQR ? 'QR코드 숨기기' : 'QR코드로 공유하기'}
-          </button>
-          {showQR && (
-            <div className="qr-container">
-              <QRCodeSVG value={generateRoomURL()} size={200} />
-              <p className="qr-text">QR코드를 스캔하여 같은 방에 참여하세요!</p>
-            </div>
-          )}
-        </div>
+  const renderLinkResult = () => (
+    <div className="linkresult-container">
+      <div className="linkresult-header">
+        <h2>🎉 링크 결과</h2>
+        <p>이번 라운드의 결과입니다</p>
       </div>
       
       {matches.length > 0 && (
@@ -568,39 +818,32 @@ function App() {
       )}
       
       <div className="result-actions">
-        {isHost && (
-          <button className="return-waiting-button" onClick={handleReturnToWaiting}>
-            대기실로 돌아가기
+        {isMaster && unmatched.length > 0 && (
+          <button className="next-round-button" onClick={handleNextRound}>
+            다음 라운드 ({unmatched.length}명)
           </button>
         )}
-        <button className="new-game-button" onClick={handleNewGame}>
-          새 게임 시작
+        <button className="leave-room-button" onClick={handleLeaveRoom}>
+          방 나가기
         </button>
       </div>
     </div>
   );
 
   return (
-    <ErrorBoundary>
-      <div className="App">
-        {currentView === 'login' && renderLogin()}
-        {currentView === 'waiting' && renderWaiting()}
-        {currentView === 'matching' && renderMatching()}
-        {currentView === 'result' && renderResult()}
-        
-        {/* Debug panel for all views */}
-        <div style={{position: 'fixed', top: '10px', right: '10px', background: 'rgba(0,0,0,0.8)', color: 'white', padding: '10px', fontSize: '12px', zIndex: 1000, borderRadius: '5px'}}>
-          <div><strong>Debug Info:</strong></div>
-          <div>View: {currentView}</div>
-          <div>Users: {users.length}</div>
-          <div>IsHost: {String(isHost)}</div>
-          <div>GameState: {gameState}</div>
-          <div>UserId: {userId || 'none'}</div>
-          <div>RoomId: {roomId || 'none'}</div>
-          <div>{debugInfo || 'No debug info'}</div>
-        </div>
-      </div>
-    </ErrorBoundary>
+    <div className="App">
+      {error && <div className="error-message">{error}</div>}
+      {success && <div className="success-message">{success}</div>}
+      
+      {currentState === 'enter' && renderEnter()}
+      {currentState === 'makeroom' && renderMakeRoom()}
+      {currentState === 'enterroom' && renderEnterRoom()}
+      {currentState === 'checkpassword' && renderCheckPassword()}
+      {currentState === 'enterroomwithqr' && renderEnterRoomWithQR()}
+      {currentState === 'waitingroom' && renderWaitingRoom()}
+      {currentState === 'linking' && renderLinking()}
+      {currentState === 'linkresult' && renderLinkResult()}
+    </div>
   );
 }
 

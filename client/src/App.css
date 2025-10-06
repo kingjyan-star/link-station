@@ -1,3 +1,4 @@
+/* Reset and base styles */
 * {
   margin: 0;
   padding: 0;
@@ -12,44 +13,70 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: 100vh;
+  color: #333;
 }
 
 .App {
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 20px;
 }
 
-/* 로그인 화면 */
-.login-container {
-  width: 100%;
-  max-width: 400px;
-}
-
-.login-box {
+/* Container styles */
+.enter-container,
+.makeroom-container,
+.enterroom-container,
+.checkpassword-container,
+.enterroomwithqr-container,
+.waitingroom-container,
+.linking-container,
+.linkresult-container {
   background: white;
   border-radius: 20px;
-  padding: 40px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  padding: 40px;
+  max-width: 500px;
+  width: 100%;
   text-align: center;
 }
 
-.app-title {
-  font-size: 2.5rem;
-  color: #333;
+/* Header styles */
+.enter-header h1,
+.makeroom-header h2,
+.enterroom-header h2,
+.checkpassword-header h2,
+.enterroomwithqr-header h2,
+.waitingroom-header h2,
+.linking-header h2,
+.linkresult-header h2 {
+  color: #4a5568;
   margin-bottom: 10px;
+  font-size: 2rem;
   font-weight: 700;
 }
 
-.app-subtitle {
-  color: #666;
+.enter-header p,
+.makeroom-header p,
+.enterroom-header p,
+.checkpassword-header p,
+.enterroomwithqr-header p,
+.waitingroom-header p,
+.linking-header p,
+.linkresult-header p {
+  color: #718096;
   margin-bottom: 30px;
   font-size: 1.1rem;
 }
 
-.login-form {
+/* Form styles */
+.enter-form,
+.makeroom-form,
+.enterroom-form,
+.checkpassword-form,
+.enterroomwithqr-form {
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -62,239 +89,334 @@ body {
 .input-group label {
   display: block;
   margin-bottom: 8px;
-  color: #333;
   font-weight: 600;
+  color: #4a5568;
+  font-size: 0.9rem;
 }
 
 .input-group input {
   width: 100%;
   padding: 12px 16px;
-  border: 2px solid #e1e5e9;
+  border: 2px solid #e2e8f0;
   border-radius: 10px;
-  font-size: 16px;
-  transition: border-color 0.3s ease;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  background: #f7fafc;
 }
 
 .input-group input:focus {
   outline: none;
   border-color: #667eea;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
+/* Button styles */
+.button-group {
+  display: flex;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.button-group button {
+  flex: 1;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-height: 48px;
+}
+
+.make-room-button,
+.enter-room-button,
+.create-room-button,
+.join-room-button,
+.enter-button,
 .join-button {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  border: none;
-  padding: 15px 30px;
-  border-radius: 10px;
-  font-size: 18px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.2s ease;
 }
 
+.make-room-button:hover,
+.enter-room-button:hover,
+.create-room-button:hover,
+.join-room-button:hover,
+.enter-button:hover,
 .join-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+}
+
+.cancel-button {
+  background: #e2e8f0;
+  color: #4a5568;
+}
+
+.cancel-button:hover {
+  background: #cbd5e0;
   transform: translateY(-2px);
 }
 
-/* QR코드 섹션 */
+/* Waiting room specific styles */
+.waitingroom-container {
+  max-width: 800px;
+}
+
+.waitingroom-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.master-badge {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .qr-section {
-  margin-top: 30px;
-  padding-top: 20px;
-  border-top: 1px solid #e1e5e9;
+  margin: 30px 0;
 }
 
 .qr-button {
-  background: #f8f9fa;
-  color: #333;
-  border: 2px solid #e1e5e9;
-  padding: 10px 20px;
-  border-radius: 8px;
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
   cursor: pointer;
-  font-size: 14px;
   transition: all 0.3s ease;
 }
 
 .qr-button:hover {
-  background: #e9ecef;
-  border-color: #667eea;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(79, 172, 254, 0.3);
 }
 
 .qr-container {
   margin-top: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
+  padding: 20px;
+  background: #f7fafc;
+  border-radius: 15px;
+  border: 2px dashed #cbd5e0;
 }
 
 .qr-text {
-  color: #666;
-  font-size: 14px;
-  text-align: center;
+  margin-top: 15px;
+  color: #718096;
+  font-size: 0.9rem;
 }
 
-/* 매칭 화면 */
-.matching-container {
-  width: 100%;
-  max-width: 800px;
-  background: white;
-  border-radius: 20px;
-  padding: 40px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-}
-
-.matching-header {
-  text-align: center;
-  margin-bottom: 30px;
-}
-
-.matching-header h2 {
-  font-size: 2rem;
-  color: #333;
-  margin-bottom: 10px;
-}
-
-.matching-header p {
-  color: #666;
-  font-size: 1.1rem;
+/* Users list */
+.users-list {
+  margin: 30px 0;
 }
 
 .users-list h3 {
-  color: #333;
+  color: #4a5568;
   margin-bottom: 20px;
   font-size: 1.3rem;
 }
 
 .users-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 15px;
-  margin-bottom: 30px;
 }
 
 .user-card {
-  background: #f8f9fa;
-  border: 2px solid #e1e5e9;
-  border-radius: 12px;
+  background: #f7fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 15px;
   padding: 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   transition: all 0.3s ease;
+  position: relative;
 }
 
 .user-card:hover {
-  border-color: #667eea;
   transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+  border-color: #667eea;
 }
 
 .user-info {
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 10px;
 }
 
 .user-nickname {
   font-weight: 600;
-  color: #333;
+  color: #4a5568;
   font-size: 1.1rem;
 }
 
 .you-badge {
-  background: #667eea;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   padding: 4px 8px;
   border-radius: 12px;
-  font-size: 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.voted-badge {
+  background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.7rem;
   font-weight: 600;
 }
 
 .select-button {
-  background: #667eea;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
   padding: 8px 16px;
   border-radius: 8px;
-  cursor: pointer;
+  font-size: 0.9rem;
   font-weight: 600;
+  cursor: pointer;
   transition: all 0.3s ease;
+  margin-top: 10px;
 }
 
 .select-button:hover {
-  background: #5a6fd8;
   transform: translateY(-1px);
-}
-
-.select-button.selected {
-  background: #28a745;
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
 }
 
 .select-button:disabled {
-  background: #6c757d;
+  opacity: 0.5;
   cursor: not-allowed;
   transform: none;
 }
 
-.selection-info {
-  background: #d4edda;
-  border: 1px solid #c3e6cb;
-  border-radius: 8px;
-  padding: 15px;
-  text-align: center;
-  color: #155724;
+/* Master controls */
+.master-controls {
+  margin: 30px 0;
+  padding: 20px;
+  background: #f7fafc;
+  border-radius: 15px;
+  border: 2px solid #e2e8f0;
 }
 
-/* 결과 화면 */
-.result-container {
-  width: 100%;
-  max-width: 800px;
-  background: white;
-  border-radius: 20px;
-  padding: 40px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-}
-
-.result-header {
-  text-align: center;
-  margin-bottom: 30px;
-}
-
-.result-header h2 {
-  font-size: 2rem;
-  color: #333;
-  margin-bottom: 10px;
-}
-
-.result-header p {
-  color: #666;
+.start-game-button {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+  border: none;
+  padding: 15px 30px;
+  border-radius: 10px;
   font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: 100%;
 }
 
-.matches-section, .unmatched-section {
-  margin-bottom: 30px;
+.start-game-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(240, 147, 251, 0.3);
 }
 
-.matches-section h3, .unmatched-section h3 {
-  color: #333;
+.start-game-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.waiting-message {
+  margin-top: 15px;
+  color: #718096;
+  font-style: italic;
+}
+
+/* Room actions */
+.room-actions {
+  margin-top: 30px;
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+}
+
+.leave-room-button {
+  background: #e53e3e;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.leave-room-button:hover {
+  background: #c53030;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(229, 62, 62, 0.3);
+}
+
+/* Linking state */
+.voted-message {
+  background: #f0fff4;
+  border: 2px solid #9ae6b4;
+  border-radius: 10px;
+  padding: 20px;
+  margin: 20px 0;
+  color: #22543d;
+  font-weight: 600;
+}
+
+/* Link result styles */
+.linkresult-container {
+  max-width: 800px;
+}
+
+.matches-section,
+.unmatched-section {
+  margin: 30px 0;
+}
+
+.matches-section h3,
+.unmatched-section h3 {
+  color: #4a5568;
   margin-bottom: 20px;
   font-size: 1.3rem;
 }
 
 .match-card {
-  border-radius: 12px;
+  background: white;
+  border-radius: 15px;
   padding: 20px;
-  margin-bottom: 15px;
-  text-align: center;
+  margin: 15px 0;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
 }
 
 .match-card.success {
-  background: #d4edda;
-  border: 2px solid #c3e6cb;
+  border-left: 5px solid #4ade80;
+  background: linear-gradient(135deg, #f0fff4 0%, #dcfce7 100%);
 }
 
 .match-card.fail {
-  background: #f8d7da;
-  border: 2px solid #f5c6cb;
+  border-left: 5px solid #f87171;
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
 }
 
 .match-pair {
@@ -307,8 +429,8 @@ body {
 
 .user-name {
   font-weight: 600;
-  font-size: 1.2rem;
-  color: #333;
+  color: #4a5568;
+  font-size: 1.1rem;
 }
 
 .match-arrow {
@@ -316,120 +438,11 @@ body {
 }
 
 .match-message {
-  color: #155724;
-  font-weight: 500;
-  margin: 0;
-}
-
-.match-card.fail .match-message {
-  color: #721c24;
-}
-
-.new-game-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  padding: 15px 30px;
-  border-radius: 10px;
-  font-size: 18px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.2s ease;
-  width: 100%;
-}
-
-.new-game-button:hover {
-  transform: translateY(-2px);
-}
-
-/* Waiting Room Styles */
-.waiting-container {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  min-height: 100vh;
-  color: white;
-}
-
-.waiting-header {
-  text-align: center;
-  margin-bottom: 30px;
-}
-
-.host-badge {
-  background: #ff6b6b;
-  color: white;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 0.8rem;
-  margin-left: 8px;
-  font-weight: bold;
-}
-
-.room-controls {
-  text-align: center;
-  margin: 20px 0;
-}
-
-.host-controls {
-  text-align: center;
-  margin-top: 30px;
-}
-
-.start-game-button {
-  background: #4ecdc4;
-  color: white;
-  border: none;
-  padding: 15px 30px;
-  border-radius: 25px;
-  font-size: 1.1rem;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(78, 205, 196, 0.3);
-}
-
-.start-game-button:hover:not(:disabled) {
-  background: #45b7b8;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(78, 205, 196, 0.4);
-}
-
-.start-game-button:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-.waiting-message {
-  text-align: center;
-  margin-top: 20px;
-  color: #f0f0f0;
+  color: #718096;
   font-style: italic;
+  text-align: center;
 }
 
-.refresh-button {
-  background: #ff9ff3;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 15px;
-  font-size: 0.9rem;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  margin-top: 10px;
-  box-shadow: 0 2px 8px rgba(255, 159, 243, 0.3);
-}
-
-.refresh-button:hover {
-  background: #ff7eb3;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(255, 159, 243, 0.4);
-}
-
-/* Result Actions */
 .result-actions {
   display: flex;
   gap: 15px;
@@ -438,45 +451,107 @@ body {
   flex-wrap: wrap;
 }
 
-.return-waiting-button {
-  background: #ff9ff3;
+.next-round-button {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
   color: white;
   border: none;
   padding: 12px 24px;
-  border-radius: 20px;
+  border-radius: 10px;
   font-size: 1rem;
-  font-weight: bold;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(255, 159, 243, 0.3);
 }
 
-.return-waiting-button:hover {
-  background: #ff7eb3;
+.next-round-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(255, 159, 243, 0.4);
+  box-shadow: 0 10px 20px rgba(79, 172, 254, 0.3);
 }
 
-/* 반응형 디자인 */
+/* Message styles */
+.error-message {
+  background: #fed7d7;
+  color: #c53030;
+  padding: 15px 20px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  border: 2px solid #feb2b2;
+  font-weight: 600;
+  text-align: center;
+}
+
+.success-message {
+  background: #c6f6d5;
+  color: #22543d;
+  padding: 15px 20px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  border: 2px solid #9ae6b4;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Responsive design */
 @media (max-width: 768px) {
   .App {
     padding: 10px;
   }
   
-  .login-box, .matching-container, .result-container {
+  .enter-container,
+  .makeroom-container,
+  .enterroom-container,
+  .checkpassword-container,
+  .enterroomwithqr-container,
+  .waitingroom-container,
+  .linking-container,
+  .linkresult-container {
     padding: 20px;
   }
   
-  .app-title {
-    font-size: 2rem;
+  .button-group {
+    flex-direction: column;
   }
   
   .users-grid {
     grid-template-columns: 1fr;
   }
   
-  .match-pair {
+  .waitingroom-header {
     flex-direction: column;
-    gap: 10px;
+    text-align: center;
   }
+  
+  .result-actions {
+    flex-direction: column;
+  }
+}
+
+/* Loading states */
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.enter-container,
+.makeroom-container,
+.enterroom-container,
+.checkpassword-container,
+.enterroomwithqr-container,
+.waitingroom-container,
+.linking-container,
+.linkresult-container {
+  animation: fadeIn 0.5s ease-out;
 }
