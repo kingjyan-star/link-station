@@ -412,11 +412,11 @@ function App() {
         setSelectedUser(selectedUserId);
         setHasVoted(true);
         
+        // Don't immediately redirect to results - let polling handle it
+        // This ensures all users get the results at the same time
         if (data.matches || data.unmatched) {
-          setMatches(data.matches || []);
-          setUnmatched(data.unmatched || []);
-          setCurrentState('linkresult');
-          stopPolling();
+          console.log('All users have voted, results will be shown via polling');
+          // Keep polling active to broadcast results to all users
         }
       } else {
         setError(data.message || '선택에 실패했습니다.');
@@ -510,15 +510,34 @@ function App() {
       const data = await response.json();
       
       if (data.success && data.room) {
+        // Check if current user is still in the room
+        const currentUserInRoom = data.room.users.find(user => user.id === userId);
+        if (!currentUserInRoom) {
+          // User has been kicked or removed
+          setError('방에서 추방되었습니다.');
+          setCurrentState('enter');
+          setUsername('');
+          setRoomId('');
+          setUserId('');
+          setUsers([]);
+          setIsMaster(false);
+          setRoomData(null);
+          stopPolling();
+          return;
+        }
+        
         setUsers(data.room.users);
         
-        if (currentState === 'linking') {
-          if (data.room.gameState === 'completed' && data.matchResult) {
-            setMatches(data.matchResult.matches || []);
-            setUnmatched(data.matchResult.unmatched || []);
-            setCurrentState('linkresult');
-            stopPolling();
-          }
+        // Check for match results regardless of current state
+        if (data.room.gameState === 'completed' && data.matchResult) {
+          console.log('Match results received via polling:', data.matchResult);
+          setMatches(data.matchResult.matches || []);
+          setUnmatched(data.matchResult.unmatched || []);
+          setCurrentState('linkresult');
+          stopPolling();
+        } else if (currentState === 'linking') {
+          // Update voting status for users
+          setUsers(data.room.users);
         }
       }
     } catch (error) {
@@ -534,6 +553,22 @@ function App() {
       const data = await response.json();
       
       if (data.success && data.room) {
+        // Check if current user is still in the room
+        const currentUserInRoom = data.room.users.find(user => user.id === userId);
+        if (!currentUserInRoom) {
+          // User has been kicked or removed
+          setError('방에서 추방되었습니다.');
+          setCurrentState('enter');
+          setUsername('');
+          setRoomId('');
+          setUserId('');
+          setUsers([]);
+          setIsMaster(false);
+          setRoomData(null);
+          stopPolling();
+          return;
+        }
+        
         // Update users and master status
         setUsers(data.room.users);
         setIsMaster(data.room.masterId === userId);
