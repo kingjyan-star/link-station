@@ -58,6 +58,26 @@ function App() {
     }
   }, []);
 
+  // Auto-hide success messages after 3 seconds
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => {
+        setSuccess('');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [success]);
+
+  // Auto-hide error messages after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError('');
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
   // Start waiting room polling when in waiting room state
   useEffect(() => {
     if (currentState === 'waitingroom') {
@@ -140,7 +160,7 @@ function App() {
       if (data.success) {
         setRoomId(data.roomId);
         setUserId(data.userId);
-        setUsers(data.users);
+      setUsers(data.users);
         setIsMaster(true);
         setRoomData(data.roomData);
         setCurrentState('waitingroom');
@@ -203,7 +223,7 @@ function App() {
       if (data.success) {
         setRoomId(data.roomId);
         setUserId(data.userId);
-        setUsers(data.users);
+      setUsers(data.users);
         setIsMaster(data.isMaster);
         setRoomData(data.roomData);
         setCurrentState('waitingroom');
@@ -236,7 +256,7 @@ function App() {
         setRoomData(data.roomData);
         setCurrentState('waitingroom');
         setSuccess('방에 참여했습니다!');
-      } else {
+    } else {
         setError(data.message || '방 참여에 실패했습니다.');
       }
     } catch (error) {
@@ -418,6 +438,33 @@ function App() {
     startPolling();
   };
 
+  const handleKickUser = async (targetUserId) => {
+    if (!isMaster) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/api/kick-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId,
+          masterUserId: userId,
+          targetUserId
+        })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setUsers(data.users);
+        setSuccess('사용자가 추방되었습니다.');
+      } else {
+        setError(data.message || '사용자 추방에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Error kicking user:', error);
+      setError('사용자 추방 중 오류가 발생했습니다.');
+    }
+  };
+
   const handleLeaveRoom = () => {
     setCurrentState('enter');
     setUsername('');
@@ -551,11 +598,11 @@ function App() {
       </div>
       
       <div className="makeroom-form">
-        <div className="input-group">
+          <div className="input-group">
           <label htmlFor="roomName">방 이름 (최대 128자)</label>
-          <input
+            <input
             id="roomName"
-            type="text"
+              type="text"
             value={roomName}
             onChange={(e) => setRoomName(e.target.value)}
             placeholder="방 이름을 입력하세요"
@@ -572,10 +619,10 @@ function App() {
             onChange={(e) => setRoomPassword(e.target.value)}
             placeholder="비밀번호를 입력하세요 (선택사항)"
             maxLength={16}
-          />
-        </div>
-        
-        <div className="input-group">
+            />
+          </div>
+          
+          <div className="input-group">
           <label htmlFor="memberLimit">최대 인원 (2-99명)</label>
           <input
             id="memberLimit"
@@ -621,9 +668,9 @@ function App() {
       <div className="enterroom-form">
         <div className="input-group">
           <label htmlFor="enteredRoomName">방 이름 (최대 128자)</label>
-          <input
+            <input
             id="enteredRoomName"
-            type="text"
+              type="text"
             value={enteredRoomName}
             onChange={(e) => setEnteredRoomName(e.target.value)}
             placeholder="방 이름을 입력하세요"
@@ -670,9 +717,9 @@ function App() {
             onChange={(e) => setEnteredPassword(e.target.value)}
             placeholder="비밀번호를 입력하세요"
             maxLength={16}
-          />
-        </div>
-        
+            />
+          </div>
+          
         <div className="button-group">
           <button 
             className="enter-button"
@@ -741,18 +788,18 @@ function App() {
         <p>방: {roomData?.roomName} | 참여자: {users.length}/{roomData?.memberLimit}명</p>
         {isMaster && <span className="master-badge">방장</span>}
       </div>
-      
-      <div className="qr-section">
-        <button 
-          className="qr-button"
-          onClick={() => setShowQR(!showQR)}
-        >
-          {showQR ? 'QR코드 숨기기' : 'QR코드로 공유하기'}
-        </button>
-        {showQR && (
-          <div className="qr-container">
+        
+        <div className="qr-section">
+          <button 
+            className="qr-button"
+            onClick={() => setShowQR(!showQR)}
+          >
+            {showQR ? 'QR코드 숨기기' : 'QR코드로 공유하기'}
+          </button>
+          {showQR && (
+            <div className="qr-container">
             <QRCodeSVG value={`${window.location.origin}?room=${roomId}`} size={200} />
-            <p className="qr-text">QR코드를 스캔하여 같은 방에 참여하세요!</p>
+              <p className="qr-text">QR코드를 스캔하여 같은 방에 참여하세요!</p>
             <p className="qr-link">링크: {window.location.origin}?room={roomId}</p>
           </div>
         )}
@@ -768,6 +815,15 @@ function App() {
                 {user.id === userId && <span className="you-badge">나</span>}
                 {user.isMaster && <span className="master-badge">방장</span>}
               </div>
+              {isMaster && user.id !== userId && (
+                <button 
+                  className="kick-button"
+                  onClick={() => handleKickUser(user.id)}
+                  title="사용자 추방"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -812,6 +868,7 @@ function App() {
                 <span className="user-nickname">{user.displayName || user.nickname}</span>
                 {user.id === userId && <span className="you-badge">나</span>}
                 {user.hasVoted && <span className="voted-badge">투표완료</span>}
+                {!user.hasVoted && user.id !== userId && <span className="waiting-badge">대기중</span>}
               </div>
               {!hasVoted && user.id !== userId && (
                 <button 
@@ -878,13 +935,13 @@ function App() {
         )}
         <button className="leave-room-button" onClick={handleLeaveRoom}>
           방 나가기
-        </button>
+      </button>
       </div>
     </div>
   );
 
   return (
-    <div className="App">
+      <div className="App">
       {error && <div className="error-message">{error}</div>}
       {success && <div className="success-message">{success}</div>}
       
@@ -896,7 +953,7 @@ function App() {
       {currentState === 'waitingroom' && renderWaitingRoom()}
       {currentState === 'linking' && renderLinking()}
       {currentState === 'linkresult' && renderLinkResult()}
-    </div>
+      </div>
   );
 }
 

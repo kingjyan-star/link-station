@@ -310,14 +310,36 @@ app.post('/api/start-game', (req, res) => {
 app.post('/api/select', (req, res) => {
   const { roomId, userId, selectedUserId } = req.body;
   
+  console.log(`Selection attempt: ${userId} selects ${selectedUserId} in room ${roomId}`);
+  
   const room = rooms.get(roomId);
   if (!room) {
+    console.log(`Room not found: ${roomId}`);
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
+  }
+  
+  // Check if user exists in room
+  if (!room.users.has(userId)) {
+    console.log(`User not found in room: ${userId}`);
+    return res.status(404).json({ success: false, message: '방에 참여하지 않은 사용자입니다.' });
+  }
+  
+  // Check if selected user exists in room
+  if (!room.users.has(selectedUserId)) {
+    console.log(`Selected user not found in room: ${selectedUserId}`);
+    return res.status(404).json({ success: false, message: '선택한 사용자를 찾을 수 없습니다.' });
   }
   
   // Check if game is in linking phase
   if (room.gameState !== 'linking') {
+    console.log(`Game not in linking phase. Current state: ${room.gameState}`);
     return res.status(400).json({ success: false, message: '게임이 링킹 단계가 아닙니다.' });
+  }
+  
+  // Check if user already voted
+  if (room.selections.has(userId)) {
+    console.log(`User already voted: ${userId}`);
+    return res.status(400).json({ success: false, message: '이미 투표하셨습니다.' });
   }
   
   // Record selection
@@ -405,6 +427,45 @@ app.get('/api/room/:roomId', (req, res) => {
       masterId: room.masterId
     },
     matchResult: room.matchResult
+  });
+});
+
+// Kick user (master only)
+app.post('/api/kick-user', (req, res) => {
+  const { roomId, masterUserId, targetUserId } = req.body;
+  
+  const room = rooms.get(roomId);
+  if (!room) {
+    return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
+  }
+  
+  // Check if user is master
+  if (room.masterId !== masterUserId) {
+    return res.status(403).json({ success: false, message: '방장만 사용자를 추방할 수 있습니다.' });
+  }
+  
+  // Check if target user exists
+  const targetUser = room.users.get(targetUserId);
+  if (!targetUser) {
+    return res.status(404).json({ success: false, message: '사용자를 찾을 수 없습니다.' });
+  }
+  
+  // Cannot kick yourself
+  if (targetUserId === masterUserId) {
+    return res.status(400).json({ success: false, message: '자신을 추방할 수 없습니다.' });
+  }
+  
+  // Remove user from room
+  room.users.delete(targetUserId);
+  room.selections.delete(targetUserId);
+  activeUsers.delete(targetUser.username);
+  
+  console.log(`User kicked: ${targetUser.displayName} from ${room.roomName} by master`);
+  
+  res.json({
+    success: true,
+    message: '사용자가 추방되었습니다.',
+    users: Array.from(room.users.values())
   });
 });
 

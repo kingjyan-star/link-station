@@ -283,6 +283,15 @@ body {
   font-weight: 600;
 }
 
+.waiting-badge {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
 .select-button {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
@@ -305,6 +314,29 @@ body {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+}
+
+.kick-button {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.kick-button:hover {
+  background: #dc2626;
+  transform: scale(1.1);
 }
 
 /* Master controls */
