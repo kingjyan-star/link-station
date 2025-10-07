@@ -351,6 +351,10 @@ app.post('/api/select', (req, res) => {
   // Check if all users have selected
   if (room.selections.size === room.users.size) {
     console.log('All users have selected, processing matches...');
+    console.log(`Room users size: ${room.users.size}`);
+    console.log(`Room selections size: ${room.selections.size}`);
+    console.log('All users:', Array.from(room.users.keys()));
+    console.log('All selections:', Array.from(room.selections.keys()));
     
     const matches = [];
     const unmatched = [];

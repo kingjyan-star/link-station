@@ -538,6 +538,12 @@ function App() {
         } else if (currentState === 'linking') {
           // Update voting status for users
           setUsers(data.room.users);
+          
+          // Additional check: if all users have voted but game state is still linking
+          const allUsersVoted = data.room.users.every(user => user.hasVoted);
+          if (allUsersVoted && data.room.gameState === 'linking') {
+            console.log('All users voted but game state not updated yet, waiting for results...');
+          }
         }
       }
     } catch (error) {
@@ -904,6 +910,7 @@ function App() {
                 {user.id === userId && <span className="you-badge">나</span>}
                 {user.hasVoted && <span className="voted-badge">투표완료</span>}
                 {!user.hasVoted && user.id !== userId && <span className="waiting-badge">대기중</span>}
+                {!user.hasVoted && user.id === userId && <span className="waiting-badge">대기중</span>}
               </div>
               {!hasVoted && user.id !== userId && (
                 <button 
@@ -913,6 +920,16 @@ function App() {
                 >
                   선택
                 </button>
+              )}
+              {hasVoted && user.id !== userId && !user.hasVoted && (
+                <div className="waiting-indicator">
+                  <span>선택 대기중...</span>
+                </div>
+              )}
+              {hasVoted && user.id !== userId && user.hasVoted && (
+                <div className="completed-indicator">
+                  <span>✓ 완료</span>
+                </div>
               )}
             </div>
           ))}
