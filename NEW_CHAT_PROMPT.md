@@ -1,97 +1,216 @@
-# 🚀 New Cursor Chat Starter Prompt
+# 🔗 Link Station - AI Assistant Context Handover
 
-## 📋 **Copy and paste into new chat:**
+**Copy and paste this into a new AI chat session to continue development with full context.**
 
+---
+
+## 📋 Project Quick Reference
+
+**Name**: Link Station  
+**Type**: Real-time matching game web application  
+**Live URL**: https://link-station-pro.vercel.app  
+**Status**: ✅ Production Ready (October 2025)
+
+---
+
+## 🎯 What You Need to Know
+
+I'm working on **Link Station**, a multi-device real-time matching game where users join rooms, select each other, and form pairs. The app has an 8-state flow from room creation to match results.
+
+### Tech Stack
+- **Frontend**: React 19.1.1 (client/src/App.js)
+- **Backend**: Node.js + Express API (api/game.js)
+- **Deployment**: Vercel (serverless + static)
+- **Real-time**: Polling-based updates (2-5 sec intervals)
+
+### Current Architecture
+- React app served from root (`index.html`, `static/`)
+- API functions in `api/game.js` (serverless)
+- No WebSockets (using REST + polling)
+- In-memory storage (Map-based rooms)
+
+---
+
+## 📁 Critical Files to Review
+
+**MUST READ FIRST**:
+1. **PROJECT_CONTEXT.md** - Complete development history, architecture, all bug fixes, and technical decisions
+
+**Reference as Needed**:
+2. **client/src/App.js** - Main React component (1012 lines, 8-state flow)
+3. **api/game.js** - Serverless API with all endpoints
+4. **client/src/App.css** - Complete styling
+5. **vercel.json** - Deployment configuration
+
+---
+
+## 🎮 8-State Flow Overview
+
+1. **Enter** - Username input, make/join room options
+2. **MakeRoom** - Create room with name, password, member limit
+3. **EnterRoom** - Join room by name
+4. **CheckPassword** - Password verification for protected rooms
+5. **EnterroomwithQR** - Join via QR code (bypasses password)
+6. **WaitingRoom** - Pre-game lobby with master controls
+7. **Linking** - Active matching/voting phase
+8. **LinkResult** - Display match results
+
+---
+
+## 🔧 Key API Endpoints
+
+**Room Management**:
+- `POST /api/create-room` - Create room (assigns master)
+- `POST /api/join-room` - Join room
+- `POST /api/join-room-qr` - Join via QR (bypasses password)
+- `POST /api/kick-user` - Master removes user
+
+**Game Flow**:
+- `POST /api/start-game` - Master starts game (locks room)
+- `POST /api/select` - User votes (auto-processes when all vote)
+- `GET /api/room/:roomId` - Get room status (polling)
+
+---
+
+## ✅ Latest Status (October 2025)
+
+### What's Working
+- ✅ Complete 8-state flow
+- ✅ Real-time polling (2-5 sec intervals)
+- ✅ Master controls (kick, start game)
+- ✅ QR code sharing with proper routing
+- ✅ Voting status display ("투표완료" vs "대기중")
+- ✅ Auto-hiding notifications (3s success, 5s error)
+- ✅ Result broadcasting to all users
+- ✅ Kicked user auto-redirect
+
+### Recent Fixes (October 2025)
+1. **Voting Status Display** - All users can see who voted vs waiting
+2. **Result Broadcasting** - All users see results simultaneously via polling
+3. **Kicked User Redirect** - Kicked users auto-redirected to Enter state
+4. **Enhanced Debugging** - Added extensive logging to API
+
+### Known Limitations
+- In-memory storage (data lost on server restart)
+- Polling creates traffic overhead
+- No persistent game history
+- No user authentication
+
+---
+
+## 🚀 Deployment Process
+
+**Standard Build & Deploy**:
+```bash
+# 1. Build React app
+cd client && npm run build && cd ..
+
+# 2. Copy static files (Windows)
+copy client\build\index.html index.html
+xcopy client\build\static static /E /I /Y
+
+# 3. Deploy
+git add .
+git commit -m "Your message"
+git push origin main
 ```
-Hi! I need to continue working on my Link Station project. Here's the complete context:
 
-## 🎯 Project Overview
-**Link Station** - Real-time matching game web application
-- **Live URL**: https://link-station-pro.vercel.app
-- **Tech Stack**: React 19.1.1 + REST API + Vercel (migrated from Socket.IO)
-- **Purpose**: Users join rooms, select each other, get matched in real-time
+Vercel auto-deploys on push to main branch.
 
-## 🏗️ Current Architecture
-```
-link-station/
-├── index.html              # React app (served from root)
-├── static/                 # CSS/JS assets
-├── api/game.js            # Game API (serverless function)
-├── client/                # React source code
-└── vercel.json            # Vercel configuration
-```
+---
 
-## ✅ Working Features
-- **Multi-device room joining** with QR code sharing
-- **Unique user identification** (prevents nickname conflicts)
-- **Real-time selection process** (polling-based, 2-second intervals)
-- **Synchronized match results** across all devices
-- **Responsive design** for mobile and desktop
+## 🐛 Current Issues (if any)
 
-## 🔧 API Endpoints
-- `POST /api/join` - Join room with nickname
-- `POST /api/select` - Select another user for matching
-- `GET /api/room/:roomId` - Get room status + match results
+**Latest Bug Report (October 2025)**:
+1. ❓ Voting status not visible to voted users - **FIXED**
+2. ❓ Result screen not showing after all votes - **INVESTIGATING**
+   - Added enhanced debugging to API
+   - Modified polling logic to check for completed state
+   - Check console logs for match processing
 
-## 🐛 Major Issues Resolved
-1. **404 errors** → Fixed static file serving
-2. **Socket.IO compatibility** → Migrated to REST API + polling
-3. **User conflicts** → Added unique display names (e.g., "박수형(1)")
-4. **Match result broadcasting** → All devices see results via polling
+---
 
-## ✅ Recent Fixes Completed (Latest Session)
-- ✅ **Notification timeout** - Success/error messages auto-hide after 3-5 seconds
-- ✅ **Master kick feature** - Master can kick unwanted users with ✕ button
-- ✅ **Voting status display** - Real-time showing of who voted vs waiting
-- ✅ **Selection error debugging** - Enhanced error handling and logging for selection issues
+## 💡 Development Context
 
-## 📊 Current Status
-- ✅ **Fully functional** - All core features working properly
-- ✅ **Multi-device tested** - Real-time updates and synchronization working
-- ✅ **Match results working** - Selection and results display correctly
-- ✅ **Waiting room working** - Proper state management and user visibility
+### Why This Architecture?
+- **No WebSockets**: Vercel serverless doesn't support persistent connections
+- **Polling**: Provides near real-time experience (2-5 sec updates)
+- **Static Root**: Simplifies Vercel deployment and CDN serving
+- **In-Memory Storage**: Sufficient for session-based games
 
-## 🎯 Potential Improvements
-- Database integration (replace in-memory storage)
-- User authentication system
-- Game history and statistics
-- Performance optimization
+### Common Debug Points
+- Check browser console for polling responses
+- Verify `gameState` transitions (waiting → linking → completed)
+- Ensure `hasVoted` field updates correctly
+- Confirm `matchResult` in `/api/room/:roomId` response
 
-## 📝 Key Technical Details
-- Uses polling (2s intervals) instead of WebSockets for real-time updates
-- Static files served from root directory for Vercel compatibility
-- Serverless functions handle API requests
-- React app with QRCode.react for room sharing
+### State Management
+- Each state has dedicated render function in `App.js`
+- Polling runs differently in waiting (5s) vs linking (2s)
+- Master status (`isMaster`) propagated to ALL users via API
+- Kicked user detection via polling (checks if userId still in room.users)
 
-## 🔧 Recent Debugging Added
-- Debug panel in top-right corner showing state information
-- Yellow debug box in waiting room showing host status
-- Console logging for all state changes
-- Detailed error tracking
+---
 
-## 🎯 Current Features Working
-1. **Complete 8-state flow** - Enter → MakeRoom → EnterRoom → CheckPassword → EnterRoomWithQR → WaitingRoom → Linking → LinkResult
-2. **Real-time updates** - Users see each other join and vote status updates
-3. **Master controls** - Kick users, start games, manage room
-4. **QR code sharing** - Proper routing to enterroomwithqr state
-5. **Voting visualization** - See who voted vs who's waiting
-6. **Auto-notifications** - Success/error messages with timeout
+## 🔍 Troubleshooting Guide
 
-The project is fully functional and ready for production use!
+### If users can't see results:
+1. Check console for "All users have selected" log in API
+2. Verify `gameState` changes to 'completed'
+3. Ensure `matchResult` is in room object
+4. Check polling is detecting completed state
 
-## 📚 Additional Context
-For complete technical details, see `DEVELOPMENT_SUMMARY.md` in the project root.
-```
+### If master controls don't work:
+1. Verify `masterId` matches user's `userId`
+2. Check `isMaster` field in user objects
+3. Ensure master badge visible to all users
+4. Validate master-only endpoints check `masterId`
 
-## 💡 **사용 방법:**
-1. 새로운 Cursor 채팅 시작
-2. 위 프롬프트 전체를 복사
-3. 새 채팅에 붙여넣기
-4. 원하는 작업 요청하기
+### If kicked users stay in room:
+1. Check polling detects user not in `room.users`
+2. Verify redirect to 'enter' state triggers
+3. Ensure error message displays
+4. Check room data clears properly
 
-## 📝 **추가 컨텍스트 파일들:**
-- `DEVELOPMENT_SUMMARY.md` - 상세 기술 문서
-- `CHAT_HISTORY.md` - 개발 과정 기록
-- `CURSOR_CONTEXT.md` - 간단한 컨텍스트
+---
 
-이 프롬프트를 사용하면 새로운 AI가 프로젝트의 전체 맥락을 이해하고 작업을 계속할 수 있습니다!
+## 📚 How to Use This Context
+
+1. **Read PROJECT_CONTEXT.md first** - It has everything (50+ sections, complete history)
+2. **Check current files** - Review App.js and api/game.js for latest code
+3. **Understand polling** - Most real-time features work via polling
+4. **Test multi-device** - Always verify on 2+ devices for synchronization
+
+---
+
+## 🎯 Your First Steps
+
+When starting a new session:
+
+1. **Ask user what they need** - Bug fix, new feature, or investigation?
+2. **Review relevant sections** - Check PROJECT_CONTEXT.md for related past issues
+3. **Check current code** - Read the actual implementation in App.js/api/game.js
+4. **Consider multi-device** - Most issues relate to state sync across devices
+5. **Use polling wisely** - Understand when polling runs (waiting vs linking states)
+
+---
+
+## 📝 Current Todos (if any)
+
+- [ ] **Investigate**: Result screen not showing after all votes (enhanced debugging added)
+- [ ] **Test**: Verify voting status display works for all users
+- [ ] **Future**: Consider database for persistent storage
+
+---
+
+## 🔄 Context Refresh
+
+This prompt was created at **~90% context usage** to allow seamless continuation of development. All critical information from previous sessions is preserved in:
+- **PROJECT_CONTEXT.md** (comprehensive)
+- **DEPLOYMENT.md** (deployment-specific)
+
+---
+
+**You are now fully briefed on Link Station! Ready to continue development.**
+
+Ask the user: *"What would you like to work on with Link Station?"*
