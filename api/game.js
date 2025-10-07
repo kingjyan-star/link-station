@@ -388,10 +388,11 @@ app.get('/api/room/:roomId', (req, res) => {
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
   }
   
-  // Add voting status to users
+  // Add voting status and master status to users
   const usersWithVotingStatus = Array.from(room.users.values()).map(user => ({
     ...user,
-    hasVoted: room.selections.has(user.id)
+    hasVoted: room.selections.has(user.id),
+    isMaster: user.id === room.masterId
   }));
   
   res.json({

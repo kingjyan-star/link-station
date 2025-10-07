@@ -47,6 +47,28 @@ function App() {
     };
   }, []);
 
+  // Check URL parameters for QR code access
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomIdFromURL = urlParams.get('room');
+    
+    if (roomIdFromURL) {
+      setRoomId(roomIdFromURL);
+      setCurrentState('enterroomwithqr');
+    }
+  }, []);
+
+  // Start waiting room polling when in waiting room state
+  useEffect(() => {
+    if (currentState === 'waitingroom') {
+      startWaitingRoomPolling();
+    } else {
+      stopPolling();
+    }
+    
+    return () => stopPolling();
+  }, [currentState]);
+
   // Validation functions
   const validateUsername = (name) => {
     if (!name || name.trim() === '') {
@@ -419,6 +441,13 @@ function App() {
     pollingInterval.current = setInterval(pollRoomStatus, 2000);
   };
 
+  const startWaitingRoomPolling = () => {
+    if (pollingInterval.current) {
+      clearInterval(pollingInterval.current);
+    }
+    pollingInterval.current = setInterval(pollWaitingRoomStatus, 2000);
+  };
+
   const stopPolling = () => {
     if (pollingInterval.current) {
       clearInterval(pollingInterval.current);
@@ -447,6 +476,29 @@ function App() {
       }
     } catch (error) {
       console.error('Error polling room status:', error);
+    }
+  };
+
+  const pollWaitingRoomStatus = async () => {
+    if (!roomId) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/api/room/${roomId}`);
+      const data = await response.json();
+      
+      if (data.success && data.room) {
+        // Update users and master status
+        setUsers(data.room.users);
+        setIsMaster(data.room.masterId === userId);
+        
+        // Check if game started
+        if (data.room.gameState === 'linking') {
+          setCurrentState('linking');
+          startPolling(); // Switch to game polling
+        }
+      }
+    } catch (error) {
+      console.error('Error polling waiting room status:', error);
     }
   };
 
@@ -701,6 +753,7 @@ function App() {
           <div className="qr-container">
             <QRCodeSVG value={`${window.location.origin}?room=${roomId}`} size={200} />
             <p className="qr-text">QR코드를 스캔하여 같은 방에 참여하세요!</p>
+            <p className="qr-link">링크: {window.location.origin}?room={roomId}</p>
           </div>
         )}
       </div>
@@ -713,7 +766,7 @@ function App() {
               <div className="user-info">
                 <span className="user-nickname">{user.displayName || user.nickname}</span>
                 {user.id === userId && <span className="you-badge">나</span>}
-                {user.id === userId && isMaster && <span className="master-badge">방장</span>}
+                {user.isMaster && <span className="master-badge">방장</span>}
               </div>
             </div>
           ))}
