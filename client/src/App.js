@@ -412,11 +412,16 @@ function App() {
         setSelectedUser(selectedUserId);
         setHasVoted(true);
         
-        // Don't immediately redirect to results - let polling handle it
-        // This ensures all users get the results at the same time
+        // Update users list immediately with voting status
+        if (data.users) {
+          setUsers(data.users);
+        }
+        
+        // Don't immediately show results even if we're the last voter
+        // Let polling handle it so all users see results at the same time
         if (data.matches || data.unmatched) {
-          console.log('All users have voted, results will be shown via polling');
-          // Keep polling active to broadcast results to all users
+          console.log('All users have voted. Waiting for polling to broadcast results to all users...');
+          // Results will be shown via polling to ensure all users see them simultaneously
         }
       } else {
         setError(data.message || '선택에 실패했습니다.');

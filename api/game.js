@@ -19,6 +19,20 @@ app.post('/api/check-username', (req, res) => {
   res.json({ duplicate: isDuplicate });
 });
 
+// Check room name duplication
+app.post('/api/check-roomname', (req, res) => {
+  const { roomName } = req.body;
+  
+  if (!roomName || roomName.trim() === '') {
+    return res.json({ duplicate: false });
+  }
+  
+  const existingRoom = Array.from(rooms.values()).find(room => 
+    room.roomName.toLowerCase() === roomName.trim().toLowerCase()
+  );
+  res.json({ duplicate: !!existingRoom });
+});
+
 // Create room
 app.post('/api/create-room', (req, res) => {
   const { roomName, roomPassword, memberLimit, username } = req.body;
@@ -30,6 +44,14 @@ app.post('/api/create-room', (req, res) => {
   
   if (memberLimit < 2 || memberLimit > 99) {
     return res.status(400).json({ success: false, message: '최대 인원은 2-99명 사이여야 합니다.' });
+  }
+  
+  // Check room name duplication
+  const existingRoom = Array.from(rooms.values()).find(room => 
+    room.roomName.toLowerCase() === roomName.trim().toLowerCase()
+  );
+  if (existingRoom) {
+    return res.status(400).json({ success: false, message: '이미 존재하는 방 이름입니다. 다른 이름을 사용해주세요.' });
   }
   
   // Check username duplication
@@ -398,9 +420,17 @@ app.post('/api/select', (req, res) => {
       users: Array.from(room.users.values())
     });
   } else {
+    // Return updated users with voting status
+    const usersWithVotingStatus = Array.from(room.users.values()).map(user => ({
+      ...user,
+      hasVoted: room.selections.has(user.id),
+      isMaster: user.id === room.masterId
+    }));
+    
     res.json({
       success: true,
-      message: '선택이 기록되었습니다. 다른 참여자들의 선택을 기다리는 중...'
+      message: '선택이 기록되었습니다. 다른 참여자들의 선택을 기다리는 중...',
+      users: usersWithVotingStatus
     });
   }
 });
