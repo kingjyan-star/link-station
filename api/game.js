@@ -5,7 +5,52 @@ app.use(express.json());
 
 // In-memory storage
 let rooms = new Map();
-let activeUsers = new Set(); // Track active usernames globally
+let activeUsers = new Map(); // Track active usernames globally with last activity time
+// Structure: username -> { roomId, userId, lastActivity }
+
+// Constants
+const USER_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes of inactivity = disconnected
+const CLEANUP_INTERVAL_MS = 60 * 1000; // Run cleanup every minute
+
+// Helper function to clean up inactive users and empty rooms
+function cleanupInactiveUsersAndRooms() {
+  const now = Date.now();
+  const disconnectedUsers = [];
+  
+  // Find disconnected users
+  for (const [username, userData] of activeUsers.entries()) {
+    if (now - userData.lastActivity > USER_TIMEOUT_MS) {
+      disconnectedUsers.push({ username, ...userData });
+    }
+  }
+  
+  // Remove disconnected users from rooms and activeUsers
+  for (const { username, roomId, userId } of disconnectedUsers) {
+    const room = rooms.get(roomId);
+    if (room) {
+      room.users.delete(userId);
+      room.selections.delete(userId);
+      console.log(`User ${username} disconnected from room ${room.roomName} due to inactivity`);
+      
+      // If master disconnected, assign new master
+      if (room.masterId === userId && room.users.size > 0) {
+        const newMaster = Array.from(room.users.values())[0];
+        room.masterId = newMaster.id;
+        console.log(`Master handover: ${newMaster.displayName} is now master of ${room.roomName}`);
+      }
+      
+      // If room is empty, delete it
+      if (room.users.size === 0) {
+        rooms.delete(roomId);
+        console.log(`Room ${room.roomName} deleted - no active users`);
+      }
+    }
+    activeUsers.delete(username);
+  }
+}
+
+// Start cleanup interval
+setInterval(cleanupInactiveUsersAndRooms, CLEANUP_INTERVAL_MS);
 
 // Check username duplication
 app.post('/api/check-username', (req, res) => {
@@ -16,7 +61,7 @@ app.post('/api/check-username', (req, res) => {
   }
   
   const isDuplicate = activeUsers.has(username.trim());
-  res.json({ duplicate: isDuplicate });
+  res.json({ duplicate: isDuplicate, available: !isDuplicate });
 });
 
 // Check room name duplication
@@ -88,7 +133,11 @@ app.post('/api/create-room', (req, res) => {
   
   room.users.set(userId, user);
   rooms.set(roomId, room);
-  activeUsers.add(username.trim());
+  activeUsers.set(username.trim(), {
+    roomId,
+    userId,
+    lastActivity: Date.now()
+  });
   
   console.log(`Room created: ${roomName} (${roomId}) by ${username}`);
   
@@ -158,7 +207,11 @@ app.post('/api/join-room', (req, res) => {
   };
   
   targetRoom.users.set(userId, user);
-  activeUsers.add(username.trim());
+  activeUsers.set(username.trim(), {
+    roomId: targetRoom.id,
+    userId,
+    lastActivity: Date.now()
+  });
   
   console.log(`User joined room: ${username} in ${roomName}`);
   
@@ -224,7 +277,11 @@ app.post('/api/check-password', (req, res) => {
   };
   
   targetRoom.users.set(userId, user);
-  activeUsers.add(username.trim());
+  activeUsers.set(username.trim(), {
+    roomId: targetRoom.id,
+    userId,
+    lastActivity: Date.now()
+  });
   
   console.log(`User joined room with password: ${username} in ${roomName}`);
   
@@ -277,7 +334,11 @@ app.post('/api/join-room-qr', (req, res) => {
   };
   
   room.users.set(userId, user);
-  activeUsers.add(username.trim());
+  activeUsers.set(username.trim(), {
+    roomId: room.id,
+    userId,
+    lastActivity: Date.now()
+  });
   
   console.log(`User joined room with QR: ${username} in ${room.roomName}`);
   
@@ -433,6 +494,21 @@ app.post('/api/select', (req, res) => {
       users: usersWithVotingStatus
     });
   }
+});
+
+// Heartbeat/Ping endpoint to keep user connection alive
+app.post('/api/ping', (req, res) => {
+  const { username, userId } = req.body;
+  
+  if (activeUsers.has(username)) {
+    const userData = activeUsers.get(username);
+    if (userData.userId === userId) {
+      userData.lastActivity = Date.now();
+      activeUsers.set(username, userData);
+    }
+  }
+  
+  res.json({ success: true, timestamp: Date.now() });
 });
 
 // Get room status

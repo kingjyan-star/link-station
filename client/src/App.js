@@ -37,12 +37,16 @@ function App() {
   
   // Polling
   const pollingInterval = useRef(null);
+  const heartbeatInterval = useRef(null);
 
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {
       if (pollingInterval.current) {
         clearInterval(pollingInterval.current);
+      }
+      if (heartbeatInterval.current) {
+        clearInterval(heartbeatInterval.current);
       }
     };
   }, []);
@@ -77,6 +81,17 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [error]);
+
+  // Start/stop heartbeat based on state
+  useEffect(() => {
+    if (currentState === 'waitingroom' || currentState === 'linking' || currentState === 'linkresult') {
+      startHeartbeat();
+    } else {
+      stopHeartbeat();
+    }
+    
+    return () => stopHeartbeat();
+  }, [currentState, username, userId]);
 
   // Start waiting room polling when in waiting room state
   useEffect(() => {
@@ -507,6 +522,36 @@ function App() {
     }
   };
 
+  // Heartbeat functions to keep connection alive
+  const startHeartbeat = () => {
+    if (heartbeatInterval.current) {
+      clearInterval(heartbeatInterval.current);
+    }
+    // Send heartbeat every 2 minutes (less than 5 minute timeout)
+    heartbeatInterval.current = setInterval(sendHeartbeat, 120000);
+  };
+
+  const stopHeartbeat = () => {
+    if (heartbeatInterval.current) {
+      clearInterval(heartbeatInterval.current);
+      heartbeatInterval.current = null;
+    }
+  };
+
+  const sendHeartbeat = async () => {
+    if (!username || !userId) return;
+    
+    try {
+      await fetch(`${API_URL}/api/ping`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, userId })
+      });
+    } catch (error) {
+      console.error('Heartbeat error:', error);
+    }
+  };
+
   const pollRoomStatus = async () => {
     if (!roomId) return;
     
@@ -847,8 +892,8 @@ function App() {
             <QRCodeSVG value={`${window.location.origin}?room=${roomId}`} size={200} />
               <p className="qr-text">QR코드를 스캔하여 같은 방에 참여하세요!</p>
             <p className="qr-link">링크: {window.location.origin}?room={roomId}</p>
-          </div>
-        )}
+            </div>
+          )}
       </div>
       
       <div className="users-list">
@@ -862,7 +907,7 @@ function App() {
                 {user.isMaster && <span className="master-badge">방장</span>}
               </div>
               {isMaster && user.id !== userId && (
-                <button 
+                <button
                   className="kick-button"
                   onClick={() => handleKickUser(user.id)}
                   title="사용자 추방"
@@ -918,13 +963,13 @@ function App() {
                 {!user.hasVoted && user.id === userId && <span className="waiting-badge">대기중</span>}
               </div>
               {!hasVoted && user.id !== userId && (
-                <button 
+          <button 
                   className="select-button"
                   onClick={() => handleSelectUser(user.id)}
                   disabled={isLoading}
-                >
+          >
                   선택
-                </button>
+          </button>
               )}
               {hasVoted && user.id !== userId && !user.hasVoted && (
                 <div className="waiting-indicator">
