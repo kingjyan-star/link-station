@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import './App.css';
 
@@ -82,6 +82,166 @@ function App() {
     }
   }, [error]);
 
+  // Heartbeat functions to keep connection alive
+  const sendHeartbeat = useCallback(async () => {
+    if (!username || !userId) return;
+    
+    try {
+      await fetch(`${API_URL}/api/ping`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, userId })
+      });
+    } catch (error) {
+      console.error('Heartbeat error:', error);
+    }
+  }, [username, userId]);
+
+  const startHeartbeat = useCallback(() => {
+    if (heartbeatInterval.current) {
+      clearInterval(heartbeatInterval.current);
+    }
+    // Send heartbeat every 2 minutes (less than 5 minute timeout)
+    heartbeatInterval.current = setInterval(sendHeartbeat, 120000);
+  }, [sendHeartbeat]);
+
+  const stopHeartbeat = () => {
+    if (heartbeatInterval.current) {
+      clearInterval(heartbeatInterval.current);
+      heartbeatInterval.current = null;
+    }
+  };
+
+  // Polling functions
+  const pollRoomStatus = useCallback(async () => {
+    if (!roomId) return;
+    
+    console.log('🔄 Polling room status...', { roomId, currentState, userId });
+    
+    try {
+      const response = await fetch(`${API_URL}/api/room/${roomId}`);
+      const data = await response.json();
+      
+      if (data.success && data.room) {
+        console.log('📊 Polling response:', {
+          gameState: data.room.gameState,
+          userCount: data.room.users.length,
+          hasMatchResult: !!data.matchResult,
+          currentUserVoted: data.room.users.find(u => u.id === userId)?.hasVoted
+        });
+        
+        // Check if current user is still in the room
+        const currentUserInRoom = data.room.users.find(user => user.id === userId);
+        if (!currentUserInRoom) {
+          // User has been kicked or removed
+          console.log('❌ User not in room, redirecting...');
+          setError('방에서 추방되었습니다.');
+          setCurrentState('enter');
+          setUsername('');
+          setRoomId('');
+          setUserId('');
+          setUsers([]);
+          setIsMaster(false);
+          setRoomData(null);
+          stopPolling();
+          return;
+        }
+        
+        // Update users with voting status
+        console.log('👥 Users update:', data.room.users.map(u => ({ name: u.displayName, voted: u.hasVoted })));
+        setUsers(data.room.users);
+        
+        // Check for match results regardless of current state
+        if (data.room.gameState === 'completed' && data.matchResult) {
+          console.log('✅ Match results received via polling:', data.matchResult);
+          setMatches(data.matchResult.matches || []);
+          setUnmatched(data.matchResult.unmatched || []);
+          setCurrentState('linkresult');
+          stopPolling();
+        } else if (currentState === 'linking') {
+          // Additional check: if all users have voted but game state is still linking
+          const allUsersVoted = data.room.users.every(user => user.hasVoted);
+          if (allUsersVoted && data.room.gameState === 'linking') {
+            console.log('⚠️ All users voted but game state not updated yet, waiting for results...');
+          }
+          
+          // Fallback: If all users voted and we have a match result in the response, show it
+          if (allUsersVoted && data.matchResult) {
+            console.log('🚨 Fallback: All users voted and match result found, showing results...');
+            setMatches(data.matchResult.matches || []);
+            setUnmatched(data.matchResult.unmatched || []);
+            setCurrentState('linkresult');
+            stopPolling();
+          }
+        }
+      } else {
+        console.log('❌ Polling failed:', data);
+      }
+    } catch (error) {
+      console.error('❌ Error polling room status:', error);
+    }
+  }, [roomId, currentState, userId]);
+
+  const startPolling = useCallback(() => {
+    if (pollingInterval.current) {
+      clearInterval(pollingInterval.current);
+    }
+    pollingInterval.current = setInterval(pollRoomStatus, 2000);
+  }, [pollRoomStatus]);
+
+  const pollWaitingRoomStatus = useCallback(async () => {
+    if (!roomId) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/api/room/${roomId}`);
+      const data = await response.json();
+      
+      if (data.success && data.room) {
+        // Check if current user is still in the room
+        const currentUserInRoom = data.room.users.find(user => user.id === userId);
+        if (!currentUserInRoom) {
+          // User has been kicked or removed
+          setError('방에서 추방되었습니다.');
+          setCurrentState('enter');
+          setUsername('');
+          setRoomId('');
+          setUserId('');
+          setUsers([]);
+          setIsMaster(false);
+          setRoomData(null);
+          stopPolling();
+          return;
+        }
+        
+        // Update users and master status
+        setUsers(data.room.users);
+        setIsMaster(data.room.masterId === userId);
+        
+        // Check if game started
+        if (data.room.gameState === 'linking') {
+          setCurrentState('linking');
+          startPolling(); // Switch to game polling
+        }
+      }
+    } catch (error) {
+      console.error('Error polling waiting room status:', error);
+    }
+  }, [roomId, userId, startPolling]);
+
+  const startWaitingRoomPolling = useCallback(() => {
+    if (pollingInterval.current) {
+      clearInterval(pollingInterval.current);
+    }
+    pollingInterval.current = setInterval(pollWaitingRoomStatus, 2000);
+  }, [pollWaitingRoomStatus]);
+
+  const stopPolling = () => {
+    if (pollingInterval.current) {
+      clearInterval(pollingInterval.current);
+      pollingInterval.current = null;
+    }
+  };
+
   // Start/stop heartbeat based on state
   useEffect(() => {
     if (currentState === 'waitingroom' || currentState === 'linking' || currentState === 'linkresult') {
@@ -91,7 +251,7 @@ function App() {
     }
     
     return () => stopHeartbeat();
-  }, [currentState, username, userId]);
+  }, [currentState, username, userId, startHeartbeat]);
 
   // Start waiting room polling when in waiting room state
   useEffect(() => {
@@ -107,7 +267,7 @@ function App() {
         stopPolling();
       }
     };
-  }, [currentState]);
+  }, [currentState, startWaitingRoomPolling]);
 
   // Validation functions
   const validateUsername = (name) => {
@@ -457,7 +617,7 @@ function App() {
   const handleNextRound = () => {
     setMatches([]);
     setUnmatched([]);
-    setSelectedUser(null);
+        setSelectedUser(null);
     setHasVoted(false);
     setCurrentState('linking');
     startPolling();
@@ -500,161 +660,11 @@ function App() {
     setRoomData(null);
     setMatches([]);
     setUnmatched([]);
-    setSelectedUser(null);
+        setSelectedUser(null);
     setHasVoted(false);
     stopPolling();
   };
 
-  // Polling functions
-  const startPolling = () => {
-    if (pollingInterval.current) {
-      clearInterval(pollingInterval.current);
-    }
-    pollingInterval.current = setInterval(pollRoomStatus, 2000);
-  };
-
-  const startWaitingRoomPolling = () => {
-    if (pollingInterval.current) {
-      clearInterval(pollingInterval.current);
-    }
-    pollingInterval.current = setInterval(pollWaitingRoomStatus, 2000);
-  };
-
-  const stopPolling = () => {
-    if (pollingInterval.current) {
-      clearInterval(pollingInterval.current);
-      pollingInterval.current = null;
-    }
-  };
-
-  // Heartbeat functions to keep connection alive
-  const startHeartbeat = () => {
-    if (heartbeatInterval.current) {
-      clearInterval(heartbeatInterval.current);
-    }
-    // Send heartbeat every 2 minutes (less than 5 minute timeout)
-    heartbeatInterval.current = setInterval(sendHeartbeat, 120000);
-  };
-
-  const stopHeartbeat = () => {
-    if (heartbeatInterval.current) {
-      clearInterval(heartbeatInterval.current);
-      heartbeatInterval.current = null;
-    }
-  };
-
-  const sendHeartbeat = async () => {
-    if (!username || !userId) return;
-    
-    try {
-      await fetch(`${API_URL}/api/ping`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, userId })
-      });
-    } catch (error) {
-      console.error('Heartbeat error:', error);
-    }
-  };
-
-  const pollRoomStatus = async () => {
-    if (!roomId) return;
-    
-    console.log('🔄 Polling room status...', { roomId, currentState, userId });
-    
-    try {
-      const response = await fetch(`${API_URL}/api/room/${roomId}`);
-      const data = await response.json();
-      
-      if (data.success && data.room) {
-        console.log('📊 Polling response:', {
-          gameState: data.room.gameState,
-          userCount: data.room.users.length,
-          hasMatchResult: !!data.matchResult,
-          currentUserVoted: data.room.users.find(u => u.id === userId)?.hasVoted
-        });
-        
-        // Check if current user is still in the room
-        const currentUserInRoom = data.room.users.find(user => user.id === userId);
-        if (!currentUserInRoom) {
-          // User has been kicked or removed
-          console.log('❌ User not in room, redirecting...');
-          setError('방에서 추방되었습니다.');
-          setCurrentState('enter');
-          setUsername('');
-          setRoomId('');
-          setUserId('');
-          setUsers([]);
-          setIsMaster(false);
-          setRoomData(null);
-          stopPolling();
-          return;
-        }
-        
-        // Update users with voting status
-        console.log('👥 Users update:', data.room.users.map(u => ({ name: u.displayName, voted: u.hasVoted })));
-        setUsers(data.room.users);
-        
-        // Check for match results regardless of current state
-        if (data.room.gameState === 'completed' && data.matchResult) {
-          console.log('✅ Match results received via polling:', data.matchResult);
-          setMatches(data.matchResult.matches || []);
-          setUnmatched(data.matchResult.unmatched || []);
-          setCurrentState('linkresult');
-          stopPolling();
-        } else if (currentState === 'linking') {
-          // Additional check: if all users have voted but game state is still linking
-          const allUsersVoted = data.room.users.every(user => user.hasVoted);
-          if (allUsersVoted && data.room.gameState === 'linking') {
-            console.log('⚠️ All users voted but game state not updated yet, waiting for results...');
-          }
-        }
-      } else {
-        console.log('❌ Polling failed:', data);
-      }
-    } catch (error) {
-      console.error('❌ Error polling room status:', error);
-    }
-  };
-
-  const pollWaitingRoomStatus = async () => {
-    if (!roomId) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/api/room/${roomId}`);
-      const data = await response.json();
-      
-      if (data.success && data.room) {
-        // Check if current user is still in the room
-        const currentUserInRoom = data.room.users.find(user => user.id === userId);
-        if (!currentUserInRoom) {
-          // User has been kicked or removed
-          setError('방에서 추방되었습니다.');
-          setCurrentState('enter');
-          setUsername('');
-          setRoomId('');
-          setUserId('');
-          setUsers([]);
-          setIsMaster(false);
-          setRoomData(null);
-          stopPolling();
-          return;
-        }
-        
-        // Update users and master status
-        setUsers(data.room.users);
-        setIsMaster(data.room.masterId === userId);
-        
-        // Check if game started
-        if (data.room.gameState === 'linking') {
-          setCurrentState('linking');
-          startPolling(); // Switch to game polling
-        }
-      }
-    } catch (error) {
-      console.error('Error polling waiting room status:', error);
-    }
-  };
 
   // Render functions
   const renderEnter = () => (
@@ -974,9 +984,33 @@ function App() {
               <div className="user-info">
                 <span className="user-nickname">{user.displayName || user.nickname}</span>
                 {user.id === userId && <span className="you-badge">나</span>}
-                {user.hasVoted && <span className="voted-badge">투표완료</span>}
-                {!user.hasVoted && user.id !== userId && <span className="waiting-badge">대기중</span>}
-                {!user.hasVoted && user.id === userId && <span className="waiting-badge">대기중</span>}
+              </div>
+              
+              <div className="user-indicators">
+                {/* 1. Master badge */}
+                {user.isMaster && (
+                  <div className="master-indicator">
+                    <span>👑 방장</span>
+                  </div>
+                )}
+                
+                {/* 2. Your selection indicator */}
+                {hasVoted && selectedUser === user.id && (
+                  <div className="selected-indicator">
+                    <span>🎯 당신의 선택</span>
+                  </div>
+                )}
+                
+                {/* 3. Voting status indicator */}
+                {user.hasVoted ? (
+                  <div className="completed-indicator">
+                    <span>✅ 투표완료</span>
+                  </div>
+                ) : (
+                  <div className="waiting-indicator">
+                    <span>⏳ 투표 중</span>
+                  </div>
+                )}
               </div>
               {!hasVoted && user.id !== userId && (
           <button 
@@ -986,16 +1020,6 @@ function App() {
           >
                   선택
           </button>
-              )}
-              {hasVoted && user.id !== userId && !user.hasVoted && (
-                <div className="waiting-indicator">
-                  <span>선택 대기중...</span>
-                </div>
-              )}
-              {hasVoted && user.id !== userId && user.hasVoted && (
-                <div className="completed-indicator">
-                  <span>✓ 완료</span>
-                </div>
               )}
             </div>
           ))}
