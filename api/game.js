@@ -17,11 +17,20 @@ function cleanupInactiveUsersAndRooms() {
   const now = Date.now();
   const disconnectedUsers = [];
   
+  console.log(`🧹 Running cleanup... Active users: ${activeUsers.size}, Total rooms: ${rooms.size}`);
+  
   // Find disconnected users
   for (const [username, userData] of activeUsers.entries()) {
-    if (now - userData.lastActivity > USER_TIMEOUT_MS) {
+    const inactiveTime = now - userData.lastActivity;
+    if (inactiveTime > USER_TIMEOUT_MS) {
+      console.log(`   Found inactive user: ${username} (inactive for ${Math.floor(inactiveTime / 1000)}s)`);
       disconnectedUsers.push({ username, ...userData });
     }
+  }
+  
+  if (disconnectedUsers.length === 0) {
+    console.log(`   No inactive users found`);
+    return;
   }
   
   // Remove disconnected users from rooms and activeUsers
@@ -30,23 +39,25 @@ function cleanupInactiveUsersAndRooms() {
     if (room) {
       room.users.delete(userId);
       room.selections.delete(userId);
-      console.log(`User ${username} disconnected from room ${room.roomName} due to inactivity`);
+      console.log(`   ⚠️ User ${username} disconnected from room ${room.roomName} due to inactivity`);
       
       // If master disconnected, assign new master
       if (room.masterId === userId && room.users.size > 0) {
         const newMaster = Array.from(room.users.values())[0];
         room.masterId = newMaster.id;
-        console.log(`Master handover: ${newMaster.displayName} is now master of ${room.roomName}`);
+        console.log(`   👑 Master handover: ${newMaster.displayName} is now master of ${room.roomName}`);
       }
       
       // If room is empty, delete it
       if (room.users.size === 0) {
         rooms.delete(roomId);
-        console.log(`Room ${room.roomName} deleted - no active users`);
+        console.log(`   🗑️ Room "${room.roomName}" deleted - no active users`);
       }
     }
     activeUsers.delete(username);
   }
+  
+  console.log(`🧹 Cleanup complete. Active users: ${activeUsers.size}, Total rooms: ${rooms.size}`);
 }
 
 // Start cleanup interval
@@ -92,12 +103,18 @@ app.post('/api/create-room', (req, res) => {
   }
   
   // Check room name duplication
+  console.log(`Creating room: "${roomName}"`);
+  console.log(`Current rooms:`, Array.from(rooms.values()).map(r => ({ name: r.roomName, id: r.id, users: r.users.size })));
+  
   const existingRoom = Array.from(rooms.values()).find(room => 
     room.roomName.toLowerCase() === roomName.trim().toLowerCase()
   );
   if (existingRoom) {
+    console.log(`❌ Duplicate room name detected: "${roomName}" already exists as "${existingRoom.roomName}"`);
     return res.status(400).json({ success: false, message: '이미 존재하는 방 이름입니다. 다른 이름을 사용해주세요.' });
   }
+  
+  console.log(`✓ Room name "${roomName}" is available`);
   
   // Check username duplication
   if (activeUsers.has(username)) {
