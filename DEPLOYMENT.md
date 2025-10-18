@@ -1,39 +1,65 @@
 # 🚀 Link Station - Deployment Guide
 
 **Live URL**: https://link-station-pro.vercel.app  
-**Platform**: Vercel  
+**Status**: 🔧 In Progress - Critical Polling Bug Identified  
 **Last Updated**: October 2025
 
 ---
 
-## 📋 Quick Deployment
+## 📋 Deployment Overview
 
-### Standard Build & Deploy Process
-
-```bash
-# 1. Build React app
-cd client
-npm run build
-cd ..
-
-# 2. Copy static files to root (Windows)
-copy client\build\index.html index.html
-xcopy client\build\static static /E /I /Y
-
-# 3. Commit and deploy
-git add .
-git commit -m "Your deployment message"
-git push origin main
-```
-
-**Vercel auto-deploys** when you push to the `main` branch.
+Link Station is deployed on Vercel as a hybrid application:
+- **Static Files**: React app served from root directory
+- **API**: Node.js serverless functions in `/api` directory
 
 ---
 
-## 🏗️ Deployment Architecture
+## 🏗️ Architecture
 
-### Vercel Configuration (`vercel.json`)
+```
+Root Directory (Vercel)
+├── index.html (React app entry)
+├── static/ (CSS, JS assets)
+├── api/game.js (Serverless API)
+├── vercel.json (Configuration)
+└── package.json (Dependencies)
+```
 
+---
+
+## 🔧 Build Process
+
+### 1. Build React Application
+```bash
+cd client
+npm install
+npm run build
+cd ..
+```
+
+### 2. Copy Static Files to Root (Windows)
+```bash
+# Copy main HTML file
+copy client\build\index.html index.html
+
+# Copy all static assets
+xcopy client\build\static static /E /I /Y
+```
+
+### 3. Deploy to Vercel
+```bash
+git add .
+git commit -m "Deploy: [describe changes]"
+git push origin main
+```
+
+Vercel automatically detects changes and redeploys.
+
+---
+
+## ⚙️ Configuration Files
+
+### vercel.json
 ```json
 {
   "version": 2,
@@ -56,51 +82,13 @@ git push origin main
 }
 ```
 
-### What Gets Deployed
-
-1. **Static Files** (served from root):
-   - `index.html` - Main React app entry
-   - `static/css/` - Compiled stylesheets
-   - `static/js/` - Compiled React JavaScript
-   - `asset-manifest.json`, `manifest.json`, `robots.txt`
-
-2. **Serverless Functions**:
-   - `api/game.js` - All game API endpoints
-
-3. **Configuration**:
-   - `vercel.json` - Routing and build config
-   - `package.json` - Dependencies
-
----
-
-## 🔧 Build Configuration
-
-### Client Package.json Settings
-
-**Critical**: Must have `"homepage": "."` for correct asset paths:
-
-```json
-{
-  "name": "client",
-  "homepage": ".",
-  "dependencies": {
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "qrcode.react": "^4.2.0"
-  },
-  "scripts": {
-    "build": "react-scripts build"
-  }
-}
-```
-
-### Root Package.json
-
+### package.json (Root)
 ```json
 {
   "name": "link-station",
+  "version": "1.0.0",
+  "main": "server.js",
   "scripts": {
-    "start": "node server.js",
     "build": "cd client && npm install && npm run build",
     "vercel-build": "cd client && npm install && npm run build"
   },
@@ -110,242 +98,133 @@ git push origin main
 }
 ```
 
----
-
-## 🌐 Environment & URLs
-
-### Production
-- **URL**: https://link-station-pro.vercel.app
-- **API**: https://link-station-pro.vercel.app/api/...
-- **Region**: Auto-selected by Vercel
-
-### Local Development
-- **Frontend**: `http://localhost:3000` (React dev server)
-- **Backend**: `http://localhost:3002` (Express server)
-- **API Base**: Auto-detected in `App.js`:
-  ```javascript
-  const API_URL = window.location.hostname === 'localhost' 
-    ? 'http://localhost:3002' 
-    : '';
-  ```
-
----
-
-## 📦 Dependencies
-
-### Frontend (client/package.json)
-- `react` ^19.1.1
-- `react-dom` ^19.1.1  
-- `react-scripts` 5.0.1
-- `qrcode.react` ^4.2.0
-- `web-vitals` ^2.1.4
-
-### Backend (package.json)
-- `express` ^4.18.2
-
-**No Socket.IO** - Removed due to Vercel serverless limitations
-
----
-
-## 🔍 Troubleshooting Deployment
-
-### Issue: Blank Page / 404 Errors
-
-**Cause**: Static files not in correct location  
-**Solution**:
-1. Verify `homepage: "."` in `client/package.json`
-2. Ensure files copied to root: `index.html`, `static/`
-3. Check Vercel build logs for errors
-
-### Issue: API Not Working
-
-**Cause**: API routes not configured properly  
-**Solution**:
-1. Verify `api/game.js` exists and exports `app`
-2. Check `vercel.json` has correct rewrites
-3. Test API endpoint: `https://link-station-pro.vercel.app/api/room/test`
-
-### Issue: Build Failures
-
-**Cause**: Dependencies or build script errors  
-**Solution**:
-1. Run `npm install` in both root and `client/` directories
-2. Test build locally: `cd client && npm run build`
-3. Check for missing dependencies or syntax errors
-4. Review Vercel build logs
-
-### Issue: Old Version Showing
-
-**Cause**: Vercel cache or deployment not triggered  
-**Solution**:
-1. Verify git push succeeded: `git log --oneline`
-2. Check Vercel dashboard for deployment status
-3. Hard refresh browser: Ctrl+Shift+R (Windows) or Cmd+Shift+R (Mac)
-4. Manually redeploy from Vercel dashboard if needed
-
----
-
-## 🚦 Pre-Deployment Checklist
-
-### Before Pushing to Production
-
-- [ ] **Local Testing**: Test all features locally
-- [ ] **Build Success**: Run `npm run build` without errors
-- [ ] **Multi-device Test**: Verify on 2+ devices
-- [ ] **Console Clean**: No critical errors in browser console
-- [ ] **API Validation**: All endpoints working
-- [ ] **State Flow**: Test complete 8-state flow
-- [ ] **Real-time Updates**: Verify polling works
-- [ ] **Master Controls**: Test kick and start game
-- [ ] **QR Code**: Verify QR joining works
-
-### After Deployment
-
-- [ ] **URL Check**: Visit https://link-station-pro.vercel.app
-- [ ] **Page Load**: Verify no blank page or 404s
-- [ ] **Full Flow Test**: Create room → invite users → play game
-- [ ] **Multi-device**: Test with 2-3 devices
-- [ ] **Console Review**: Check for any production errors
-
----
-
-## 📊 Vercel Dashboard
-
-### Accessing Your Deployment
-
-1. **Login**: https://vercel.com/dashboard
-2. **Project**: Find "link-station-pro"
-3. **Deployments**: View history and logs
-4. **Settings**: Configure domains, environment variables
-
-### Useful Vercel Features
-
-- **Real-time Logs**: View function execution logs
-- **Analytics**: Track page views and performance
-- **Domains**: Add custom domains
-- **Environment Variables**: Store secrets (if needed)
-
----
-
-## 🔄 CI/CD Workflow
-
-### Automatic Deployment
-
-1. **Code Changes**: Edit files locally
-2. **Build**: Run build process
-3. **Commit**: `git add . && git commit -m "message"`
-4. **Push**: `git push origin main`
-5. **Auto-Deploy**: Vercel detects push and deploys
-6. **Live**: Changes appear at production URL
-
-### Manual Deployment (Vercel CLI)
-
-```bash
-# Install Vercel CLI
-npm i -g vercel
-
-# Login
-vercel login
-
-# Deploy to preview
-vercel
-
-# Deploy to production
-vercel --prod
+### client/package.json
+```json
+{
+  "name": "client",
+  "version": "0.1.0",
+  "homepage": ".",
+  "dependencies": {
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-scripts": "5.0.1",
+    "qrcode.react": "^4.2.0"
+  },
+  "scripts": {
+    "build": "react-scripts build"
+  }
+}
 ```
 
 ---
 
-## 🛡️ Production Considerations
+## 🔍 Troubleshooting
 
-### Performance
-- **Static Assets**: Served via Vercel CDN (fast globally)
-- **API Functions**: Serverless (auto-scales)
-- **Build Size**: ~70KB gzipped (React app)
-- **Cold Start**: ~500ms for first API call
+### Common Issues
 
-### Limitations
-- **In-memory Storage**: Data lost on function restart
-- **Serverless Timeout**: 10-second max execution (Hobby plan)
-- **No WebSockets**: Using polling instead
-- **Regional**: Functions may run in different regions
+**404 Errors on Static Assets**
+- Ensure `static/` directory is copied to root
+- Check `vercel.json` configuration
+- Verify `homepage: "."` in client/package.json
 
-### Recommendations
-- **Database**: Add PostgreSQL/MongoDB for persistence
-- **Caching**: Implement Redis for session data
-- **Monitoring**: Add error tracking (Sentry, LogRocket)
-- **Scaling**: Upgrade Vercel plan if needed
+**API Endpoints Not Working**
+- Check `vercel.json` rewrites configuration
+- Ensure `api/game.js` exports default function
+- Verify API routes in browser Network tab
 
----
+**Build Failures**
+- Check Node.js version compatibility
+- Verify all dependencies in package.json
+- Review Vercel build logs for specific errors
 
-## 🔐 Security Notes
+### Debug Commands
 
-### Current Setup
-- No authentication or authorization
-- In-memory storage (no data persistence)
-- Client-side routing (no server-side protection)
-- CORS enabled for all origins (development)
-
-### Production Hardening
-- [ ] Add rate limiting to API endpoints
-- [ ] Implement user authentication
-- [ ] Add CSRF protection
-- [ ] Restrict CORS to specific origins
-- [ ] Sanitize all user inputs server-side
-- [ ] Add request validation middleware
-
----
-
-## 📝 Deployment Log
-
-### October 2025 - Latest
-- ✅ Voting status display fixes
-- ✅ Result broadcasting improvements
-- ✅ Enhanced API debugging
-- ✅ Documentation consolidation
-
-### Earlier Deployments
-- ✅ Kicked user redirect functionality
-- ✅ Master kick feature
-- ✅ Auto-hiding notifications
-- ✅ QR code routing fixes
-- ✅ 8-state flow implementation
-- ✅ API migration from Socket.IO
-- ✅ Initial Vercel deployment
-
----
-
-## 🆘 Support
-
-### Common Commands
-
+**Check Local Build**
 ```bash
-# View Vercel logs
-vercel logs [deployment-url]
-
-# List deployments
-vercel ls
-
-# Remove deployment
-vercel rm [deployment-url]
-
-# Check Vercel status
-vercel whoami
+npm run build
+npm start
 ```
 
-### Resources
-- **Vercel Docs**: https://vercel.com/docs
-- **React Build**: https://create-react-app.dev/docs/deployment/
-- **Serverless Functions**: https://vercel.com/docs/functions
+**Test API Locally**
+```bash
+node api/game.js
+curl http://localhost:3000/api/room/test
+```
 
-### Getting Help
-- Check Vercel build logs for errors
-- Review browser console for client errors
-- Test API endpoints directly via Postman/curl
-- See PROJECT_CONTEXT.md for architecture details
+**Verify Static Files**
+```bash
+ls -la static/
+# Should show: css/, js/, and other assets
+```
 
 ---
 
-**Status**: ✅ Deployment Pipeline Working  
-**Auto-Deploy**: Enabled via GitHub  
-**Next Steps**: Monitor production and add features as needed
+## 📊 Monitoring
+
+### Vercel Dashboard
+- **Functions**: Monitor API performance
+- **Analytics**: Track user traffic
+- **Logs**: View serverless function logs
+
+### Browser Developer Tools
+- **Network Tab**: Monitor API calls and polling
+- **Console**: Check for JavaScript errors
+- **Application**: Verify service worker (if any)
+
+---
+
+## 🚨 Current Issues
+
+### Critical Bug (October 2025)
+**Problem**: Polling stops after all users vote
+- Only first voter sees results
+- Other users stuck in linking state
+- Network shows only heartbeat, no room polling
+
+**Status**: Requires immediate fix
+
+---
+
+## 🔄 Deployment Checklist
+
+Before each deployment:
+
+- [ ] Test locally with `npm start`
+- [ ] Build React app successfully
+- [ ] Copy static files to root
+- [ ] Verify API endpoints work
+- [ ] Test multi-device synchronization
+- [ ] Check browser console for errors
+- [ ] Commit with descriptive message
+- [ ] Push to main branch
+- [ ] Monitor Vercel deployment logs
+- [ ] Test live application
+
+---
+
+## 📈 Performance Notes
+
+### Optimization Applied
+- **Static Serving**: CDN delivery for assets
+- **Serverless API**: Automatic scaling
+- **Polling Intervals**: 2-5 second intervals (balance between real-time and performance)
+- **Heartbeat System**: 2-minute intervals to maintain connections
+
+### Monitoring Points
+- API response times (should be <500ms)
+- Polling frequency (2-5 seconds)
+- User disconnect detection (5-minute timeout)
+- Room cleanup (1-minute intervals)
+
+---
+
+## 🔗 Related Files
+
+- **PROJECT_CONTEXT.md**: Complete development history and architecture
+- **NEW_CHAT_PROMPT.md**: AI assistant context handover
+- **api/game.js**: Main serverless API implementation
+- **client/src/App.js**: React frontend application
+
+---
+
+**Next Steps**: Fix the critical polling bug to ensure all users see match results simultaneously.

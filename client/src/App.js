@@ -97,11 +97,16 @@ function App() {
   useEffect(() => {
     if (currentState === 'waitingroom') {
       startWaitingRoomPolling();
-    } else {
-      stopPolling();
     }
+    // Don't stop polling here - let other states manage their own polling
+    // This was causing polling to stop when transitioning to 'linking' state
     
-    return () => stopPolling();
+    return () => {
+      // Only stop polling if we're leaving the waiting room
+      if (currentState === 'waitingroom') {
+        stopPolling();
+      }
+    };
   }, [currentState]);
 
   // Validation functions
@@ -555,15 +560,25 @@ function App() {
   const pollRoomStatus = async () => {
     if (!roomId) return;
     
+    console.log('🔄 Polling room status...', { roomId, currentState, userId });
+    
     try {
       const response = await fetch(`${API_URL}/api/room/${roomId}`);
       const data = await response.json();
       
       if (data.success && data.room) {
+        console.log('📊 Polling response:', {
+          gameState: data.room.gameState,
+          userCount: data.room.users.length,
+          hasMatchResult: !!data.matchResult,
+          currentUserVoted: data.room.users.find(u => u.id === userId)?.hasVoted
+        });
+        
         // Check if current user is still in the room
         const currentUserInRoom = data.room.users.find(user => user.id === userId);
         if (!currentUserInRoom) {
           // User has been kicked or removed
+          console.log('❌ User not in room, redirecting...');
           setError('방에서 추방되었습니다.');
           setCurrentState('enter');
           setUsername('');
@@ -577,7 +592,7 @@ function App() {
         }
         
         // Update users with voting status
-        console.log('Polling update - Users:', data.room.users.map(u => ({ name: u.displayName, voted: u.hasVoted })));
+        console.log('👥 Users update:', data.room.users.map(u => ({ name: u.displayName, voted: u.hasVoted })));
         setUsers(data.room.users);
         
         // Check for match results regardless of current state
@@ -594,9 +609,11 @@ function App() {
             console.log('⚠️ All users voted but game state not updated yet, waiting for results...');
           }
         }
+      } else {
+        console.log('❌ Polling failed:', data);
       }
     } catch (error) {
-      console.error('Error polling room status:', error);
+      console.error('❌ Error polling room status:', error);
     }
   };
 

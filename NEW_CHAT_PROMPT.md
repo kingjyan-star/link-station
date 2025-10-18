@@ -9,7 +9,23 @@
 **Name**: Link Station  
 **Type**: Real-time matching game web application  
 **Live URL**: https://link-station-pro.vercel.app  
-**Status**: ✅ Production Ready (October 2025)
+**Status**: 🔧 In Progress - Critical Polling Bug Identified
+
+---
+
+## 🚨 **CRITICAL ISSUE - IMMEDIATE ATTENTION NEEDED**
+
+### **Current Bug**: Polling Stops After All Users Vote
+- **Symptoms**: Only first voter sees results, others stuck in linking state
+- **Root Cause**: Polling interval stops on non-first voters after all vote
+- **Evidence**: Network tab shows only heartbeat (ping) requests, no `/api/room/` polling
+- **Impact**: Results not broadcast to all users
+
+### **Testing Results**:
+- **Voting Order**: 박수형 → 심상보 → 홍은주 → 김도희
+- **박수형 (first voter)**: ✅ Sees results
+- **심상보, 홍은주, 김도희**: ❌ Stuck in linking state, no polling
+- **Network Evidence**: Only heartbeat requests visible, no room status polling
 
 ---
 
@@ -37,7 +53,7 @@ I'm working on **Link Station**, a multi-device real-time matching game where us
 1. **PROJECT_CONTEXT.md** - Complete development history, architecture, all bug fixes, and technical decisions
 
 **Reference as Needed**:
-2. **client/src/App.js** - Main React component (1012 lines, 8-state flow)
+2. **client/src/App.js** - Main React component (1061 lines, 8-state flow)
 3. **api/game.js** - Serverless API with all endpoints
 4. **client/src/App.css** - Complete styling
 5. **vercel.json** - Deployment configuration
@@ -69,6 +85,7 @@ I'm working on **Link Station**, a multi-device real-time matching game where us
 - `POST /api/start-game` - Master starts game (locks room)
 - `POST /api/select` - User votes (auto-processes when all vote)
 - `GET /api/room/:roomId` - Get room status (polling)
+- `POST /api/ping` - Heartbeat to keep connection alive
 
 ---
 
@@ -76,19 +93,25 @@ I'm working on **Link Station**, a multi-device real-time matching game where us
 
 ### What's Working
 - ✅ Complete 8-state flow
-- ✅ Real-time polling (2-5 sec intervals)
+- ✅ Real-time polling (2-5 sec intervals) during voting
 - ✅ Master controls (kick, start game)
 - ✅ QR code sharing with proper routing
 - ✅ Voting status display ("투표완료" vs "대기중")
 - ✅ Auto-hiding notifications (3s success, 5s error)
-- ✅ Result broadcasting to all users
-- ✅ Kicked user auto-redirect
+- ✅ Room name duplication prevention
+- ✅ User disconnect detection and cleanup
+
+### Current Critical Bug
+- ❌ **Polling stops after all users vote**
+- ❌ **Only first voter sees results**
+- ❌ **Other users stuck in linking state**
+- ❌ **No result broadcasting to all users**
 
 ### Recent Fixes (October 2025)
-1. **Voting Status Display** - All users can see who voted vs waiting
-2. **Result Broadcasting** - All users see results simultaneously via polling
-3. **Kicked User Redirect** - Kicked users auto-redirected to Enter state
-4. **Enhanced Debugging** - Added extensive logging to API
+1. **Room Duplication** - Fixed case-insensitive room name checking
+2. **Connection Management** - Added heartbeat system and user cleanup
+3. **Voting Status** - Fixed real-time voting status display during voting
+4. **API Logging** - Added comprehensive debugging logs
 
 ### Known Limitations
 - In-memory storage (data lost on server restart)
@@ -119,14 +142,21 @@ Vercel auto-deploys on push to main branch.
 
 ---
 
-## 🐛 Current Issues (if any)
+## 🐛 Current Critical Issue (Requires Immediate Fix)
 
-**Latest Bug Report (October 2025)**:
-1. ❓ Voting status not visible to voted users - **FIXED**
-2. ❓ Result screen not showing after all votes - **INVESTIGATING**
-   - Added enhanced debugging to API
-   - Modified polling logic to check for completed state
-   - Check console logs for match processing
+**Problem**: Polling stops after all users vote, preventing result broadcasting
+
+**Evidence**:
+- First voter (박수형) sees results immediately
+- Other users (심상보, 홍은주, 김도희) stuck in linking state
+- Network tab shows only heartbeat requests, no `/api/room/` polling
+- Console shows no errors but polling has stopped
+
+**Investigation Needed**:
+1. Check why `pollingInterval` stops on non-first voters
+2. Verify `currentState` remains 'linking' for all users
+3. Ensure polling continues until `gameState === 'completed'`
+4. Fix result broadcasting to all users
 
 ---
 
@@ -154,23 +184,23 @@ Vercel auto-deploys on push to main branch.
 
 ## 🔍 Troubleshooting Guide
 
-### If users can't see results:
-1. Check console for "All users have selected" log in API
-2. Verify `gameState` changes to 'completed'
-3. Ensure `matchResult` is in room object
-4. Check polling is detecting completed state
+### If polling stops after voting:
+1. Check if `currentState` is still 'linking'
+2. Verify `pollingInterval.current` is not null
+3. Check for JavaScript errors in console
+4. Ensure polling continues until results received
+
+### If users don't see results:
+1. Check if polling is running on all devices
+2. Verify `gameState` changes to 'completed' in API
+3. Ensure `matchResult` is returned in `/api/room/:roomId`
+4. Check polling logic detects completed state
 
 ### If master controls don't work:
 1. Verify `masterId` matches user's `userId`
 2. Check `isMaster` field in user objects
 3. Ensure master badge visible to all users
 4. Validate master-only endpoints check `masterId`
-
-### If kicked users stay in room:
-1. Check polling detects user not in `room.users`
-2. Verify redirect to 'enter' state triggers
-3. Ensure error message displays
-4. Check room data clears properly
 
 ---
 
@@ -187,30 +217,30 @@ Vercel auto-deploys on push to main branch.
 
 When starting a new session:
 
-1. **Ask user what they need** - Bug fix, new feature, or investigation?
-2. **Review relevant sections** - Check PROJECT_CONTEXT.md for related past issues
-3. **Check current code** - Read the actual implementation in App.js/api/game.js
-4. **Consider multi-device** - Most issues relate to state sync across devices
-5. **Use polling wisely** - Understand when polling runs (waiting vs linking states)
+1. **Fix the polling bug** - This is the highest priority
+2. **Test the fix** - Verify all users see results after voting
+3. **Check for other issues** - Ensure no regressions
+4. **Update documentation** - Record the fix in PROJECT_CONTEXT.md
 
 ---
 
-## 📝 Current Todos (if any)
+## 📝 Current Todos (High Priority)
 
-- [ ] **Investigate**: Result screen not showing after all votes (enhanced debugging added)
-- [ ] **Test**: Verify voting status display works for all users
+- [ ] **URGENT**: Fix polling continuation after all users vote
+- [ ] **Test**: Verify all users see results simultaneously
+- [ ] **Debug**: Check why polling stops on non-first voters
 - [ ] **Future**: Consider database for persistent storage
 
 ---
 
 ## 🔄 Context Refresh
 
-This prompt was created at **~90% context usage** to allow seamless continuation of development. All critical information from previous sessions is preserved in:
+This prompt was created at **~97% context usage** to allow seamless continuation of development. All critical information from previous sessions is preserved in:
 - **PROJECT_CONTEXT.md** (comprehensive)
 - **DEPLOYMENT.md** (deployment-specific)
 
 ---
 
-**You are now fully briefed on Link Station! Ready to continue development.**
+**You are now fully briefed on Link Station! The critical polling bug requires immediate attention.**
 
-Ask the user: *"What would you like to work on with Link Station?"*
+Ask the user: *"I understand the polling bug. Let me fix the issue where polling stops after all users vote, preventing result broadcasting to all users."*

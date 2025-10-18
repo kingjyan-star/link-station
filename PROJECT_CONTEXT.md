@@ -2,7 +2,7 @@
 
 **Live URL**: https://link-station-pro.vercel.app  
 **Last Updated**: October 2025  
-**Status**: ✅ Production Ready
+**Status**: 🔧 In Progress - Critical Polling Bug Identified
 
 ---
 
@@ -351,6 +351,16 @@ link-station/
 - Added "선택 대기중..." and "✓ 완료" indicators for voted users
 - Enhanced API debugging for match processing
 - Added logging to track when all users vote
+
+### Session 12: Critical Polling Bug (October 2025 - IN PROGRESS)
+**Problem**: Only first voter (박수형) sees results, other users' polling stops after all vote
+**Root Cause**: Polling interval stops on non-first voters, preventing result broadcasting
+**Current Status**: 
+- First voter sees results immediately
+- Other users stuck in linking state with no polling
+- Network tab shows only heartbeat (ping) requests, no /api/room/ requests
+- Console shows no errors but polling has stopped
+**Next Steps**: Fix polling continuation after all users vote
 
 ---
 
