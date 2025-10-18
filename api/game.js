@@ -507,11 +507,18 @@ app.post('/api/select', (req, res) => {
     console.log(`✅ Game state changed to: ${room.gameState}`);
     console.log(`✅ Match result stored in room object`);
     
+    // Return users with voting status even in final response
+    const usersWithVotingStatus = Array.from(room.users.values()).map(user => ({
+      ...user,
+      hasVoted: true, // All users have voted at this point
+      isMaster: user.id === room.masterId
+    }));
+    
     res.json({
       success: true,
       matches,
       unmatched,
-      users: Array.from(room.users.values())
+      users: usersWithVotingStatus
     });
   } else {
     // Return updated users with voting status
