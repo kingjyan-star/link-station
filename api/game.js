@@ -139,7 +139,8 @@ app.post('/api/create-room', (req, res) => {
     lastActivity: Date.now()
   });
   
-  console.log(`Room created: ${roomName} (${roomId}) by ${username}`);
+  console.log(`✅ Room created: "${roomName}" (ID: ${roomId}) by "${username}"`);
+  console.log(`   Total rooms now: ${rooms.size}`);
   
   res.json({
     success: true,
@@ -159,18 +160,26 @@ app.post('/api/create-room', (req, res) => {
 app.post('/api/join-room', (req, res) => {
   const { roomName, username } = req.body;
   
-  // Find room by name
+  console.log(`Join room attempt: "${roomName}" by "${username}"`);
+  console.log(`Total rooms: ${rooms.size}`);
+  console.log(`Available rooms:`, Array.from(rooms.values()).map(r => ({ name: r.roomName, id: r.id, users: r.users.size })));
+  
+  // Find room by name (case-insensitive)
   let targetRoom = null;
   for (const [roomId, room] of rooms) {
-    if (room.roomName === roomName.trim()) {
+    if (room.roomName.toLowerCase() === roomName.trim().toLowerCase()) {
       targetRoom = room;
       break;
     }
   }
   
   if (!targetRoom) {
+    console.log(`Room not found: "${roomName}"`);
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
   }
+  
+  console.log(`Room found: ${targetRoom.roomName} (${targetRoom.id})`);
+
   
   // Check if room is full
   if (targetRoom.users.size >= targetRoom.memberLimit) {
@@ -233,18 +242,23 @@ app.post('/api/join-room', (req, res) => {
 app.post('/api/check-password', (req, res) => {
   const { roomName, password, username } = req.body;
   
-  // Find room by name
+  console.log(`Check password attempt: "${roomName}" by "${username}"`);
+  
+  // Find room by name (case-insensitive)
   let targetRoom = null;
   for (const [roomId, room] of rooms) {
-    if (room.roomName === roomName.trim()) {
+    if (room.roomName.toLowerCase() === roomName.trim().toLowerCase()) {
       targetRoom = room;
       break;
     }
   }
   
   if (!targetRoom) {
+    console.log(`Room not found for password check: "${roomName}"`);
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
   }
+  
+  console.log(`Room found for password check: ${targetRoom.roomName}`);
   
   // Check password
   if (targetRoom.roomPassword !== password) {
