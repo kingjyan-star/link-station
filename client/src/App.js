@@ -28,6 +28,7 @@ function App() {
   const [unmatched, setUnmatched] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [hasVoted, setHasVoted] = useState(false);
+  const [userRole, setUserRole] = useState('attender'); // 'attender' or 'observer'
   
   // UI state
   const [showQR, setShowQR] = useState(false);
@@ -322,15 +323,16 @@ function App() {
       });
       const data = await response.json();
       
-      if (data.success) {
-        setRoomId(data.roomId);
-        setUserId(data.userId);
-      setUsers(data.users);
-        setIsMaster(true);
-        setRoomData(data.roomData);
-        setCurrentState('waitingroom');
-        setSuccess('방이 생성되었습니다!');
-      } else {
+          if (data.success) {
+            setRoomId(data.roomId);
+            setUserId(data.userId);
+            setUsers(data.users);
+            setIsMaster(true);
+            setRoomData(data.roomData);
+            setUserRole('attender'); // Initialize as attender
+            setCurrentState('waitingroom');
+            setSuccess('방이 생성되었습니다!');
+          } else {
         setError(data.message || '방 생성에 실패했습니다.');
       }
     } catch (error) {
@@ -360,6 +362,7 @@ function App() {
           setUsers(data.users);
           setIsMaster(data.isMaster);
           setRoomData(data.roomData);
+          setUserRole('attender'); // Initialize as attender
           setCurrentState('waitingroom');
           setSuccess('방에 참여했습니다!');
         }
@@ -388,9 +391,10 @@ function App() {
       if (data.success) {
         setRoomId(data.roomId);
         setUserId(data.userId);
-      setUsers(data.users);
+        setUsers(data.users);
         setIsMaster(data.isMaster);
         setRoomData(data.roomData);
+        setUserRole('attender'); // Initialize as attender
         setCurrentState('waitingroom');
         setSuccess('방에 참여했습니다!');
       } else {
@@ -419,6 +423,7 @@ function App() {
         setUsers(data.users);
         setIsMaster(data.isMaster);
         setRoomData(data.roomData);
+        setUserRole('attender'); // Initialize as attender
         setCurrentState('waitingroom');
         setSuccess('방에 참여했습니다!');
     } else {
@@ -613,14 +618,7 @@ function App() {
     }
   };
 
-  const handleNextRound = () => {
-    setMatches([]);
-    setUnmatched([]);
-        setSelectedUser(null);
-    setHasVoted(false);
-    setCurrentState('linking');
-    startPolling();
-  };
+  // Next round system removed - no rounds, only one game per session
 
   const handleKickUser = async (targetUserId) => {
     if (!isMaster) return;
@@ -663,7 +661,7 @@ function App() {
       console.error('Error leaving room:', error);
     }
     
-    // Clean up state and go back to makeOrJoinRoom
+    // Clean up state and go back to makeOrJoinRoom (complete exit)
     setRoomId('');
     setUserId('');
     setUsers([]);
@@ -677,6 +675,55 @@ function App() {
     
     // Go back to makeOrJoinRoom state (user keeps their username)
     setCurrentState('makeOrJoinRoom');
+  };
+
+  const handleReturnToWaitingRoom = async () => {
+    // Return to waiting room after results - keep room alive
+    setMatches([]);
+    setUnmatched([]);
+    setSelectedUser(null);
+    setHasVoted(false);
+    
+    // Reset game state in API
+    try {
+      if (roomId && userId) {
+        await fetch(`${API_URL}/api/return-to-waiting`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roomId, userId })
+        });
+      }
+    } catch (error) {
+      console.error('Error returning to waiting room:', error);
+    }
+    
+    setCurrentState('waitingroom');
+    // Start waiting room polling
+    startWaitingRoomPolling();
+  };
+
+  const handleRoleChange = async (newRole) => {
+    if (newRole === userRole) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/api/change-role`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, userId, role: newRole })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setUserRole(newRole);
+        // Update users list to reflect role change
+        setUsers(data.users);
+      } else {
+        setError(data.message || '역할 변경에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Error changing role:', error);
+      setError('역할 변경 중 오류가 발생했습니다.');
+    }
   };
 
 
@@ -959,11 +1006,53 @@ function App() {
           )}
       </div>
       
-      <div className="users-list">
-        <h3>참여자 목록</h3>
+      {/* Role Selection Boxes */}
+      <div className="role-selection">
+        <div 
+          className={`role-box attender-box ${userRole === 'attender' ? 'active' : ''}`}
+          onClick={() => handleRoleChange('attender')}
+        >
+          <h3>참가자</h3>
+        </div>
+        <div 
+          className={`role-box observer-box ${userRole === 'observer' ? 'active' : ''}`}
+          onClick={() => handleRoleChange('observer')}
+        >
+          <h3>관전자</h3>
+        </div>
+      </div>
+
+      {/* Attender List */}
+      <div className="attenders-list">
+        <h3>참가자 목록</h3>
         <div className="users-grid">
-          {users.map(user => (
+          {users.filter(user => user.role === 'attender').map(user => (
             <div key={user.id} className="user-card">
+              <div className="user-info">
+                <span className="user-nickname">{user.displayName || user.nickname}</span>
+                {user.id === userId && <span className="you-badge">나</span>}
+                {user.isMaster && <span className="master-badge">방장</span>}
+              </div>
+              {isMaster && user.id !== userId && (
+                <button
+                  className="kick-button"
+                  onClick={() => handleKickUser(user.id)}
+                  title="사용자 추방"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Observer List */}
+      <div className="observers-list">
+        <h3>관전자 목록</h3>
+        <div className="users-grid">
+          {users.filter(user => user.role === 'observer').map(user => (
+            <div key={user.id} className="user-card observer-card">
               <div className="user-info">
                 <span className="user-nickname">{user.displayName || user.nickname}</span>
                 {user.id === userId && <span className="you-badge">나</span>}
@@ -988,12 +1077,12 @@ function App() {
           <button 
             className="start-game-button"
             onClick={handleStartGame}
-            disabled={users.length < 2 || isLoading}
+            disabled={users.filter(user => user.role === 'attender').length < 2 || isLoading}
           >
-            {isLoading ? '게임 시작 중...' : `게임 시작 (${users.length}명)`}
+            {isLoading ? '게임 시작 중...' : `게임 시작 (참가자 ${users.filter(user => user.role === 'attender').length}명)`}
           </button>
-          {users.length < 2 && (
-            <p className="waiting-message">최소 2명 이상 필요합니다.</p>
+          {users.filter(user => user.role === 'attender').length < 2 && (
+            <p className="waiting-message">참가자는 최소 2명 이상 필요합니다.</p>
           )}
         </div>
       )}
@@ -1010,13 +1099,14 @@ function App() {
     <div className="linking-container">
       <div className="linking-header">
         <h2>🔗 링크하기</h2>
-        <p>연결하고 싶은 사람을 선택하세요</p>
+        <p>{userRole === 'observer' ? '투표 상황을 관전하세요' : '연결하고 싶은 사람을 선택하세요'}</p>
+        <p className="role-indicator">현재 역할: {userRole === 'attender' ? '참가자' : '관전자'}</p>
       </div>
       
       <div className="users-list">
-        <h3>참여자 목록</h3>
+        <h3>참가자 목록</h3>
         <div className="users-grid">
-          {users.map(user => (
+          {users.filter(user => user.role === 'attender').map(user => (
             <div key={user.id} className="user-card">
               <div className="user-info">
                 <span className="user-nickname">{user.displayName || user.nickname}</span>
@@ -1049,14 +1139,14 @@ function App() {
                   </div>
                 )}
               </div>
-              {!hasVoted && user.id !== userId && (
+              {!hasVoted && user.id !== userId && userRole === 'attender' && (
           <button 
                   className="select-button"
                   onClick={() => handleSelectUser(user.id)}
                   disabled={isLoading}
-          >
+                >
                   선택
-          </button>
+                </button>
               )}
             </div>
           ))}
@@ -1107,14 +1197,12 @@ function App() {
       )}
       
       <div className="result-actions">
-        {isMaster && unmatched.length > 0 && (
-          <button className="next-round-button" onClick={handleNextRound}>
-            다음 라운드 ({unmatched.length}명)
-          </button>
-        )}
+        <button className="return-to-waiting-button" onClick={handleReturnToWaitingRoom}>
+          대기실로 돌아가기
+        </button>
         <button className="leave-room-button" onClick={handleLeaveRoom}>
           방 나가기
-      </button>
+        </button>
       </div>
     </div>
   );

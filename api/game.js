@@ -145,7 +145,8 @@ app.post('/api/create-room', (req, res) => {
     username: username.trim(),
     displayName: username.trim(),
     joinedAt: new Date().toISOString(),
-    isMaster: true
+    isMaster: true,
+    role: 'attender'
   };
   
   room.users.set(userId, user);
@@ -229,7 +230,8 @@ app.post('/api/join-room', (req, res) => {
     username: username.trim(),
     displayName: username.trim(),
     joinedAt: new Date().toISOString(),
-    isMaster: false
+    isMaster: false,
+    role: 'attender'
   };
   
   targetRoom.users.set(userId, user);
@@ -247,6 +249,7 @@ app.post('/api/join-room', (req, res) => {
     userId,
     users: Array.from(targetRoom.users.values()),
     isMaster: false,
+    role: 'attender',
     roomData: {
       roomName: targetRoom.roomName,
       memberLimit: targetRoom.memberLimit,
@@ -304,7 +307,8 @@ app.post('/api/check-password', (req, res) => {
     username: username.trim(),
     displayName: username.trim(),
     joinedAt: new Date().toISOString(),
-    isMaster: false
+    isMaster: false,
+    role: 'attender'
   };
   
   targetRoom.users.set(userId, user);
@@ -322,6 +326,7 @@ app.post('/api/check-password', (req, res) => {
     userId,
     users: Array.from(targetRoom.users.values()),
     isMaster: false,
+    role: 'attender',
     roomData: {
       roomName: targetRoom.roomName,
       memberLimit: targetRoom.memberLimit,
@@ -361,7 +366,8 @@ app.post('/api/join-room-qr', (req, res) => {
     username: username.trim(),
     displayName: username.trim(),
     joinedAt: new Date().toISOString(),
-    isMaster: false
+    isMaster: false,
+    role: 'attender'
   };
   
   room.users.set(userId, user);
@@ -379,6 +385,7 @@ app.post('/api/join-room-qr', (req, res) => {
     userId,
     users: Array.from(room.users.values()),
     isMaster: false,
+    role: 'attender',
     roomData: {
       roomName: room.roomName,
       memberLimit: room.memberLimit,
@@ -401,9 +408,10 @@ app.post('/api/start-game', (req, res) => {
     return res.status(403).json({ success: false, message: '방장만 게임을 시작할 수 있습니다.' });
   }
   
-  // Check minimum players
-  if (room.users.size < 2) {
-    return res.status(400).json({ success: false, message: '최소 2명 이상 필요합니다.' });
+  // Check minimum attenders
+  const attenders = Array.from(room.users.values()).filter(user => (user.role || 'attender') === 'attender');
+  if (attenders.length < 2) {
+    return res.status(400).json({ success: false, message: '참가자는 최소 2명 이상 필요합니다.' });
   }
   
   // Start game
@@ -432,10 +440,16 @@ app.post('/api/select', (req, res) => {
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
   }
   
-  // Check if user exists in room
+  // Check if user exists in room and is an attender
   if (!room.users.has(userId)) {
     console.log(`User not found in room: ${userId}`);
     return res.status(404).json({ success: false, message: '방에 참여하지 않은 사용자입니다.' });
+  }
+  
+  const user = room.users.get(userId);
+  if ((user.role || 'attender') !== 'attender') {
+    console.log(`User is not an attender: ${userId}, role: ${user.role}`);
+    return res.status(400).json({ success: false, message: '참가자만 투표할 수 있습니다.' });
   }
   
   // Check if selected user exists in room
@@ -462,8 +476,9 @@ app.post('/api/select', (req, res) => {
   console.log(`Selection: ${userId} selects ${selectedUserId} in room ${roomId}`);
   console.log(`Selections so far: ${room.selections.size}/${room.users.size}`);
   
-  // Check if all users have selected
-  if (room.selections.size === room.users.size) {
+  // Check if all attenders have selected
+  const attenders = Array.from(room.users.values()).filter(user => (user.role || 'attender') === 'attender');
+  if (room.selections.size === attenders.length) {
     console.log('All users have selected, processing matches...');
     console.log(`Room users size: ${room.users.size}`);
     console.log(`Room selections size: ${room.selections.size}`);
@@ -563,6 +578,59 @@ app.post('/api/remove-user', (req, res) => {
   res.json({ success: true });
 });
 
+// Change user role (attender/observer)
+app.post('/api/change-role', (req, res) => {
+  const { roomId, userId, role } = req.body;
+  const room = rooms.get(roomId);
+  
+  if (!room) {
+    return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
+  }
+  
+  const user = room.users.get(userId);
+  if (!user) {
+    return res.status(404).json({ success: false, message: '사용자를 찾을 수 없습니다.' });
+  }
+  
+  // Update user role
+  user.role = role;
+  room.users.set(userId, user);
+  
+  console.log(`🔄 User ${user.displayName} changed role to ${role}`);
+  
+  // Return updated users list
+  const usersWithVotingStatus = Array.from(room.users.values()).map(user => ({
+    ...user,
+    hasVoted: room.selections.has(user.id),
+    isMaster: user.id === room.masterId,
+    role: user.role || 'attender' // Default to attender if no role set
+  }));
+  
+  res.json({
+    success: true,
+    users: usersWithVotingStatus
+  });
+});
+
+// Return to waiting room after results
+app.post('/api/return-to-waiting', (req, res) => {
+  const { roomId, userId } = req.body;
+  const room = rooms.get(roomId);
+  
+  if (!room) {
+    return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
+  }
+  
+  // Reset game state to waiting
+  room.gameState = 'waiting';
+  room.selections.clear();
+  room.matchResult = null;
+  
+  console.log(`🔄 Room ${room.roomName} returned to waiting state`);
+  
+  res.json({ success: true });
+});
+
 // Get room status
 app.get('/api/room/:roomId', (req, res) => {
   const { roomId } = req.params;
@@ -572,11 +640,12 @@ app.get('/api/room/:roomId', (req, res) => {
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
   }
   
-  // Add voting status and master status to users
+  // Add voting status, master status, and role to users
   const usersWithVotingStatus = Array.from(room.users.values()).map(user => ({
     ...user,
     hasVoted: room.selections.has(user.id),
-    isMaster: user.id === room.masterId
+    isMaster: user.id === room.masterId,
+    role: user.role || 'attender' // Default to attender if no role set
   }));
   
   console.log(`📊 Room status request for ${room.roomName}:`);

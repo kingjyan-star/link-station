@@ -707,3 +707,87 @@ button:disabled {
   background: #e9ecef;
   transform: translateY(-1px);
 }
+
+/* Role Selection Styles */
+.role-selection {
+  display: flex;
+  gap: 10px;
+  margin: 20px 0;
+  justify-content: center;
+}
+
+.role-box {
+  flex: 1;
+  max-width: 200px;
+  padding: 20px;
+  border: 3px solid #dee2e6;
+  border-radius: 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #f8f9fa;
+}
+
+.role-box h3 {
+  margin: 0;
+  color: #6c757d;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.role-box.attender-box.active {
+  border-color: #28a745;
+  background: #d4edda;
+}
+
+.role-box.attender-box.active h3 {
+  color: #28a745;
+}
+
+.role-box.observer-box.active {
+  border-color: #6f42c1;
+  background: #e2d9f3;
+}
+
+.role-box.observer-box.active h3 {
+  color: #6f42c1;
+}
+
+.role-box:hover:not(.active) {
+  border-color: #adb5bd;
+  background: #e9ecef;
+  transform: translateY(-2px);
+}
+
+/* Role Indicator in Linking */
+.role-indicator {
+  font-size: 14px;
+  color: #6c757d;
+  margin: 5px 0;
+  font-weight: 500;
+}
+
+/* Observer Card Styling */
+.observer-card {
+  opacity: 0.8;
+  border: 2px solid #6f42c1;
+}
+
+/* Return to Waiting Button */
+.return-to-waiting-button {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-right: 10px;
+}
+
+.return-to-waiting-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(40, 167, 69, 0.4);
+}
