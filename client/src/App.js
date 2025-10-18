@@ -8,7 +8,7 @@ const API_URL = process.env.NODE_ENV === 'production'
 
 function App() {
   // State management
-  const [currentState, setCurrentState] = useState('enter'); // enter, makeroom, enterroom, checkpassword, enterroomwithqr, waitingroom, linking, linkresult
+  const [currentState, setCurrentState] = useState('registerName'); // registerName, makeOrJoinRoom, makeroom, joinroom, checkpassword, joinroomwithqr, waitingroom, linking, linkresult
   const [username, setUsername] = useState('');
   const [roomName, setRoomName] = useState('');
   const [roomPassword, setRoomPassword] = useState('');
@@ -58,7 +58,7 @@ function App() {
     
     if (roomIdFromURL) {
       setRoomId(roomIdFromURL);
-      setCurrentState('enterroomwithqr');
+      setCurrentState('joinroomwithqr');
     }
   }, []);
 
@@ -431,7 +431,7 @@ function App() {
   };
 
   // Event handlers
-  const handleMakeRoom = async () => {
+  const handleRegisterName = async () => {
     const validation = validateUsername(username);
     if (!validation.valid) {
       setError(validation.message);
@@ -444,24 +444,32 @@ function App() {
       return;
     }
 
+    setCurrentState('makeOrJoinRoom');
+    setError('');
+  };
+
+  const handleMakeRoom = () => {
     setCurrentState('makeroom');
     setError('');
   };
 
-  const handleEnterRoom = async () => {
-    const validation = validateUsername(username);
-    if (!validation.valid) {
-      setError(validation.message);
-      return;
-    }
+  const handleJoinRoom = () => {
+    setCurrentState('joinroom');
+    setError('');
+  };
 
-    const isDuplicate = await checkUsernameDuplication(username);
-    if (isDuplicate) {
-      setError('이미 사용 중인 사용자 이름입니다.');
-      return;
+  const handleExitFromMakeOrJoin = () => {
+    // Remove user from active users when they exit
+    if (username) {
+      // Call API to remove user from active users
+      fetch(`${API_URL}/api/remove-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username })
+      }).catch(error => console.error('Error removing user:', error));
     }
-
-    setCurrentState('enterroom');
+    setUsername('');
+    setCurrentState('registerName');
     setError('');
   };
 
@@ -489,7 +497,7 @@ function App() {
     setIsLoading(false);
   };
 
-  const handleJoinRoom = async () => {
+  const handleJoinRoomSubmit = async () => {
     const roomNameValidation = validateRoomName(enteredRoomName);
     if (!roomNameValidation.valid) {
       setError(roomNameValidation.message);
@@ -642,8 +650,8 @@ function App() {
   };
 
   const handleLeaveRoom = () => {
-    setCurrentState('enter');
-    setUsername('');
+    // Go back to waiting room instead of enter state
+    setCurrentState('waitingroom');
     setRoomId('');
     setUserId('');
     setUsers([]);
@@ -651,21 +659,21 @@ function App() {
     setRoomData(null);
     setMatches([]);
     setUnmatched([]);
-        setSelectedUser(null);
+    setSelectedUser(null);
     setHasVoted(false);
     stopPolling();
   };
 
 
   // Render functions
-  const renderEnter = () => (
-    <div className="enter-container">
-      <div className="enter-header">
+  const renderRegisterName = () => (
+    <div className="register-name-container">
+      <div className="register-name-header">
         <h1>🔗 링크 스테이션</h1>
-        <p>사용자 이름을 입력하고 방을 만들거나 참여하세요</p>
+        <p>사용자 이름을 입력하세요</p>
       </div>
       
-      <div className="enter-form">
+      <div className="register-name-form">
         <div className="input-group">
           <label htmlFor="username">사용자 이름 (최대 32자)</label>
           <input
@@ -680,20 +688,43 @@ function App() {
         
         <div className="button-group">
           <button 
-            className="make-room-button"
-            onClick={handleMakeRoom}
+            className="register-button"
+            onClick={handleRegisterName}
             disabled={!username.trim()}
           >
-            방 만들기
-          </button>
-          <button 
-            className="enter-room-button"
-            onClick={handleEnterRoom}
-            disabled={!username.trim()}
-          >
-            방 참여하기
+            계속하기
           </button>
         </div>
+      </div>
+    </div>
+  );
+
+  const renderMakeOrJoinRoom = () => (
+    <div className="make-or-join-container">
+      <div className="make-or-join-header">
+        <h2>안녕하세요, {username}님!</h2>
+        <p>원하시는 작업을 선택하세요</p>
+      </div>
+      
+      <div className="make-or-join-options">
+        <button 
+          className="make-room-button"
+          onClick={handleMakeRoom}
+        >
+          🏠 방 만들기
+        </button>
+        <button 
+          className="join-room-button"
+          onClick={handleJoinRoom}
+        >
+          🚪 방 참여하기
+        </button>
+        <button 
+          className="exit-button"
+          onClick={handleExitFromMakeOrJoin}
+        >
+          🚪 나가기
+        </button>
       </div>
     </div>
   );
@@ -753,7 +784,7 @@ function App() {
           <button 
             className="cancel-button"
             onClick={() => {
-              setCurrentState('enter');
+              setCurrentState('makeOrJoinRoom');
               setRoomName('');
               setRoomPassword('');
               setMemberLimit(8);
@@ -766,7 +797,7 @@ function App() {
     </div>
   );
 
-  const renderEnterRoom = () => (
+  const renderJoinRoom = () => (
     <div className="enterroom-container">
       <div className="enterroom-header">
         <h2>방 참여하기</h2>
@@ -789,7 +820,7 @@ function App() {
         <div className="button-group">
           <button 
             className="join-room-button"
-            onClick={handleJoinRoom}
+            onClick={handleJoinRoomSubmit}
             disabled={isLoading || !enteredRoomName.trim()}
           >
             {isLoading ? '참여 중...' : '방 참여하기'}
@@ -797,7 +828,7 @@ function App() {
           <button 
             className="cancel-button"
             onClick={() => {
-              setCurrentState('enter');
+              setCurrentState('makeOrJoinRoom');
               setEnteredRoomName('');
             }}
           >
@@ -850,7 +881,7 @@ function App() {
     </div>
   );
 
-  const renderEnterRoomWithQR = () => (
+  const renderJoinRoomWithQR = () => (
     <div className="enterroomwithqr-container">
       <div className="enterroomwithqr-header">
         <h2>QR 코드로 참여하기</h2>
@@ -1078,11 +1109,12 @@ function App() {
       {error && <div className="error-message">{error}</div>}
       {success && <div className="success-message">{success}</div>}
       
-      {currentState === 'enter' && renderEnter()}
+      {currentState === 'registerName' && renderRegisterName()}
+      {currentState === 'makeOrJoinRoom' && renderMakeOrJoinRoom()}
       {currentState === 'makeroom' && renderMakeRoom()}
-      {currentState === 'enterroom' && renderEnterRoom()}
+      {currentState === 'joinroom' && renderJoinRoom()}
       {currentState === 'checkpassword' && renderCheckPassword()}
-      {currentState === 'enterroomwithqr' && renderEnterRoomWithQR()}
+      {currentState === 'joinroomwithqr' && renderJoinRoomWithQR()}
       {currentState === 'waitingroom' && renderWaitingRoom()}
       {currentState === 'linking' && renderLinking()}
       {currentState === 'linkresult' && renderLinkResult()}

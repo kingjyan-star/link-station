@@ -551,6 +551,18 @@ app.post('/api/ping', (req, res) => {
   res.json({ success: true, timestamp: Date.now() });
 });
 
+// Remove user from active users when they exit
+app.post('/api/remove-user', (req, res) => {
+  const { username } = req.body;
+  
+  if (username && activeUsers.has(username)) {
+    activeUsers.delete(username);
+    console.log(`👋 User ${username} removed from active users`);
+  }
+  
+  res.json({ success: true });
+});
+
 // Get room status
 app.get('/api/room/:roomId', (req, res) => {
   const { roomId } = req.params;

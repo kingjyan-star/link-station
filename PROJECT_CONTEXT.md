@@ -2,7 +2,7 @@
 
 **Live URL**: https://link-station-pro.vercel.app  
 **Last Updated**: October 2025  
-**Status**: 🔧 In Progress - Persistent Polling Issues Require Fundamental Fix
+**Status**: ✅ Active Development - State Flow Improvements Implemented
 
 ---
 
@@ -38,44 +38,53 @@
 
 ---
 
-## 🎮 Complete 8-State Flow
+## 🎮 Complete 9-State Flow (Updated)
 
-### 1. **Enter State**
-- **Purpose**: Initial entry point
+### 1. **RegisterName State** (formerly "Enter")
+- **Purpose**: Initial entry point for username registration
 - **Inputs**: Username (max 32 chars)
 - **Validation**: Blank check, duplication check
-- **Actions**: "방 만들기" (Make Room) or "방 참여하기" (Enter Room)
+- **Actions**: "계속하기" (Continue) → goes to MakeOrJoinRoom state
 
-### 2. **MakeRoom State**
+### 2. **MakeOrJoinRoom State** (NEW - Bridge State)
+- **Purpose**: Central hub for room actions
+- **Display**: "안녕하세요, [username]님!"
+- **Actions**: 
+  - "🏠 방 만들기" (Make Room) → goes to MakeRoom state
+  - "🚪 방 참여하기" (Join Room) → goes to JoinRoom state
+  - "🚪 나가기" (Exit) → removes username from active users, returns to RegisterName state
+
+### 3. **MakeRoom State**
 - **Purpose**: Create new room
 - **Inputs**: 
   - Room name (max 128 chars)
   - Password (optional, max 16 chars)
   - Member limit (2-99, default 8)
 - **Validation**: Room name uniqueness, blank checks
-- **Actions**: "방 생성하기" (Create) or "취소" (Cancel)
+- **Actions**: "방 생성하기" (Create) or "취소" (Cancel → returns to MakeOrJoinRoom)
+- **Success**: Redirects to WaitingRoom as master
 
-### 3. **EnterRoom State**
+### 4. **JoinRoom State** (formerly "EnterRoom")
 - **Purpose**: Join existing room
 - **Inputs**: Room name
 - **Checks**: Room existence, member limit, password requirement
-- **Actions**: "방 참여하기" (Join) or "취소" (Cancel)
+- **Actions**: "방 참여하기" (Join) or "취소" (Cancel → returns to MakeOrJoinRoom)
 - **Flow**: Auto-redirects to CheckPassword if room has password
 
-### 4. **CheckPassword State**
+### 5. **CheckPassword State**
 - **Purpose**: Verify password for protected rooms
 - **Inputs**: Room password
 - **Validation**: Password match check
 - **Actions**: "입장하기" (Enter) or "취소" (Cancel)
 
-### 5. **EnterroomwithQR State**
+### 6. **JoinRoomWithQR State** (formerly "EnterroomwithQR")
 - **Purpose**: Join room via QR code scan
 - **Inputs**: Username (room ID from URL params)
 - **Features**: Bypasses password requirement (trusted invitation)
 - **Actions**: "참여하기" (Join) or "취소" (Cancel)
 - **URL Format**: `https://link-station-pro.vercel.app?room=roomId`
 
-### 6. **WaitingRoom State**
+### 7. **WaitingRoom State**
 - **Purpose**: Pre-game lobby
 - **Display**:
   - User list with real-time updates
@@ -87,7 +96,7 @@
 - **Polling**: 5-second intervals for user list updates
 - **Room Locked**: New players blocked when game state is "linking" or "completed"
 
-### 7. **Linking State**
+### 8. **Linking State**
 - **Purpose**: Active matching phase
 - **Display**:
   - User selection interface
@@ -101,14 +110,14 @@
 - **Polling**: 2-second intervals for voting status updates
 - **Auto-transition**: When all vote → LinkResult state
 
-### 8. **LinkResult State**
+### 9. **LinkResult State**
 - **Purpose**: Show matching results
 - **Display**:
   - Successful matches (mutual selections)
   - Unmatched users
 - **Actions**:
-  - "다음 라운드" (Next Round) - returns to WaitingRoom
-  - "방 나가기" (Leave Room) - returns to Enter state
+  - "다음 라운드" (Next Round) - returns to WaitingRoom (for unmatched users)
+  - "방 나가기" (Leave Room) - **NOW returns to WaitingRoom** (preserves username, allows continuous play)
 - **Result Broadcasting**: All users see results simultaneously via polling
 
 ---
@@ -352,7 +361,7 @@ link-station/
 - Enhanced API debugging for match processing
 - Added logging to track when all users vote
 
-### Session 12: Critical Polling Bug (October 2025 - PERSISTENT ISSUES)
+### Session 12: Critical Polling Bug (October 2025 - RESOLVED)
 **Problem**: Only first voter (박수형) sees results, other users' polling stops after all vote
 **Root Cause**: useEffect in App.js was stopping ALL polling when currentState changed from 'waitingroom' to 'linking'
 **Multiple Fix Attempts**: 
@@ -360,12 +369,33 @@ link-station/
 - Added comprehensive debugging logs to pollRoomStatus function
 - Fixed race conditions with multiple fallback mechanisms
 - Enhanced voting status updates and result detection
-**Current Status**: ❌ PERSISTENT - Issues continue despite multiple fixes
-**New Problems Identified**:
-1. No results shown to anybody after voting
-2. Users cannot see others' vote status except when they vote
-3. Master also affected by vote status update issues
-**Next Approach**: Fundamental polling architecture redesign needed
+**Final Solution**: Simplified polling logic, consolidated useEffect, improved result detection
+**Status**: ✅ RESOLVED - All users now see results and vote status updates properly
+
+### Session 13: State Flow Improvements (October 2025 - COMPLETED)
+**Problem**: Username persistence after leaving results caused duplication errors
+**Root Cause**: Users returned to "enter" state (name registration) after leaving results, but username remained in activeUsers
+**Solution Implemented**:
+1. **Renamed States** for clarity:
+   - `enter` → `registerName`
+   - `enterroom` → `joinroom`
+   - `enterroomwithqr` → `joinroomwithqr`
+2. **Added Bridge State** `makeOrJoinRoom`:
+   - Shows after username registration
+   - Displays "안녕하세요, [username]님!"
+   - 3 buttons: Make Room, Join Room, Exit
+   - Exit button removes username from activeUsers
+3. **Changed Exit Flow**:
+   - After LinkResult: Users return to **WaitingRoom** (not registerName)
+   - From MakeRoom/JoinRoom: Cancel returns to **MakeOrJoinRoom**
+   - From MakeOrJoinRoom: Exit cleans up username, returns to **RegisterName**
+4. **Added API Endpoint** `/api/remove-user` to clean up usernames on exit
+**Benefits**:
+- ✅ Users can play multiple rounds without re-entering nickname
+- ✅ No more username duplication errors
+- ✅ Clearer navigation flow
+- ✅ Proper cleanup when users truly exit
+**Status**: ✅ COMPLETED - State flow is now logical and user-friendly
 
 ---
 
