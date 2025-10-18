@@ -576,23 +576,22 @@ function App() {
           return;
         }
         
+        // Update users with voting status
+        console.log('Polling update - Users:', data.room.users.map(u => ({ name: u.displayName, voted: u.hasVoted })));
         setUsers(data.room.users);
         
         // Check for match results regardless of current state
         if (data.room.gameState === 'completed' && data.matchResult) {
-          console.log('Match results received via polling:', data.matchResult);
+          console.log('✅ Match results received via polling:', data.matchResult);
           setMatches(data.matchResult.matches || []);
           setUnmatched(data.matchResult.unmatched || []);
           setCurrentState('linkresult');
           stopPolling();
         } else if (currentState === 'linking') {
-          // Update voting status for users
-          setUsers(data.room.users);
-          
           // Additional check: if all users have voted but game state is still linking
           const allUsersVoted = data.room.users.every(user => user.hasVoted);
           if (allUsersVoted && data.room.gameState === 'linking') {
-            console.log('All users voted but game state not updated yet, waiting for results...');
+            console.log('⚠️ All users voted but game state not updated yet, waiting for results...');
           }
         }
       }

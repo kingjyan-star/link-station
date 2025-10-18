@@ -503,7 +503,9 @@ app.post('/api/select', (req, res) => {
       completedAt: new Date().toISOString()
     };
     
-    console.log(`Results: ${matches.length} matches, ${unmatched.length} unmatched`);
+    console.log(`✅ Results calculated: ${matches.length} matches, ${unmatched.length} unmatched`);
+    console.log(`✅ Game state changed to: ${room.gameState}`);
+    console.log(`✅ Match result stored in room object`);
     
     res.json({
       success: true,
@@ -557,6 +559,11 @@ app.get('/api/room/:roomId', (req, res) => {
     hasVoted: room.selections.has(user.id),
     isMaster: user.id === room.masterId
   }));
+  
+  console.log(`📊 Room status request for ${room.roomName}:`);
+  console.log(`   Game state: ${room.gameState}`);
+  console.log(`   Users: ${room.users.size}, Selections: ${room.selections.size}`);
+  console.log(`   Has match result: ${!!room.matchResult}`);
   
   res.json({
     success: true,
