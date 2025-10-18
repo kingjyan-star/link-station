@@ -2,7 +2,7 @@
 
 **Live URL**: https://link-station-pro.vercel.app  
 **Last Updated**: October 2025  
-**Status**: ✅ Production Ready - Critical Polling Bug Fixed
+**Status**: 🔧 In Progress - Persistent Polling Issues Require Fundamental Fix
 
 ---
 
@@ -352,14 +352,20 @@ link-station/
 - Enhanced API debugging for match processing
 - Added logging to track when all users vote
 
-### Session 12: Critical Polling Bug (October 2025 - FIXED)
+### Session 12: Critical Polling Bug (October 2025 - PERSISTENT ISSUES)
 **Problem**: Only first voter (박수형) sees results, other users' polling stops after all vote
 **Root Cause**: useEffect in App.js was stopping ALL polling when currentState changed from 'waitingroom' to 'linking'
-**Solution**: 
-- Modified useEffect to only stop polling when leaving waiting room, not when transitioning to other states
+**Multiple Fix Attempts**: 
+- Modified useEffect to only stop polling when leaving waiting room
 - Added comprehensive debugging logs to pollRoomStatus function
-- Fixed the race condition that prevented result broadcasting
-**Status**: ✅ FIXED - All users should now see results simultaneously
+- Fixed race conditions with multiple fallback mechanisms
+- Enhanced voting status updates and result detection
+**Current Status**: ❌ PERSISTENT - Issues continue despite multiple fixes
+**New Problems Identified**:
+1. No results shown to anybody after voting
+2. Users cannot see others' vote status except when they vote
+3. Master also affected by vote status update issues
+**Next Approach**: Fundamental polling architecture redesign needed
 
 ---
 

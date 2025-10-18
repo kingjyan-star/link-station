@@ -153,44 +153,13 @@ function App() {
         console.log('🔄 Setting users state with voting status...');
         setUsers(data.room.users);
         
-        // Check for match results regardless of current state
-        if (data.room.gameState === 'completed' && data.matchResult) {
-          console.log('✅ Match results received via polling:', data.matchResult);
+        // SIMPLE FIX: Show results if they exist, regardless of game state
+        if (data.matchResult) {
+          console.log('✅ Match results found, showing results to all users');
           setMatches(data.matchResult.matches || []);
           setUnmatched(data.matchResult.unmatched || []);
           setCurrentState('linkresult');
-          stopPolling();
-        } else if (currentState === 'linking') {
-          // Additional check: if all users have voted but game state is still linking
-          const allUsersVoted = data.room.users.every(user => user.hasVoted);
-          if (allUsersVoted && data.room.gameState === 'linking') {
-            console.log('⚠️ All users voted but game state not updated yet, waiting for results...');
-          }
-          
-          // Fallback: If all users voted and we have a match result in the response, show it
-          if (allUsersVoted && data.matchResult) {
-            console.log('🚨 Fallback: All users voted and match result found, showing results...');
-            setMatches(data.matchResult.matches || []);
-            setUnmatched(data.matchResult.unmatched || []);
-            setCurrentState('linkresult');
-            stopPolling();
-          }
-          
-          // Additional fallback: If all users voted and we're in linking state, force result check
-          if (allUsersVoted && data.room.users.length >= 2) {
-            console.log('🚨 All users voted, checking for delayed results...');
-            // Don't stop polling yet, keep checking for results
-          }
-        }
-        
-        // CRITICAL: Check for results even if we're not in linking state
-        // This ensures results are shown even if state transition failed
-        if (data.matchResult && currentState !== 'linkresult') {
-          console.log('🚨 Found match result outside of linking state, showing results...');
-          setMatches(data.matchResult.matches || []);
-          setUnmatched(data.matchResult.unmatched || []);
-          setCurrentState('linkresult');
-          stopPolling();
+          // Don't stop polling - let the useEffect handle it
         }
       } else {
         console.log('❌ Polling failed:', data);
@@ -272,21 +241,18 @@ function App() {
     return () => stopHeartbeat();
   }, [currentState, username, userId, startHeartbeat]);
 
-  // Start waiting room polling when in waiting room state
+  // SIMPLE FIX: Start polling for any state that needs real-time updates
   useEffect(() => {
     if (currentState === 'waitingroom') {
       startWaitingRoomPolling();
+    } else if (currentState === 'linking' || currentState === 'linkresult') {
+      startPolling(); // Start polling for linking and result states
+    } else {
+      stopPolling(); // Stop polling for other states
     }
-    // Don't stop polling here - let other states manage their own polling
-    // This was causing polling to stop when transitioning to 'linking' state
     
-    return () => {
-      // Only stop polling if we're leaving the waiting room
-      if (currentState === 'waitingroom') {
-        stopPolling();
-      }
-    };
-  }, [currentState, startWaitingRoomPolling]);
+    return () => stopPolling();
+  }, [currentState, startWaitingRoomPolling, startPolling]);
 
   // Validation functions
   const validateUsername = (name) => {

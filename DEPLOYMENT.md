@@ -1,7 +1,7 @@
 # 🚀 Link Station - Deployment Guide
 
 **Live URL**: https://link-station-pro.vercel.app  
-**Status**: 🔧 In Progress - Critical Polling Bug Identified  
+**Status**: 🔧 In Progress - Persistent Polling Issues Require Fundamental Fix  
 **Last Updated**: October 2025
 
 ---
@@ -176,12 +176,13 @@ ls -la static/
 ## 🚨 Current Issues
 
 ### Critical Bug (October 2025)
-**Problem**: Polling stops after all users vote
-- Only first voter sees results
-- Other users stuck in linking state
-- Network shows only heartbeat, no room polling
+**Problem**: Polling system fundamentally broken
+- No results shown to anybody after voting
+- Users cannot see others' vote status except when they vote
+- Master also affected by vote status update issues
+- Multiple comprehensive fixes attempted with no success
 
-**Status**: Requires immediate fix
+**Status**: Requires fundamental architecture redesign
 
 ---
 
