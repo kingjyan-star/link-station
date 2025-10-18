@@ -149,6 +149,7 @@ function App() {
         
         // Update users with voting status
         console.log('👥 Users update:', data.room.users.map(u => ({ name: u.displayName, voted: u.hasVoted })));
+        console.log('🔄 Setting users state with voting status...');
         setUsers(data.room.users);
         
         // Check for match results regardless of current state
@@ -172,6 +173,12 @@ function App() {
             setUnmatched(data.matchResult.unmatched || []);
             setCurrentState('linkresult');
             stopPolling();
+          }
+          
+          // Additional fallback: If all users voted and we're in linking state, force result check
+          if (allUsersVoted && data.room.users.length >= 2) {
+            console.log('🚨 All users voted, checking for delayed results...');
+            // Don't stop polling yet, keep checking for results
           }
         }
       } else {

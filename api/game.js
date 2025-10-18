@@ -9,8 +9,8 @@ let activeUsers = new Map(); // Track active usernames globally with last activi
 // Structure: username -> { roomId, userId, lastActivity }
 
 // Constants
-const USER_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes of inactivity = disconnected
-const CLEANUP_INTERVAL_MS = 60 * 1000; // Run cleanup every minute
+const USER_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes of inactivity = disconnected
+const CLEANUP_INTERVAL_MS = 2 * 60 * 1000; // Run cleanup every 2 minutes
 
 // Helper function to clean up inactive users and empty rooms
 function cleanupInactiveUsersAndRooms() {
@@ -571,6 +571,7 @@ app.get('/api/room/:roomId', (req, res) => {
   console.log(`   Game state: ${room.gameState}`);
   console.log(`   Users: ${room.users.size}, Selections: ${room.selections.size}`);
   console.log(`   Has match result: ${!!room.matchResult}`);
+  console.log(`   Users voted: ${Array.from(room.users.values()).filter(u => room.selections.has(u.id)).length}/${room.users.size}`);
   
   res.json({
     success: true,
