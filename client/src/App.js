@@ -116,7 +116,7 @@ function App() {
   const pollRoomStatus = useCallback(async () => {
     if (!roomId) return;
     
-    console.log('🔄 Polling room status...', { roomId, currentState, userId });
+    console.log('🔄 Polling room status...', { roomId, currentState, userId, hasVoted });
     
     try {
       const response = await fetch(`${API_URL}/api/room/${roomId}`);
@@ -127,7 +127,8 @@ function App() {
           gameState: data.room.gameState,
           userCount: data.room.users.length,
           hasMatchResult: !!data.matchResult,
-          currentUserVoted: data.room.users.find(u => u.id === userId)?.hasVoted
+          currentUserVoted: data.room.users.find(u => u.id === userId)?.hasVoted,
+          allUsersVotingStatus: data.room.users.map(u => ({ name: u.displayName, voted: u.hasVoted, id: u.id }))
         });
         
         // Check if current user is still in the room
@@ -181,13 +182,23 @@ function App() {
             // Don't stop polling yet, keep checking for results
           }
         }
+        
+        // CRITICAL: Check for results even if we're not in linking state
+        // This ensures results are shown even if state transition failed
+        if (data.matchResult && currentState !== 'linkresult') {
+          console.log('🚨 Found match result outside of linking state, showing results...');
+          setMatches(data.matchResult.matches || []);
+          setUnmatched(data.matchResult.unmatched || []);
+          setCurrentState('linkresult');
+          stopPolling();
+        }
       } else {
         console.log('❌ Polling failed:', data);
       }
     } catch (error) {
       console.error('❌ Error polling room status:', error);
     }
-  }, [roomId, currentState, userId]);
+  }, [roomId, currentState, userId, hasVoted]);
 
   const startPolling = useCallback(() => {
     if (pollingInterval.current) {
@@ -226,6 +237,7 @@ function App() {
         
         // Check if game started
         if (data.room.gameState === 'linking') {
+          console.log('🎮 Game state changed to linking, switching to game polling...');
           setCurrentState('linking');
           startPolling(); // Switch to game polling
         }
@@ -567,6 +579,8 @@ function App() {
       
       if (data.success) {
         setCurrentState('linking');
+        // Start polling immediately when game starts
+        console.log('🎮 Game started, starting polling...');
         startPolling();
       } else {
         setError(data.message || '게임 시작에 실패했습니다.');
@@ -601,8 +615,12 @@ function App() {
         
         // Update users list immediately with voting status
         if (data.users) {
+          console.log('✅ Vote successful, updating users list:', data.users.map(u => ({ name: u.displayName, voted: u.hasVoted })));
           setUsers(data.users);
         }
+        
+        // CRITICAL: Ensure polling continues after voting to see other users' status
+        console.log('🎯 Vote completed, ensuring polling continues to track other users...');
         
         // Don't immediately show results even if we're the last voter
         // Let polling handle it so all users see results at the same time
