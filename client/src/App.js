@@ -649,9 +649,21 @@ function App() {
     }
   };
 
-  const handleLeaveRoom = () => {
-    // Go back to waiting room instead of enter state
-    setCurrentState('waitingroom');
+  const handleLeaveRoom = async () => {
+    // Remove user from room via API
+    try {
+      if (roomId && userId) {
+        await fetch(`${API_URL}/api/leave-room`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roomId, userId })
+        });
+      }
+    } catch (error) {
+      console.error('Error leaving room:', error);
+    }
+    
+    // Clean up state and go back to makeOrJoinRoom
     setRoomId('');
     setUserId('');
     setUsers([]);
@@ -662,6 +674,9 @@ function App() {
     setSelectedUser(null);
     setHasVoted(false);
     stopPolling();
+    
+    // Go back to makeOrJoinRoom state (user keeps their username)
+    setCurrentState('makeOrJoinRoom');
   };
 
 

@@ -9,32 +9,35 @@
 **Name**: Link Station  
 **Type**: Real-time matching game web application  
 **Live URL**: https://link-station-pro.vercel.app  
-**Status**: 🔧 In Progress - Persistent Polling Issues Require Fundamental Fix
+**Status**: ✅ Active Development - Recent State Flow Improvements
 
 ---
 
-## 🚨 **CRITICAL ISSUE - IMMEDIATE ATTENTION NEEDED**
+## ✅ **RECENT IMPROVEMENTS - SUCCESSFULLY IMPLEMENTED**
 
-### **Current Bug**: Polling System Fundamentally Broken
-- **Symptoms**: 
-  1. No results shown to anybody after all users vote
-  2. Users cannot see others' vote status except when they vote
-  3. Master also affected by vote status update issues
-- **Root Cause**: Polling architecture has fundamental flaws despite multiple fix attempts
-- **Evidence**: Multiple comprehensive fixes have been attempted but issues persist
-- **Impact**: Game is essentially unplayable - users cannot see results or real-time updates
+### **Session 13: State Flow Improvements** (October 2025)
+- **Problem Solved**: Username persistence causing duplication errors
+- **Solution**: 
+  1. Added new `makeOrJoinRoom` bridge state
+  2. Renamed states for clarity (enter → registerName, etc.)
+  3. Users now return to **WaitingRoom** after results (not name registration)
+  4. Proper username cleanup with `/api/remove-user` endpoint
+- **Benefits**:
+  - ✅ Users can play multiple rounds without re-entering nickname
+  - ✅ No more username duplication errors
+  - ✅ Clearer navigation flow
 
-### **Testing Results**:
-- **Voting Order**: 박수형 → 심상보 → 홍은주 → 김도희
-- **All Users**: ❌ Cannot see results after voting
-- **All Users**: ❌ Cannot see real-time vote status updates
-- **Master**: ❌ Also affected by vote status issues
+### **Session 12: Polling Bug** (October 2025) 
+- **Problem Solved**: Only first voter saw results
+- **Root Cause**: useEffect stopping polling on state transition
+- **Solution**: Simplified polling logic, consolidated useEffect
+- **Status**: ✅ RESOLVED - All users now see results properly
 
 ---
 
 ## 🎯 What You Need to Know
 
-I'm working on **Link Station**, a multi-device real-time matching game where users join rooms, select each other, and form pairs. The app has an 8-state flow from room creation to match results.
+I'm working on **Link Station**, a multi-device real-time matching game where users join rooms, select each other, and form pairs. The app has a 9-state flow from name registration to match results.
 
 ### Tech Stack
 - **Frontend**: React 19.1.1 (client/src/App.js)
@@ -63,16 +66,17 @@ I'm working on **Link Station**, a multi-device real-time matching game where us
 
 ---
 
-## 🎮 8-State Flow Overview
+## 🎮 9-State Flow Overview (Updated)
 
-1. **Enter** - Username input, make/join room options
-2. **MakeRoom** - Create room with name, password, member limit
-3. **EnterRoom** - Join room by name
-4. **CheckPassword** - Password verification for protected rooms
-5. **EnterroomwithQR** - Join via QR code (bypasses password)
-6. **WaitingRoom** - Pre-game lobby with master controls
-7. **Linking** - Active matching/voting phase
-8. **LinkResult** - Display match results
+1. **RegisterName** (formerly Enter) - Username registration only
+2. **MakeOrJoinRoom** (NEW) - Bridge state: choose make/join/exit
+3. **MakeRoom** - Create room with name, password, member limit
+4. **JoinRoom** (formerly EnterRoom) - Join room by name
+5. **CheckPassword** - Password verification for protected rooms
+6. **JoinRoomWithQR** (formerly EnterroomwithQR) - Join via QR code
+7. **WaitingRoom** - Pre-game lobby with master controls
+8. **Linking** - Active matching/voting phase
+9. **LinkResult** - Display match results (now returns to WaitingRoom)
 
 ---
 
@@ -89,6 +93,7 @@ I'm working on **Link Station**, a multi-device real-time matching game where us
 - `POST /api/select` - User votes (auto-processes when all vote)
 - `GET /api/room/:roomId` - Get room status (polling)
 - `POST /api/ping` - Heartbeat to keep connection alive
+- `POST /api/remove-user` - Clean up username on exit
 
 ---
 

@@ -1,7 +1,7 @@
 # 🚀 Link Station - Deployment Guide
 
 **Live URL**: https://link-station-pro.vercel.app  
-**Status**: 🔧 In Progress - Persistent Polling Issues Require Fundamental Fix  
+**Status**: ✅ Active Development - State Flow Improvements Deployed  
 **Last Updated**: October 2025
 
 ---
@@ -175,14 +175,19 @@ ls -la static/
 
 ## 🚨 Current Issues
 
-### Critical Bug (October 2025)
-**Problem**: Polling system fundamentally broken
-- No results shown to anybody after voting
-- Users cannot see others' vote status except when they vote
-- Master also affected by vote status update issues
-- Multiple comprehensive fixes attempted with no success
+### Recent Improvements (October 2025)
 
-**Status**: Requires fundamental architecture redesign
+**Session 13: State Flow Improvements** ✅ COMPLETED
+- Added new `makeOrJoinRoom` bridge state
+- Renamed states for clarity (enter → registerName, etc.)
+- Users return to WaitingRoom after results (not name registration)
+- Added `/api/remove-user` endpoint for proper cleanup
+- **Benefits**: No more username duplication, continuous play without re-entering name
+
+**Session 12: Polling Bug Fix** ✅ RESOLVED
+- Fixed polling stopping on state transitions
+- All users now see results and vote status properly
+- Simplified polling logic with consolidated useEffect
 
 ---
 
@@ -228,4 +233,4 @@ Before each deployment:
 
 ---
 
-**Next Steps**: Fix the critical polling bug to ensure all users see match results simultaneously.
+**Next Steps**: Continue monitoring for any edge cases or new user feedback.

@@ -226,6 +226,20 @@ link-station/
 - **Validation**: Must be master, can't kick self
 - **Effect**: Kicked user auto-redirected to Enter state via polling
 
+#### `POST /api/ping`
+- **Purpose**: Heartbeat to keep user connection alive
+- **Body**: `{ username, userId }`
+- **Response**: `{ success, timestamp }`
+- **Frequency**: Every 2 minutes from frontend
+- **Effect**: Updates user's `lastActivity` timestamp in activeUsers Map
+
+#### `POST /api/remove-user`
+- **Purpose**: Remove username from activeUsers when user exits
+- **Body**: `{ username }`
+- **Response**: `{ success }`
+- **Usage**: Called when user exits from MakeOrJoinRoom state
+- **Effect**: Allows username to be reused immediately
+
 #### `POST /api/leave-room`
 - **Purpose**: Leave room voluntarily
 - **Body**: `{ roomId, userId }`
