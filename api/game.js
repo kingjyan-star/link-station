@@ -8,9 +8,16 @@ let rooms = new Map();
 let activeUsers = new Map(); // Track active usernames globally with last activity time
 // Structure: username -> { roomId, userId, lastActivity }
 
-// Constants
-const USER_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes of inactivity = disconnected
-const CLEANUP_INTERVAL_MS = 60 * 1000; // Run cleanup every minute
+// Constants for user activity tracking
+// HOW "AWAY" IS DETECTED:
+// 1. Each user has a 'lastActivity' timestamp updated by heartbeat pings
+// 2. Frontend sends heartbeat every 5 minutes via /api/ping endpoint
+// 3. Frontend also sends heartbeat when Chrome tab becomes visible (Page Visibility API)
+// 4. Backend cleanup runs every 5 minutes to check for inactive users
+// 5. Users inactive for 30+ minutes are marked as disconnected and removed
+// 6. This handles Chrome's tab throttling (background tabs slow down timers)
+const USER_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes of inactivity = disconnected (was 5min, too aggressive for tab switching)
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Run cleanup every 5 minutes (was 1min, less aggressive)
 
 // Helper function to clean up inactive users and empty rooms
 function cleanupInactiveUsersAndRooms() {
@@ -595,6 +602,12 @@ app.post('/api/change-role', (req, res) => {
   // Update user role
   user.role = role;
   room.users.set(userId, user);
+  
+  // Update lastActivity to keep user connection alive
+  const activeUserData = activeUsers.get(user.username);
+  if (activeUserData) {
+    activeUserData.lastActivity = Date.now();
+  }
   
   console.log(`🔄 User ${user.displayName} changed role to ${role}`);
   

@@ -102,8 +102,10 @@ function App() {
     if (heartbeatInterval.current) {
       clearInterval(heartbeatInterval.current);
     }
-    // Send heartbeat every 2 minutes (less than 5 minute timeout)
-    heartbeatInterval.current = setInterval(sendHeartbeat, 120000);
+    // Send heartbeat every 5 minutes (well under 30 minute timeout)
+    heartbeatInterval.current = setInterval(sendHeartbeat, 5 * 60 * 1000);
+    // Send initial heartbeat immediately
+    sendHeartbeat();
   }, [sendHeartbeat]);
 
   const stopHeartbeat = () => {
@@ -241,6 +243,19 @@ function App() {
     
     return () => stopHeartbeat();
   }, [currentState, username, userId, startHeartbeat]);
+
+  // Send heartbeat when tab becomes visible (handles Chrome tab switching)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && (currentState === 'waitingroom' || currentState === 'linking' || currentState === 'linkresult')) {
+        console.log('Tab became visible, sending heartbeat...');
+        sendHeartbeat();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [currentState, sendHeartbeat]);
 
   // SIMPLE FIX: Start polling for any state that needs real-time updates
   useEffect(() => {
