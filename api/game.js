@@ -16,8 +16,13 @@ let activeUsers = new Map(); // Track active usernames globally with last activi
 // 4. Backend cleanup runs every 5 minutes to check for inactive users
 // 5. Users inactive for 30+ minutes are marked as disconnected and removed
 // 6. This handles Chrome's tab throttling (background tabs slow down timers)
-const USER_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes of inactivity = disconnected (was 5min, too aggressive for tab switching)
-const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Run cleanup every 5 minutes (was 1min, less aggressive)
+// 
+// ROOM DELETION POLICY:
+// - Empty rooms are deleted IMMEDIATELY when all users leave
+// - room.lastActivity is updated on all critical actions (vote, kick, role change, etc.)
+// - This prevents "room not found" errors during active operations
+const USER_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes of inactivity = disconnected
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Run cleanup every 5 minutes
 
 // Helper function to clean up inactive users and empty rooms
 function cleanupInactiveUsersAndRooms() {
@@ -37,6 +42,8 @@ function cleanupInactiveUsersAndRooms() {
   
   if (disconnectedUsers.length === 0) {
     console.log(`   No inactive users found`);
+    // Still check for old empty rooms
+    cleanupEmptyRooms(now);
     return;
   }
   
@@ -52,19 +59,32 @@ function cleanupInactiveUsersAndRooms() {
       if (room.masterId === userId && room.users.size > 0) {
         const newMaster = Array.from(room.users.values())[0];
         room.masterId = newMaster.id;
+        newMaster.isMaster = true;
+        room.users.set(newMaster.id, newMaster);
         console.log(`   👑 Master handover: ${newMaster.displayName} is now master of ${room.roomName}`);
       }
       
-      // If room is empty, delete it
+      // Delete empty rooms immediately
       if (room.users.size === 0) {
         rooms.delete(roomId);
-        console.log(`   🗑️ Room "${room.roomName}" deleted - no active users`);
+        console.log(`   🗑️ Room "${room.roomName}" deleted - all users left`);
       }
     }
     activeUsers.delete(username);
   }
   
   console.log(`🧹 Cleanup complete. Active users: ${activeUsers.size}, Total rooms: ${rooms.size}`);
+}
+
+// Helper function to clean up any empty rooms (safety check)
+function cleanupEmptyRooms(now) {
+  for (const [roomId, room] of rooms.entries()) {
+    // Delete any empty rooms immediately (shouldn't happen, but just in case)
+    if (room.users.size === 0) {
+      rooms.delete(roomId);
+      console.log(`   🗑️ Room "${room.roomName}" deleted - empty room cleanup`);
+    }
+  }
 }
 
 // Start cleanup interval
@@ -143,7 +163,8 @@ app.post('/api/create-room', (req, res) => {
     gameState: 'waiting', // waiting, linking, completed
     matchResult: null,
     masterId: userId,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    lastActivity: Date.now() // Track room activity to prevent deletion during active games
   };
   
   // Add user to room
@@ -242,6 +263,7 @@ app.post('/api/join-room', (req, res) => {
   };
   
   targetRoom.users.set(userId, user);
+  targetRoom.lastActivity = Date.now(); // Update room activity on join
   activeUsers.set(username.trim(), {
     roomId: targetRoom.id,
     userId,
@@ -319,6 +341,7 @@ app.post('/api/check-password', (req, res) => {
   };
   
   targetRoom.users.set(userId, user);
+  targetRoom.lastActivity = Date.now(); // Update room activity on join
   activeUsers.set(username.trim(), {
     roomId: targetRoom.id,
     userId,
@@ -425,6 +448,7 @@ app.post('/api/start-game', (req, res) => {
   room.gameState = 'linking';
   room.selections.clear();
   room.matchResult = null;
+  room.lastActivity = Date.now(); // Prevent room deletion during game
   
   console.log(`Game started in room: ${room.roomName}`);
   
@@ -479,6 +503,7 @@ app.post('/api/select', (req, res) => {
   
   // Record selection
   room.selections.set(userId, selectedUserId);
+  room.lastActivity = Date.now(); // Prevent room deletion during voting
   
   console.log(`Selection: ${userId} selects ${selectedUserId} in room ${roomId}`);
   console.log(`Selections so far: ${room.selections.size}/${room.users.size}`);
@@ -603,11 +628,12 @@ app.post('/api/change-role', (req, res) => {
   user.role = role;
   room.users.set(userId, user);
   
-  // Update lastActivity to keep user connection alive
+  // Update lastActivity to keep user and room alive
   const activeUserData = activeUsers.get(user.username);
   if (activeUserData) {
     activeUserData.lastActivity = Date.now();
   }
+  room.lastActivity = Date.now(); // Prevent room deletion during active use
   
   console.log(`🔄 User ${user.displayName} changed role to ${role}`);
   
@@ -709,6 +735,7 @@ app.post('/api/kick-user', (req, res) => {
   room.users.delete(targetUserId);
   room.selections.delete(targetUserId);
   activeUsers.delete(targetUser.username);
+  room.lastActivity = Date.now(); // Prevent room deletion during kick
   
   console.log(`User kicked: ${targetUser.displayName} from ${room.roomName} by master`);
   
