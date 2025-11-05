@@ -36,9 +36,16 @@ function App() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   
+  // Warning state
+  const [showUserWarning, setShowUserWarning] = useState(false);
+  const [showRoomWarning, setShowRoomWarning] = useState(false);
+  const [userTimeLeft, setUserTimeLeft] = useState(0);
+  const [roomTimeLeft, setRoomTimeLeft] = useState(0);
+  
   // Polling
   const pollingInterval = useRef(null);
   const heartbeatInterval = useRef(null);
+  const warningInterval = useRef(null);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -115,6 +122,92 @@ function App() {
     }
   };
 
+  // Warning check function
+  const checkWarning = useCallback(async () => {
+    if (!username || !userId) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/api/check-warning`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, userId, roomId })
+      });
+      const data = await response.json();
+      
+      if (data.userWarning) {
+        setShowUserWarning(true);
+        setUserTimeLeft(data.userTimeLeft);
+      } else {
+        setShowUserWarning(false);
+      }
+      
+      // Show room warning to all users (not just master)
+      if (data.roomWarning) {
+        setShowRoomWarning(true);
+        setRoomTimeLeft(data.roomTimeLeft);
+      } else {
+        setShowRoomWarning(false);
+      }
+      
+      // Handle disconnection - user is completely logged out
+      if (data.userDisconnected) {
+        alert('⚠️ 장시간 활동이 감지되지 않아 로그아웃되었습니다.');
+        // Complete logout - clear everything including username
+        setUsername('');
+        setRoomId('');
+        setUserId('');
+        setUsers([]);
+        setIsMaster(false);
+        setRoomData(null);
+        setMatches([]);
+        setUnmatched([]);
+        setSelectedUser(null);
+        setHasVoted(false);
+        stopPolling();
+        stopWarningCheck();
+        setCurrentState('registerName'); // Go back to name registration (complete logout)
+      }
+      
+      // Handle room deletion
+      if (data.roomDeleted) {
+        alert('⚠️ 장시간 활동이 감지되지 않아 방이 사라졌습니다.');
+        setRoomId('');
+        setUserId('');
+        setUsers([]);
+        setIsMaster(false);
+        setRoomData(null);
+        setMatches([]);
+        setUnmatched([]);
+        setSelectedUser(null);
+        setHasVoted(false);
+        stopPolling();
+        stopWarningCheck();
+        setCurrentState('makeOrJoinRoom');
+      }
+    } catch (error) {
+      console.error('Warning check error:', error);
+    }
+  }, [username, userId, roomId]); // Removed isMaster (not used), stopPolling and stopWarningCheck (refs, stable)
+
+  const startWarningCheck = useCallback(() => {
+    if (warningInterval.current) {
+      clearInterval(warningInterval.current);
+    }
+    // Check every 10 seconds
+    warningInterval.current = setInterval(checkWarning, 10000);
+    // Check immediately
+    checkWarning();
+  }, [checkWarning]);
+
+  const stopWarningCheck = () => {
+    if (warningInterval.current) {
+      clearInterval(warningInterval.current);
+      warningInterval.current = null;
+    }
+    setShowUserWarning(false);
+    setShowRoomWarning(false);
+  };
+
   // Polling functions
   const pollRoomStatus = useCallback(async () => {
     if (!roomId) return;
@@ -137,17 +230,21 @@ function App() {
         // Check if current user is still in the room
         const currentUserInRoom = data.room.users.find(user => user.id === userId);
         if (!currentUserInRoom) {
-          // User has been kicked or removed
+          // User has been kicked or removed (unexpected event - show alert)
           console.log('❌ User not in room, redirecting...');
-          setError('방에서 추방되었습니다.');
-          setCurrentState('enter');
-          setUsername('');
+          alert('⚠️ 방장에 의해 추방되었습니다.');
           setRoomId('');
           setUserId('');
           setUsers([]);
           setIsMaster(false);
           setRoomData(null);
+          setMatches([]);
+          setUnmatched([]);
+          setSelectedUser(null);
+          setHasVoted(false);
           stopPolling();
+          stopWarningCheck();
+          setCurrentState('makeOrJoinRoom'); // Keep username, go to makeOrJoinRoom
           return;
         }
         
@@ -190,16 +287,16 @@ function App() {
         // Check if current user is still in the room
         const currentUserInRoom = data.room.users.find(user => user.id === userId);
         if (!currentUserInRoom) {
-          // User has been kicked or removed
-          setError('방에서 추방되었습니다.');
-          setCurrentState('enter');
-          setUsername('');
+          // User has been kicked or removed (unexpected event - show alert)
+          alert('⚠️ 방장에 의해 추방되었습니다.');
           setRoomId('');
           setUserId('');
           setUsers([]);
           setIsMaster(false);
           setRoomData(null);
           stopPolling();
+          stopWarningCheck();
+          setCurrentState('makeOrJoinRoom'); // Keep username, go to makeOrJoinRoom
           return;
         }
         
@@ -256,6 +353,17 @@ function App() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [currentState, sendHeartbeat]);
+
+  // Start/stop warning check based on state
+  useEffect(() => {
+    if (currentState === 'waitingroom' || currentState === 'linking' || currentState === 'linkresult') {
+      startWarningCheck();
+    } else {
+      stopWarningCheck();
+    }
+    
+    return () => stopWarningCheck();
+  }, [currentState, startWarningCheck]);
 
   // SIMPLE FIX: Start polling for any state that needs real-time updates
   useEffect(() => {
@@ -739,6 +847,40 @@ function App() {
       console.error('Error changing role:', error);
       setError('역할 변경 중 오류가 발생했습니다.');
     }
+  };
+
+  // Warning handlers
+  const handleKeepUserAlive = async () => {
+    try {
+      await fetch(`${API_URL}/api/keep-alive-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username })
+      });
+      setShowUserWarning(false);
+      console.log('✅ User session extended');
+    } catch (error) {
+      console.error('Error keeping user alive:', error);
+    }
+  };
+
+  const handleKeepRoomAlive = async () => {
+    try {
+      await fetch(`${API_URL}/api/keep-alive-room`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId })
+      });
+      setShowRoomWarning(false);
+      console.log('✅ Room lifetime extended');
+    } catch (error) {
+      console.error('Error keeping room alive:', error);
+    }
+  };
+
+  const handleImmediateLogout = () => {
+    setShowUserWarning(false);
+    handleLeaveRoom();
   };
 
 
@@ -1236,6 +1378,54 @@ function App() {
       {currentState === 'waitingroom' && renderWaitingRoom()}
       {currentState === 'linking' && renderLinking()}
       {currentState === 'linkresult' && renderLinkResult()}
+      
+      {/* User Inactivity Warning Modal */}
+      {showUserWarning && (
+        <div className="warning-modal-overlay">
+          <div className="warning-modal">
+            <h2>⚠️ 비활동 경고</h2>
+            <p>활동이 감지되지 않아 <strong>{userTimeLeft}초</strong> 후 로그아웃됩니다</p>
+            <div className="warning-buttons">
+              <button className="keep-alive-button" onClick={handleKeepUserAlive}>
+                로그인 유지
+              </button>
+              <button className="immediate-exit-button" onClick={handleImmediateLogout}>
+                로그아웃
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Room Inactivity Warning Modal */}
+      {showRoomWarning && (
+        <div className="warning-modal-overlay">
+          <div className="warning-modal">
+            <h2>⚠️ 방 비활동 경고</h2>
+            {isMaster ? (
+              <p>활동이 감지되지 않아 <strong>{roomTimeLeft}초</strong> 후 방이 사라집니다</p>
+            ) : (
+              <p>활동이 감지되지 않아 <strong>{roomTimeLeft}초</strong> 후 방이 사라집니다<br/>방을 유지하려면 방장에게 알려주세요</p>
+            )}
+            {isMaster ? (
+              <div className="warning-buttons">
+                <button className="keep-alive-button" onClick={handleKeepRoomAlive}>
+                  방 유지
+                </button>
+                <button className="immediate-exit-button" onClick={handleLeaveRoom}>
+                  방 나가기
+                </button>
+              </div>
+            ) : (
+              <div className="warning-buttons">
+                <button className="immediate-exit-button" onClick={handleLeaveRoom} style={{ flex: '1' }}>
+                  방 나가기
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       </div>
   );
 }

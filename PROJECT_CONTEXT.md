@@ -1,8 +1,8 @@
 # 🔗 Link Station - Complete Project Context
 
 **Live URL**: https://link-station-pro.vercel.app  
-**Last Updated**: October 2025  
-**Status**: ✅ Active Development - State Flow Improvements Implemented
+**Last Updated**: November 2025  
+**Status**: ✅ Active Development - Warning System & Room Management Complete
 
 ---
 
@@ -245,6 +245,38 @@ link-station/
 - **Body**: `{ roomId, userId }`
 - **Response**: `{ success }`
 
+#### `POST /api/check-warning`
+- **Purpose**: Check if user or room needs inactivity warning
+- **Body**: `{ username, userId, roomId }`
+- **Response**: `{ success, userWarning, userTimeLeft, roomWarning, roomTimeLeft, userDisconnected, roomDeleted }`
+- **Frequency**: Every 10 seconds from frontend
+- **Warnings**: User at 29min (1min before timeout), Room at 1h59min (1min before timeout)
+
+#### `POST /api/keep-alive-user`
+- **Purpose**: Extend user session when they click "로그인 유지"
+- **Body**: `{ username }`
+- **Response**: `{ success }`
+- **Effect**: Updates user's `lastActivity` to current time
+
+#### `POST /api/keep-alive-room`
+- **Purpose**: Extend room lifetime when master clicks "방 유지"
+- **Body**: `{ roomId }`
+- **Response**: `{ success }`
+- **Effect**: Updates room's `lastActivity` to current time
+
+#### `POST /api/change-role`
+- **Purpose**: Switch user between attender and observer roles
+- **Body**: `{ roomId, userId, role }`
+- **Response**: `{ success, users[] }`
+- **Validation**: Role must be 'attender' or 'observer'
+- **Effect**: Updates user's role, broadcasts to all users in room
+
+#### `POST /api/return-to-waiting`
+- **Purpose**: Reset game state after viewing results
+- **Body**: `{ roomId, userId }`
+- **Response**: `{ success }`
+- **Effect**: Resets gameState to 'waiting', clears selections and matchResult
+
 ---
 
 ## 🎯 Key Features & Implementation
@@ -410,6 +442,73 @@ link-station/
 - ✅ Clearer navigation flow
 - ✅ Proper cleanup when users truly exit
 **Status**: ✅ COMPLETED - State flow is now logical and user-friendly
+
+### Session 14: Warning System & Room Management (November 2025 - COMPLETED)
+**Focus**: Implement inactivity warnings, improve room cleanup, add unexpected event alerts
+
+**Problems Addressed**:
+1. Rooms disappearing/reappearing during active games
+2. No warning before user/room timeout
+3. No notification when kicked or disconnected
+4. Aggressive cleanup causing race conditions
+
+**Solutions Implemented**:
+
+#### **1. Inactivity Warning System**
+- **User Warning**: Shows 1 minute before 30-minute timeout
+  - Modal: "활동이 감지되지 않아 X초 후 로그아웃됩니다"
+  - Buttons: "로그인 유지", "바로 로그아웃"
+- **Room Warning**: Shows 1 minute before 2-hour timeout (all users see it)
+  - Master sees: "방 유지", "방 나가기"
+  - Regular users see: "방 나가기"
+- **Warning Polling**: Every 10 seconds to check for warnings
+- **New API Endpoints**:
+  - `/api/check-warning` - Check if user/room needs warning
+  - `/api/keep-alive-user` - Extend user session
+  - `/api/keep-alive-room` - Extend room lifetime
+
+#### **2. Room Management Improvements**
+- **Activity Tracking**: `room.lastActivity` updated on all critical actions (vote, kick, role change, start game, join)
+- **Better Fallback**: Uses `room.createdAt` if `lastActivity` is missing (prevents new rooms from being treated as old)
+- **Zombie Room Cleanup**: Rooms with no activity for 2+ hours are deleted
+- **Empty Room Deletion**: Rooms with 0 users deleted immediately
+- **Cleanup Intervals**:
+  - User timeout: 30 minutes
+  - Room timeout: 2 hours
+  - Cleanup runs: Every 5 minutes
+
+#### **3. Unexpected Event Alerts**
+- **Kick Alert**: `⚠️ 방장에 의해 추방되었습니다.`
+  - Triggered when user is removed from room unexpectedly
+  - Detected via polling (user no longer in room.users)
+- **User Disconnection Alert**: `⚠️ 장시간 활동이 감지되지 않아 로그아웃되었습니다.`
+  - Triggered when user timeout expires (30 min)
+- **Room Deletion Alert**: `⚠️ 장시간 활동이 감지되지 않아 방이 사라졌습니다.`
+  - Triggered when room timeout expires (2 hours)
+- **Logic**: Alerts only for unexpected events (not user-initiated actions)
+
+#### **4. Observer/Attender System**
+- **Two Roles**: Attender (참가자), Observer (관전자)
+- **Role Selection**: StarCraft-style boxes in waiting room
+- **Role Switching**: Real-time, visible to all users
+- **Voting**: Only attenders can vote; observers watch
+- **Game Start**: Requires minimum 2 attenders
+- **New API Endpoint**: `/api/change-role` - Switch between roles
+
+**Files Modified**:
+- `api/game.js` - Added warning endpoints, improved cleanup, activity tracking
+- `client/src/App.js` - Added warning modals, polling, alert system, observer UI
+- `client/src/App.css` - Added warning modal styles, role selection styles
+
+**Benefits**:
+- ✅ Users get 1-minute warning before timeout
+- ✅ No more surprise disconnections
+- ✅ Rooms don't disappear during active games
+- ✅ Clear feedback for all unexpected events
+- ✅ Zombie rooms cleaned up automatically
+- ✅ Flexible observer system for non-participants
+
+**Status**: ✅ COMPLETED - Warning system fully functional, room management robust
 
 ---
 

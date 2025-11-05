@@ -1,8 +1,8 @@
 # 🚀 Link Station - Deployment Guide
 
 **Live URL**: https://link-station-pro.vercel.app  
-**Status**: ✅ Active Development - State Flow Improvements Deployed  
-**Last Updated**: October 2025
+**Status**: ✅ Active Development - Warning System & Room Management Deployed  
+**Last Updated**: November 2025
 
 ---
 
@@ -175,17 +175,22 @@ ls -la static/
 
 ## 🚨 Current Issues
 
-### Recent Improvements (October 2025)
+### Recent Improvements (November 2025)
+
+**Session 14: Warning System & Room Management** ✅ COMPLETED
+- ⚠️ **Inactivity Warnings**: 1-minute warnings before user/room timeouts
+  - User: 30min timeout with 29min warning
+  - Room: 2h timeout with 1h59min warning
+- 🛡️ **Room Activity Tracking**: Prevents rooms from disappearing during active games
+- 🚨 **Unexpected Event Alerts**: Notifications for kicks, disconnections, room deletions
+- 👥 **Observer/Attender System**: StarCraft-style role selection
+- **New Endpoints**: `/api/check-warning`, `/api/keep-alive-user`, `/api/keep-alive-room`, `/api/change-role`, `/api/return-to-waiting`
+- **Benefits**: No surprise disconnections, robust room management, clear user feedback
 
 **Session 13: State Flow Improvements** ✅ COMPLETED
-- Added new `makeOrJoinRoom` bridge state
-- Renamed states for clarity (enter → registerName, etc.)
-- Users return to WaitingRoom after results (not name registration)
-- Added `/api/remove-user` endpoint for proper cleanup
-- **Benefits**: No more username duplication, continuous play without re-entering name
-
-**Session 12: Polling Bug Fix** ✅ RESOLVED
-- Fixed polling stopping on state transitions
+- Added `makeOrJoinRoom` bridge state, renamed states for clarity
+- Users return to WaitingRoom after results (continuous play)
+- **Benefits**: No username duplication, seamless multi-round play
 - All users now see results and vote status properly
 - Simplified polling logic with consolidated useEffect
 

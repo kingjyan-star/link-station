@@ -18,10 +18,14 @@ let activeUsers = new Map(); // Track active usernames globally with last activi
 // 6. This handles Chrome's tab throttling (background tabs slow down timers)
 // 
 // ROOM DELETION POLICY:
-// - Empty rooms are deleted IMMEDIATELY when all users leave
-// - room.lastActivity is updated on all critical actions (vote, kick, role change, etc.)
-// - This prevents "room not found" errors during active operations
+// - Empty rooms (0 users) are deleted IMMEDIATELY when all users leave
+// - Zombie rooms (users still "in" but inactive for 2+ hours) are deleted to save resources
+// - room.lastActivity is updated on all critical actions (vote, kick, role change, join)
+// - This prevents both "room not found" errors and resource waste from abandoned rooms
 const USER_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes of inactivity = disconnected
+const USER_WARNING_MS = 29 * 60 * 1000; // 29 minutes - show warning 1 minute before timeout
+const ZOMBIE_ROOM_TIMEOUT = 2 * 60 * 60 * 1000; // 2 hours - delete zombie rooms
+const ROOM_WARNING_MS = (2 * 60 * 60 * 1000) - (60 * 1000); // 1 minute before room deletion
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Run cleanup every 5 minutes
 
 // Helper function to clean up inactive users and empty rooms
@@ -51,6 +55,13 @@ function cleanupInactiveUsersAndRooms() {
   for (const { username, roomId, userId } of disconnectedUsers) {
     const room = rooms.get(roomId);
     if (room) {
+      // Mark user as disconnected due to inactivity
+      const user = room.users.get(userId);
+      if (user) {
+        user.disconnected = true;
+        user.disconnectReason = 'inactivity';
+      }
+      
       room.users.delete(userId);
       room.selections.delete(userId);
       console.log(`   ⚠️ User ${username} disconnected from room ${room.roomName} due to inactivity`);
@@ -76,13 +87,27 @@ function cleanupInactiveUsersAndRooms() {
   console.log(`🧹 Cleanup complete. Active users: ${activeUsers.size}, Total rooms: ${rooms.size}`);
 }
 
-// Helper function to clean up any empty rooms (safety check)
+// Helper function to clean up empty and zombie rooms
 function cleanupEmptyRooms(now) {
   for (const [roomId, room] of rooms.entries()) {
-    // Delete any empty rooms immediately (shouldn't happen, but just in case)
+    // Use lastActivity if available, otherwise fallback to createdAt timestamp
+    const lastActivityTime = room.lastActivity || (room.createdAt ? Date.parse(room.createdAt) : 0);
+    const timeSinceActivity = now - lastActivityTime;
+    
+    // Case 1: Delete empty rooms immediately
     if (room.users.size === 0) {
       rooms.delete(roomId);
-      console.log(`   🗑️ Room "${room.roomName}" deleted - empty room cleanup`);
+      console.log(`   🗑️ Room "${room.roomName}" deleted - empty room`);
+    }
+    // Case 2: Delete zombie rooms (users still "in" but no activity for 2+ hours)
+    else if (timeSinceActivity > ZOMBIE_ROOM_TIMEOUT) {
+      rooms.delete(roomId);
+      console.log(`   🧟 Room "${room.roomName}" deleted - zombie room (inactive for ${Math.floor(timeSinceActivity / 1000 / 60)} minutes)`);
+      
+      // Also remove all users from activeUsers
+      for (const user of room.users.values()) {
+        activeUsers.delete(user.username);
+      }
     }
   }
 }
@@ -596,6 +621,90 @@ app.post('/api/ping', (req, res) => {
   }
   
   res.json({ success: true, timestamp: Date.now() });
+});
+
+// Check if user or room needs warning
+app.post('/api/check-warning', (req, res) => {
+  const { username, userId, roomId } = req.body;
+  const now = Date.now();
+  
+  let userWarning = false;
+  let roomWarning = false;
+  let userTimeLeft = 0;
+  let roomTimeLeft = 0;
+  
+  // Check user inactivity warning
+  if (username && activeUsers.has(username)) {
+    const userData = activeUsers.get(username);
+    const inactiveTime = now - userData.lastActivity;
+    
+    if (inactiveTime >= USER_WARNING_MS && inactiveTime < USER_TIMEOUT_MS) {
+      userWarning = true;
+      userTimeLeft = Math.ceil((USER_TIMEOUT_MS - inactiveTime) / 1000); // seconds left
+    }
+  }
+  
+  // Check room inactivity warning (only for master)
+  if (roomId) {
+    const room = rooms.get(roomId);
+    if (room && room.users.size > 0) {
+      const timeSinceActivity = now - (room.lastActivity || 0);
+      
+      if (timeSinceActivity >= ROOM_WARNING_MS && timeSinceActivity < ZOMBIE_ROOM_TIMEOUT) {
+        roomWarning = true;
+        roomTimeLeft = Math.ceil((ZOMBIE_ROOM_TIMEOUT - timeSinceActivity) / 1000); // seconds left
+      }
+    }
+  }
+  
+  // Check if user was disconnected
+  let userDisconnected = false;
+  if (username && !activeUsers.has(username)) {
+    userDisconnected = true;
+  }
+  
+  // Check if room was deleted
+  let roomDeleted = false;
+  if (roomId && !rooms.has(roomId)) {
+    roomDeleted = true;
+  }
+  
+  res.json({
+    success: true,
+    userWarning,
+    userTimeLeft,
+    roomWarning,
+    roomTimeLeft,
+    userDisconnected,
+    roomDeleted
+  });
+});
+
+// Keep user alive (extend timeout)
+app.post('/api/keep-alive-user', (req, res) => {
+  const { username } = req.body;
+  
+  if (username && activeUsers.has(username)) {
+    const userData = activeUsers.get(username);
+    userData.lastActivity = Date.now();
+    console.log(`✅ User ${username} extended their session`);
+  }
+  
+  res.json({ success: true });
+});
+
+// Keep room alive (extend timeout)
+app.post('/api/keep-alive-room', (req, res) => {
+  const { roomId } = req.body;
+  
+  const room = rooms.get(roomId);
+  if (room) {
+    room.lastActivity = Date.now();
+    console.log(`✅ Room "${room.roomName}" extended its lifetime`);
+    res.json({ success: true });
+  } else {
+    res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
+  }
 });
 
 // Remove user from active users when they exit

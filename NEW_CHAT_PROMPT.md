@@ -9,29 +9,33 @@
 **Name**: Link Station  
 **Type**: Real-time matching game web application  
 **Live URL**: https://link-station-pro.vercel.app  
-**Status**: ✅ Active Development - Recent State Flow Improvements
+**Status**: ✅ Active Development - Warning System & Room Management Complete
 
 ---
 
 ## ✅ **RECENT IMPROVEMENTS - SUCCESSFULLY IMPLEMENTED**
 
+### **Session 14: Warning System & Room Management** (November 2025)
+- **Problems Solved**: 
+  1. Rooms disappearing during active games
+  2. No warning before user/room timeout
+  3. No notification for kicks or disconnections
+- **Major Features Added**:
+  - ⚠️ **Inactivity Warnings**: 1-minute warning before user (30min) and room (2h) timeouts
+  - 🛡️ **Room Activity Tracking**: Prevents deletion during active games
+  - 🚨 **Unexpected Event Alerts**: Kick, disconnection, and room deletion notifications
+  - 👥 **Observer/Attender System**: StarCraft-style role selection (observers watch, attenders vote)
+- **New API Endpoints**: `/api/check-warning`, `/api/keep-alive-user`, `/api/keep-alive-room`, `/api/change-role`, `/api/return-to-waiting`
+- **Benefits**:
+  - ✅ No more surprise disconnections
+  - ✅ Rooms don't disappear during games
+  - ✅ Clear feedback for all events
+  - ✅ Flexible observer mode
+
 ### **Session 13: State Flow Improvements** (October 2025)
 - **Problem Solved**: Username persistence causing duplication errors
-- **Solution**: 
-  1. Added new `makeOrJoinRoom` bridge state
-  2. Renamed states for clarity (enter → registerName, etc.)
-  3. Users now return to **WaitingRoom** after results (not name registration)
-  4. Proper username cleanup with `/api/remove-user` endpoint
-- **Benefits**:
-  - ✅ Users can play multiple rounds without re-entering nickname
-  - ✅ No more username duplication errors
-  - ✅ Clearer navigation flow
-
-### **Session 12: Polling Bug** (October 2025) 
-- **Problem Solved**: Only first voter saw results
-- **Root Cause**: useEffect stopping polling on state transition
-- **Solution**: Simplified polling logic, consolidated useEffect
-- **Status**: ✅ RESOLVED - All users now see results properly
+- **Solution**: Added `makeOrJoinRoom` bridge state, renamed states, proper cleanup
+- **Status**: ✅ RESOLVED - Users can play multiple rounds without re-entering nickname
 
 ---
 
@@ -92,28 +96,38 @@ I'm working on **Link Station**, a multi-device real-time matching game where us
 - `POST /api/start-game` - Master starts game (locks room)
 - `POST /api/select` - User votes (auto-processes when all vote)
 - `GET /api/room/:roomId` - Get room status (polling)
-- `POST /api/ping` - Heartbeat to keep connection alive
+- `POST /api/return-to-waiting` - Return to waiting room after results
+
+**User Management**:
+- `POST /api/ping` - Heartbeat to keep connection alive (every 5min)
+- `POST /api/check-warning` - Check for timeout warnings (every 10s)
+- `POST /api/keep-alive-user` - Extend user session
+- `POST /api/keep-alive-room` - Extend room lifetime
 - `POST /api/remove-user` - Clean up username on exit
+
+**Role System**:
+- `POST /api/change-role` - Switch between attender/observer
 
 ---
 
-## ✅ Latest Status (October 2025)
+## ✅ Latest Status (November 2025)
 
 ### What's Working
-- ✅ Complete 8-state flow
+- ✅ Complete 9-state flow (registerName → makeOrJoinRoom → game → results → back to waitingroom)
+- ✅ Inactivity warning system (user & room warnings 1min before timeout)
+- ✅ Room activity tracking (prevents disappearing during games)
+- ✅ Observer/Attender system (flexible role selection)
+- ✅ Unexpected event alerts (kick, disconnection, room deletion)
 - ✅ Room creation and joining
-- ✅ Master controls (kick, start game)
+- ✅ Master controls (kick, start game, extend room)
 - ✅ QR code sharing with proper routing
 - ✅ Auto-hiding notifications (3s success, 5s error)
-- ✅ Room name duplication prevention
-- ✅ User disconnect detection and cleanup
+- ✅ User disconnect detection and cleanup (30min timeout)
+- ✅ Zombie room cleanup (2h timeout)
 - ✅ Enhanced UI with 3-space indicators (Master, Selection, Voting Status)
 
 ### Current Critical Bugs
-- ❌ **No results shown to anybody after voting**
-- ❌ **Users cannot see others' vote status except when they vote**
-- ❌ **Master also affected by vote status update issues**
-- ❌ **Polling system fundamentally broken despite multiple fixes**
+**NONE** - All known issues have been resolved!
 
 ### Recent Fix Attempts (October 2025)
 1. **Room Duplication** - Fixed case-insensitive room name checking
