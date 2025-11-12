@@ -3,9 +3,19 @@ const app = express();
 
 app.use(express.json());
 
-// In-memory storage
-let rooms = new Map();
-let activeUsers = new Map(); // Track active usernames globally with last activity time
+// In-memory storage (persisted across module reloads via globalThis)
+const globalStore = globalThis.__linkStationStore || {
+  rooms: new Map(),
+  activeUsers: new Map(),
+  deletedRooms: new Map(), // roomId -> timestamp of deletion (for diagnostics)
+  cleanupInterval: null
+};
+
+globalThis.__linkStationStore = globalStore;
+
+const rooms = globalStore.rooms;
+const activeUsers = globalStore.activeUsers; // Track active usernames globally with last activity time
+const deletedRooms = globalStore.deletedRooms;
 // Structure: username -> { roomId, userId, lastActivity }
 
 // Constants for user activity tracking
@@ -33,6 +43,13 @@ function cleanupInactiveUsersAndRooms() {
   const now = Date.now();
   const disconnectedUsers = [];
   
+  // Prune stale deletion records (older than 24 hours)
+  for (const [roomId, deletedAt] of deletedRooms.entries()) {
+    if (now - deletedAt > 24 * 60 * 60 * 1000) {
+      deletedRooms.delete(roomId);
+    }
+  }
+
   console.log(`🧹 Running cleanup... Active users: ${activeUsers.size}, Total rooms: ${rooms.size}`);
   
   // Find disconnected users
@@ -79,6 +96,7 @@ function cleanupInactiveUsersAndRooms() {
       if (room.users.size === 0) {
         rooms.delete(roomId);
         console.log(`   🗑️ Room "${room.roomName}" deleted - all users left`);
+        deletedRooms.set(roomId, now);
       }
     }
     activeUsers.delete(username);
@@ -97,11 +115,13 @@ function cleanupEmptyRooms(now) {
     // Case 1: Delete empty rooms immediately
     if (room.users.size === 0) {
       rooms.delete(roomId);
+      deletedRooms.set(roomId, now);
       console.log(`   🗑️ Room "${room.roomName}" deleted - empty room`);
     }
     // Case 2: Delete zombie rooms (users still "in" but no activity for 2+ hours)
     else if (timeSinceActivity > ZOMBIE_ROOM_TIMEOUT) {
       rooms.delete(roomId);
+      deletedRooms.set(roomId, now);
       console.log(`   🧟 Room "${room.roomName}" deleted - zombie room (inactive for ${Math.floor(timeSinceActivity / 1000 / 60)} minutes)`);
       
       // Also remove all users from activeUsers
@@ -112,8 +132,11 @@ function cleanupEmptyRooms(now) {
   }
 }
 
-// Start cleanup interval
-setInterval(cleanupInactiveUsersAndRooms, CLEANUP_INTERVAL_MS);
+// Start cleanup interval (make sure we only register once even if module reloads)
+if (!globalStore.cleanupInterval) {
+  globalStore.cleanupInterval = setInterval(cleanupInactiveUsersAndRooms, CLEANUP_INTERVAL_MS);
+  console.log(`🕒 Started cleanup interval (every ${CLEANUP_INTERVAL_MS / 60000} minutes)`);
+}
 
 // Check username duplication
 app.post('/api/check-username', (req, res) => {
@@ -666,7 +689,13 @@ app.post('/api/check-warning', (req, res) => {
   // Check if room was deleted
   let roomDeleted = false;
   if (roomId && !rooms.has(roomId)) {
-    roomDeleted = true;
+    const deletedAt = deletedRooms.get(roomId);
+    if (deletedAt) {
+      roomDeleted = true;
+    } else {
+      // If we have no record of deletion, this is likely a cold/warm boot of another instance.
+      console.warn(`⚠️ Room ${roomId} not found in current instance – treating as transient (no deletion record).`);
+    }
   }
   
   res.json({
@@ -885,6 +914,7 @@ app.post('/api/leave-room', (req, res) => {
   // If no users left, delete room
   if (room.users.size === 0) {
     rooms.delete(roomId);
+    deletedRooms.set(roomId, Date.now());
     console.log(`Room deleted: ${room.roomName}`);
   }
   
