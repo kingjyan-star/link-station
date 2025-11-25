@@ -2,7 +2,7 @@
 
 **Live URL**: https://link-station-pro.vercel.app  
 **Last Updated**: November 2025  
-**Status**: ✅ Active Development - Warning System & Room Management Complete
+**Status**: ✅ Active Development - Shared Redis Storage & Warning System Stable
 
 ---
 
@@ -29,7 +29,8 @@
 ### Backend
 - **Node.js + Express** - Server runtime
 - **REST API** - Game logic via serverless functions
-- **In-memory storage** - Room and user data (Map-based)
+- **Upstash Redis** - Shared room/user state across serverless instances
+- **In-memory fallback** - Local development without Redis credentials
 
 ### Deployment
 - **Vercel** - Hosting platform
@@ -509,6 +510,75 @@ link-station/
 - ✅ Flexible observer system for non-participants
 
 **Status**: ✅ COMPLETED - Warning system fully functional, room management robust
+
+### Session 14b: UX Refinements & Bug Fixes (November 2025 - COMPLETED)
+**Focus**: Improve warning messages, fix disconnection flow, clarify timeout behavior
+
+**Changes Made**:
+1. **User Disconnection Flow Fix**:
+   - Changed: Auto-disconnected users now go to `registerName` (not `makeOrJoinRoom`)
+   - Reason: Forced logout should clear username completely
+   - Voluntary "방 나가기" still keeps username and goes to `makeOrJoinRoom`
+
+2. **Warning Modal UX Improvements**:
+   - Changed user warning button: "바로 로그아웃" → "로그아웃" (clearer)
+   - Added master-specific message for room warning
+   - Regular users now see: "방을 유지하려면 방장에게 알려주세요"
+   - Guides users to communicate with master
+
+3. **Code Quality**:
+   - Fixed ESLint warnings (removed unnecessary `isMaster` dependency)
+   - Removed "used before defined" warnings for `stopPolling` and `stopWarningCheck`
+   - Cleaned up `checkWarning` dependency array
+
+4. **Timeout Behavior Clarification**:
+   - User timeout (30min): Triggered when no heartbeat (tabs closed)
+   - Room timeout (2h): Triggered when no game actions (tabs open but passive)
+   - Users with tabs open stay connected via heartbeat
+   - Rooms need actual game actions to reset timeout
+
+**Files Modified**:
+- `client/src/App.js` - Fixed disconnection flow, improved modal messages, cleaned dependencies
+
+**Benefits**:
+- ✅ Clear distinction between voluntary exit and forced logout
+- ✅ Better user communication (master can save room)
+- ✅ No ESLint warnings (cleaner code)
+- ✅ Clear timeout behavior (user vs room)
+
+**Status**: ✅ COMPLETED - All UX improvements deployed
+
+### Session 15: Shared Redis State & Multi-Instance Stability (November 2025 - COMPLETED)
+**Focus**: Persist rooms/users across Vercel instances, eliminate phantom room deletions
+
+**Changes Made**:
+1. **Upstash Redis Integration**:
+   - Added `api/storage.js` abstraction over Upstash REST API
+   - Stored rooms, active users, and deletion markers in shared Redis keys
+   - Added 10-minute TTL markers for recently deleted rooms (warning accuracy)
+
+2. **Backend Refactor (`api/game.js`)**:
+   - Converted all endpoints to async storage calls (create/join/leave/select/etc.)
+   - Centralized cleanup to operate on Redis data (zombie rooms, inactive users)
+   - Updated warning checks to verify true deletions via Redis rather than local memory
+
+3. **Resilience & Logging**:
+   - Single cleanup interval per instance via `globalThis` guard
+   - Initial cleanup run on cold start
+   - Automatic removal of orphaned active users when rooms are deleted
+
+**Files Modified**:
+- `api/game.js` - Massive refactor to use shared storage for all operations
+- `api/storage.js` (NEW) - Redis storage helper with REST commands and local fallback
+- `PROJECT_CONTEXT.md`, `NEW_CHAT_PROMPT.md`, `DEPLOYMENT.md` - Documented Redis setup and env vars
+
+**Benefits**:
+- ✅ Consistent room/user state across all Vercel serverless instances
+- ✅ No more phantom room disappearance or surprise logouts
+- ✅ Cleanup + warning system operate on a single source of truth
+- ✅ Deployment-ready instructions for adding Upstash Redis
+
+**Status**: ✅ COMPLETED - Shared storage live in production
 
 ---
 

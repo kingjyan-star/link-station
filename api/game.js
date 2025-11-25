@@ -3,87 +3,106 @@ const app = express();
 
 app.use(express.json());
 
-// In-memory storage (persisted across module reloads via globalThis)
-const globalStore = globalThis.__linkStationStore || {
-  rooms: new Map(),
-  activeUsers: new Map(),
-  deletedRooms: new Map(), // roomId -> timestamp of deletion (for diagnostics)
-  cleanupInterval: null
-};
+const storage = require('./storage');
 
-globalThis.__linkStationStore = globalStore;
+// ============================================================================
+// ⏰ TIMEOUT & ALARM CONFIGURATION
+// ============================================================================
+// These constants control when users/rooms timeout and when warnings appear.
+// Modify these values to change timeout behavior (all values in milliseconds).
+// ============================================================================
 
-const rooms = globalStore.rooms;
-const activeUsers = globalStore.activeUsers; // Track active usernames globally with last activity time
-const deletedRooms = globalStore.deletedRooms;
-// Structure: username -> { roomId, userId, lastActivity }
+// ───────────────────────────────────────────────────────────────────────────
+// USER TIMEOUT SETTINGS
+// ───────────────────────────────────────────────────────────────────────────
+// How long a user can be inactive before being automatically logged out.
+// User activity is updated by: heartbeat pings, room actions, game actions.
 
-// Constants for user activity tracking
-// HOW "AWAY" IS DETECTED:
-// 1. Each user has a 'lastActivity' timestamp updated by heartbeat pings
-// 2. Frontend sends heartbeat every 5 minutes via /api/ping endpoint
-// 3. Frontend also sends heartbeat when Chrome tab becomes visible (Page Visibility API)
-// 4. Backend cleanup runs every 5 minutes to check for inactive users
-// 5. Users inactive for 30+ minutes are marked as disconnected and removed
-// 6. This handles Chrome's tab throttling (background tabs slow down timers)
-// 
-// ROOM DELETION POLICY:
-// - Empty rooms (0 users) are deleted IMMEDIATELY when all users leave
-// - Zombie rooms (users still "in" but inactive for 2+ hours) are deleted to save resources
-// - room.lastActivity is updated on all critical actions (vote, kick, role change, join)
-// - This prevents both "room not found" errors and resource waste from abandoned rooms
-const USER_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes of inactivity = disconnected
-const USER_WARNING_MS = 29 * 60 * 1000; // 29 minutes - show warning 1 minute before timeout
-const ZOMBIE_ROOM_TIMEOUT = 2 * 60 * 60 * 1000; // 2 hours - delete zombie rooms
-const ROOM_WARNING_MS = (2 * 60 * 60 * 1000) - (60 * 1000); // 1 minute before room deletion
-const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Run cleanup every 5 minutes
+const USER_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes = 1,800,000 ms
+// User is disconnected if no activity for this duration.
+
+const USER_WARNING_MS = 29 * 60 * 1000; // 29 minutes = 1,740,000 ms
+// Warning appears when user has been inactive for this duration.
+// Warning shows: "You'll be logged out in X seconds" (1 minute before timeout).
+
+// ───────────────────────────────────────────────────────────────────────────
+// ROOM TIMEOUT SETTINGS
+// ───────────────────────────────────────────────────────────────────────────
+// How long a room can be inactive before being automatically deleted.
+// Room activity is updated by: game actions (vote, start game, role change, etc.)
+// Note: Heartbeat pings do NOT update room activity (only user activity).
+
+const ZOMBIE_ROOM_TIMEOUT = 2 * 60 * 60 * 1000; // 2 hours = 7,200,000 ms
+// Room is deleted if no game activity for this duration (even if users are present).
+// "Zombie room" = room with users but no game activity.
+
+const ROOM_WARNING_MS = (2 * 60 * 60 * 1000) - (60 * 1000); // 1 hour 59 minutes = 7,140,000 ms
+// Warning appears when room has been inactive for this duration.
+// Warning shows: "Room will be deleted in X seconds" (1 minute before deletion).
+// Master can click "방 유지" (Keep Room) to extend room lifetime.
+
+// ───────────────────────────────────────────────────────────────────────────
+// CLEANUP INTERVAL
+// ───────────────────────────────────────────────────────────────────────────
+// How often the backend checks for inactive users and rooms.
+
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes = 300,000 ms
+// Backend runs cleanup job every 5 minutes to:
+// - Remove inactive users (30+ min inactive)
+// - Delete empty rooms (0 users)
+// - Delete zombie rooms (2+ hours inactive)
+
+// ============================================================================
+// 📝 HOW TIMEOUTS WORK
+// ============================================================================
+// USER TIMEOUT:
+//   1. User does activity → lastActivity = Date.now()
+//   2. Frontend sends heartbeat every 5 minutes → updates lastActivity
+//   3. After 29 minutes of inactivity → Warning appears
+//   4. After 30 minutes of inactivity → User is disconnected
+//
+// ROOM TIMEOUT:
+//   1. Game action happens → room.lastActivity = Date.now()
+//   2. After 1 hour 59 minutes of no game activity → Warning appears
+//   3. After 2 hours of no game activity → Room is deleted
+//   4. Note: Heartbeat pings do NOT reset room timeout (only game actions do)
+//
+// CLEANUP JOB:
+//   - Runs every 5 minutes
+//   - Checks all users and rooms
+//   - Removes inactive users and deletes empty/zombie rooms
+// ============================================================================
 
 // Helper function to clean up inactive users and empty rooms
-function cleanupInactiveUsersAndRooms() {
+async function cleanupInactiveUsersAndRooms() {
   const now = Date.now();
-  const disconnectedUsers = [];
-  
-  // Prune stale deletion records (older than 24 hours)
-  for (const [roomId, deletedAt] of deletedRooms.entries()) {
-    if (now - deletedAt > 24 * 60 * 60 * 1000) {
-      deletedRooms.delete(roomId);
-    }
-  }
+  console.log('🧹 Running cleanup...');
 
-  console.log(`🧹 Running cleanup... Active users: ${activeUsers.size}, Total rooms: ${rooms.size}`);
-  
-  // Find disconnected users
-  for (const [username, userData] of activeUsers.entries()) {
-    const inactiveTime = now - userData.lastActivity;
-    if (inactiveTime > USER_TIMEOUT_MS) {
-      console.log(`   Found inactive user: ${username} (inactive for ${Math.floor(inactiveTime / 1000)}s)`);
-      disconnectedUsers.push({ username, ...userData });
+  const activeUserEntries = await storage.listActiveUsers();
+  const processedRooms = new Map();
+
+  for (const { username, roomId, userId, lastActivity } of activeUserEntries) {
+    const inactiveTime = now - lastActivity;
+    if (inactiveTime <= USER_TIMEOUT_MS) {
+      continue;
     }
-  }
-  
-  if (disconnectedUsers.length === 0) {
-    console.log(`   No inactive users found`);
-    // Still check for old empty rooms
-    cleanupEmptyRooms(now);
-    return;
-  }
-  
-  // Remove disconnected users from rooms and activeUsers
-  for (const { username, roomId, userId } of disconnectedUsers) {
-    const room = rooms.get(roomId);
+
+    console.log(`   Found inactive user: ${username} (inactive for ${Math.floor(inactiveTime / 1000)}s)`);
+    const room = processedRooms.get(roomId) || (await storage.getRoomById(roomId));
+
     if (room) {
-      // Mark user as disconnected due to inactivity
       const user = room.users.get(userId);
       if (user) {
         user.disconnected = true;
         user.disconnectReason = 'inactivity';
+        room.users.set(userId, user);
       }
-      
+
       room.users.delete(userId);
       room.selections.delete(userId);
-      console.log(`   ⚠️ User ${username} disconnected from room ${room.roomName} due to inactivity`);
-      
-      // If master disconnected, assign new master
+
+      console.log(`   ⚠️ User ${username} removed from room ${room.roomName} due to inactivity`);
+
       if (room.masterId === userId && room.users.size > 0) {
         const newMaster = Array.from(room.users.values())[0];
         room.masterId = newMaster.id;
@@ -91,81 +110,93 @@ function cleanupInactiveUsersAndRooms() {
         room.users.set(newMaster.id, newMaster);
         console.log(`   👑 Master handover: ${newMaster.displayName} is now master of ${room.roomName}`);
       }
-      
-      // Delete empty rooms immediately
-      if (room.users.size === 0) {
-        rooms.delete(roomId);
-        console.log(`   🗑️ Room "${room.roomName}" deleted - all users left`);
-        deletedRooms.set(roomId, now);
-      }
+
+      processedRooms.set(roomId, room);
     }
-    activeUsers.delete(username);
+
+    await storage.deleteActiveUser(username);
   }
-  
-  console.log(`🧹 Cleanup complete. Active users: ${activeUsers.size}, Total rooms: ${rooms.size}`);
+
+  for (const [roomId, room] of processedRooms.entries()) {
+    if (room.users.size === 0) {
+      await storage.deleteRoom(roomId);
+      console.log(`   🗑️ Room "${room.roomName}" deleted - all users left`);
+    } else {
+      await storage.saveRoom(room);
+    }
+  }
+
+  await cleanupEmptyRooms(now);
+
+  console.log('🧹 Cleanup complete.');
 }
 
 // Helper function to clean up empty and zombie rooms
-function cleanupEmptyRooms(now) {
-  for (const [roomId, room] of rooms.entries()) {
-    // Use lastActivity if available, otherwise fallback to createdAt timestamp
+async function cleanupEmptyRooms(now) {
+  const roomIds = await storage.listRoomIds();
+
+  for (const roomId of roomIds) {
+    const room = await storage.getRoomById(roomId);
+    if (!room) continue;
+
     const lastActivityTime = room.lastActivity || (room.createdAt ? Date.parse(room.createdAt) : 0);
     const timeSinceActivity = now - lastActivityTime;
-    
-    // Case 1: Delete empty rooms immediately
+
     if (room.users.size === 0) {
-      rooms.delete(roomId);
-      deletedRooms.set(roomId, now);
+      await storage.deleteRoom(roomId);
       console.log(`   🗑️ Room "${room.roomName}" deleted - empty room`);
-    }
-    // Case 2: Delete zombie rooms (users still "in" but no activity for 2+ hours)
-    else if (timeSinceActivity > ZOMBIE_ROOM_TIMEOUT) {
-      rooms.delete(roomId);
-      deletedRooms.set(roomId, now);
+    } else if (timeSinceActivity > ZOMBIE_ROOM_TIMEOUT) {
+      await storage.deleteRoom(roomId);
       console.log(`   🧟 Room "${room.roomName}" deleted - zombie room (inactive for ${Math.floor(timeSinceActivity / 1000 / 60)} minutes)`);
-      
-      // Also remove all users from activeUsers
+
       for (const user of room.users.values()) {
-        activeUsers.delete(user.username);
+        await storage.deleteActiveUser(user.username);
       }
     }
   }
 }
 
-// Start cleanup interval (make sure we only register once even if module reloads)
-if (!globalStore.cleanupInterval) {
-  globalStore.cleanupInterval = setInterval(cleanupInactiveUsersAndRooms, CLEANUP_INTERVAL_MS);
+if (!globalThis.__linkStationCleanupInterval) {
+  globalThis.__linkStationCleanupInterval = setInterval(() => {
+    cleanupInactiveUsersAndRooms().catch((error) => {
+      console.error('Cleanup error:', error);
+    });
+  }, CLEANUP_INTERVAL_MS);
   console.log(`🕒 Started cleanup interval (every ${CLEANUP_INTERVAL_MS / 60000} minutes)`);
 }
 
+// Run an initial cleanup on cold start
+cleanupInactiveUsersAndRooms().catch((error) => {
+  console.error('Cleanup error:', error);
+});
+
 // Check username duplication
-app.post('/api/check-username', (req, res) => {
+app.post('/api/check-username', async (req, res) => {
   const { username } = req.body;
   
   if (!username || username.trim() === '') {
     return res.json({ duplicate: false });
   }
   
-  const isDuplicate = activeUsers.has(username.trim());
+  const userData = await storage.getActiveUser(username.trim());
+  const isDuplicate = !!userData;
   res.json({ duplicate: isDuplicate, available: !isDuplicate });
 });
 
 // Check room name duplication
-app.post('/api/check-roomname', (req, res) => {
+app.post('/api/check-roomname', async (req, res) => {
   const { roomName } = req.body;
   
   if (!roomName || roomName.trim() === '') {
     return res.json({ duplicate: false });
   }
   
-  const existingRoom = Array.from(rooms.values()).find(room => 
-    room.roomName.toLowerCase() === roomName.trim().toLowerCase()
-  );
+  const existingRoom = await storage.getRoomByName(roomName.trim().toLowerCase());
   res.json({ duplicate: !!existingRoom });
 });
 
 // Create room
-app.post('/api/create-room', (req, res) => {
+app.post('/api/create-room', async (req, res) => {
   const { roomName, roomPassword, memberLimit, username } = req.body;
   
   // Validate input
@@ -177,13 +208,14 @@ app.post('/api/create-room', (req, res) => {
     return res.status(400).json({ success: false, message: '최대 인원은 2-99명 사이여야 합니다.' });
   }
   
+  const trimmedRoomName = roomName.trim();
+  const roomNameLower = trimmedRoomName.toLowerCase();
+  const trimmedUsername = username ? username.trim() : '';
+
   // Check room name duplication
   console.log(`Creating room: "${roomName}"`);
-  console.log(`Current rooms:`, Array.from(rooms.values()).map(r => ({ name: r.roomName, id: r.id, users: r.users.size })));
   
-  const existingRoom = Array.from(rooms.values()).find(room => 
-    room.roomName.toLowerCase() === roomName.trim().toLowerCase()
-  );
+  const existingRoom = await storage.getRoomByName(roomNameLower);
   if (existingRoom) {
     console.log(`❌ Duplicate room name detected: "${roomName}" already exists as "${existingRoom.roomName}"`);
     return res.status(400).json({ success: false, message: '이미 존재하는 방 이름입니다. 다른 이름을 사용해주세요.' });
@@ -192,7 +224,8 @@ app.post('/api/create-room', (req, res) => {
   console.log(`✓ Room name "${roomName}" is available`);
   
   // Check username duplication
-  if (activeUsers.has(username)) {
+  const existingUser = await storage.getActiveUser(trimmedUsername);
+  if (existingUser) {
     return res.status(400).json({ success: false, message: '이미 사용 중인 사용자 이름입니다.' });
   }
   
@@ -203,7 +236,7 @@ app.post('/api/create-room', (req, res) => {
   // Create room
   const room = {
     id: roomId,
-    roomName: roomName.trim(),
+    roomName: trimmedRoomName,
     roomPassword: roomPassword || null,
     memberLimit: parseInt(memberLimit),
     users: new Map(),
@@ -218,23 +251,22 @@ app.post('/api/create-room', (req, res) => {
   // Add user to room
   const user = {
     id: userId,
-    username: username.trim(),
-    displayName: username.trim(),
+    username: trimmedUsername,
+    displayName: trimmedUsername,
     joinedAt: new Date().toISOString(),
     isMaster: true,
     role: 'attender'
   };
   
   room.users.set(userId, user);
-  rooms.set(roomId, room);
-  activeUsers.set(username.trim(), {
+  await storage.saveRoom(room);
+  await storage.saveActiveUser(trimmedUsername, {
     roomId,
     userId,
     lastActivity: Date.now()
   });
   
   console.log(`✅ Room created: "${roomName}" (ID: ${roomId}) by "${username}"`);
-  console.log(`   Total rooms now: ${rooms.size}`);
   
   res.json({
     success: true,
@@ -251,21 +283,16 @@ app.post('/api/create-room', (req, res) => {
 });
 
 // Join room
-app.post('/api/join-room', (req, res) => {
+app.post('/api/join-room', async (req, res) => {
   const { roomName, username } = req.body;
   
   console.log(`Join room attempt: "${roomName}" by "${username}"`);
-  console.log(`Total rooms: ${rooms.size}`);
-  console.log(`Available rooms:`, Array.from(rooms.values()).map(r => ({ name: r.roomName, id: r.id, users: r.users.size })));
+  
+  const trimmedRoomName = roomName.trim();
+  const trimmedUsername = username ? username.trim() : '';
   
   // Find room by name (case-insensitive)
-  let targetRoom = null;
-  for (const [roomId, room] of rooms) {
-    if (room.roomName.toLowerCase() === roomName.trim().toLowerCase()) {
-      targetRoom = room;
-      break;
-    }
-  }
+  const targetRoom = await storage.getRoomByName(trimmedRoomName.toLowerCase());
   
   if (!targetRoom) {
     console.log(`Room not found: "${roomName}"`);
@@ -286,7 +313,8 @@ app.post('/api/join-room', (req, res) => {
   }
   
   // Check username duplication
-  if (activeUsers.has(username)) {
+  const existingUser = await storage.getActiveUser(trimmedUsername);
+  if (existingUser) {
     return res.status(400).json({ success: false, message: '이미 사용 중인 사용자 이름입니다.' });
   }
   
@@ -303,8 +331,8 @@ app.post('/api/join-room', (req, res) => {
   const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const user = {
     id: userId,
-    username: username.trim(),
-    displayName: username.trim(),
+    username: trimmedUsername,
+    displayName: trimmedUsername,
     joinedAt: new Date().toISOString(),
     isMaster: false,
     role: 'attender'
@@ -312,7 +340,8 @@ app.post('/api/join-room', (req, res) => {
   
   targetRoom.users.set(userId, user);
   targetRoom.lastActivity = Date.now(); // Update room activity on join
-  activeUsers.set(username.trim(), {
+  await storage.saveRoom(targetRoom);
+  await storage.saveActiveUser(trimmedUsername, {
     roomId: targetRoom.id,
     userId,
     lastActivity: Date.now()
@@ -336,19 +365,13 @@ app.post('/api/join-room', (req, res) => {
 });
 
 // Check password
-app.post('/api/check-password', (req, res) => {
+app.post('/api/check-password', async (req, res) => {
   const { roomName, password, username } = req.body;
   
   console.log(`Check password attempt: "${roomName}" by "${username}"`);
   
   // Find room by name (case-insensitive)
-  let targetRoom = null;
-  for (const [roomId, room] of rooms) {
-    if (room.roomName.toLowerCase() === roomName.trim().toLowerCase()) {
-      targetRoom = room;
-      break;
-    }
-  }
+  const targetRoom = await storage.getRoomByName(roomName.trim().toLowerCase());
   
   if (!targetRoom) {
     console.log(`Room not found for password check: "${roomName}"`);
@@ -373,7 +396,9 @@ app.post('/api/check-password', (req, res) => {
   }
   
   // Check username duplication
-  if (activeUsers.has(username)) {
+  const trimmedUsername = username ? username.trim() : '';
+  const existingUser = await storage.getActiveUser(trimmedUsername);
+  if (existingUser) {
     return res.status(400).json({ success: false, message: '이미 사용 중인 사용자 이름입니다.' });
   }
   
@@ -381,8 +406,8 @@ app.post('/api/check-password', (req, res) => {
   const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const user = {
     id: userId,
-    username: username.trim(),
-    displayName: username.trim(),
+    username: trimmedUsername,
+    displayName: trimmedUsername,
     joinedAt: new Date().toISOString(),
     isMaster: false,
     role: 'attender'
@@ -390,7 +415,8 @@ app.post('/api/check-password', (req, res) => {
   
   targetRoom.users.set(userId, user);
   targetRoom.lastActivity = Date.now(); // Update room activity on join
-  activeUsers.set(username.trim(), {
+  await storage.saveRoom(targetRoom);
+  await storage.saveActiveUser(trimmedUsername, {
     roomId: targetRoom.id,
     userId,
     lastActivity: Date.now()
@@ -414,10 +440,10 @@ app.post('/api/check-password', (req, res) => {
 });
 
 // Join room with QR
-app.post('/api/join-room-qr', (req, res) => {
+app.post('/api/join-room-qr', async (req, res) => {
   const { roomId, username } = req.body;
   
-  const room = rooms.get(roomId);
+  const room = await storage.getRoomById(roomId);
   if (!room) {
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
   }
@@ -433,7 +459,9 @@ app.post('/api/join-room-qr', (req, res) => {
   }
   
   // Check username duplication
-  if (activeUsers.has(username)) {
+  const trimmedUsername = username ? username.trim() : '';
+  const existingUser = await storage.getActiveUser(trimmedUsername);
+  if (existingUser) {
     return res.status(400).json({ success: false, message: '이미 사용 중인 사용자 이름입니다.' });
   }
   
@@ -441,15 +469,16 @@ app.post('/api/join-room-qr', (req, res) => {
   const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const user = {
     id: userId,
-    username: username.trim(),
-    displayName: username.trim(),
+    username: trimmedUsername,
+    displayName: trimmedUsername,
     joinedAt: new Date().toISOString(),
     isMaster: false,
     role: 'attender'
   };
   
   room.users.set(userId, user);
-  activeUsers.set(username.trim(), {
+  await storage.saveRoom(room);
+  await storage.saveActiveUser(trimmedUsername, {
     roomId: room.id,
     userId,
     lastActivity: Date.now()
@@ -473,10 +502,10 @@ app.post('/api/join-room-qr', (req, res) => {
 });
 
 // Start game
-app.post('/api/start-game', (req, res) => {
+app.post('/api/start-game', async (req, res) => {
   const { roomId, userId } = req.body;
   
-  const room = rooms.get(roomId);
+  const room = await storage.getRoomById(roomId);
   if (!room) {
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
   }
@@ -499,6 +528,7 @@ app.post('/api/start-game', (req, res) => {
   room.lastActivity = Date.now(); // Prevent room deletion during game
   
   console.log(`Game started in room: ${room.roomName}`);
+  await storage.saveRoom(room);
   
   res.json({
     success: true,
@@ -508,12 +538,12 @@ app.post('/api/start-game', (req, res) => {
 });
 
 // Select user
-app.post('/api/select', (req, res) => {
+app.post('/api/select', async (req, res) => {
   const { roomId, userId, selectedUserId } = req.body;
   
   console.log(`Selection attempt: ${userId} selects ${selectedUserId} in room ${roomId}`);
   
-  const room = rooms.get(roomId);
+  const room = await storage.getRoomById(roomId);
   if (!room) {
     console.log(`Room not found: ${roomId}`);
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
@@ -552,6 +582,17 @@ app.post('/api/select', (req, res) => {
   // Record selection
   room.selections.set(userId, selectedUserId);
   room.lastActivity = Date.now(); // Prevent room deletion during voting
+
+  const selectingUser = room.users.get(userId);
+  if (selectingUser) {
+    const activeUser = await storage.getActiveUser(selectingUser.username);
+    if (activeUser) {
+      await storage.saveActiveUser(selectingUser.username, {
+        ...activeUser,
+        lastActivity: Date.now()
+      });
+    }
+  }
   
   console.log(`Selection: ${userId} selects ${selectedUserId} in room ${roomId}`);
   console.log(`Selections so far: ${room.selections.size}/${room.users.size}`);
@@ -601,6 +642,7 @@ app.post('/api/select', (req, res) => {
     console.log(`✅ Results calculated: ${matches.length} matches, ${unmatched.length} unmatched`);
     console.log(`✅ Game state changed to: ${room.gameState}`);
     console.log(`✅ Match result stored in room object`);
+    await storage.saveRoom(room);
     
     // Return users with voting status even in final response
     const usersWithVotingStatus = Array.from(room.users.values()).map(user => ({
@@ -623,6 +665,8 @@ app.post('/api/select', (req, res) => {
       isMaster: user.id === room.masterId
     }));
     
+    await storage.saveRoom(room);
+    
     res.json({
       success: true,
       message: '선택이 기록되었습니다. 다른 참여자들의 선택을 기다리는 중...',
@@ -632,14 +676,16 @@ app.post('/api/select', (req, res) => {
 });
 
 // Heartbeat/Ping endpoint to keep user connection alive
-app.post('/api/ping', (req, res) => {
+app.post('/api/ping', async (req, res) => {
   const { username, userId } = req.body;
   
-  if (activeUsers.has(username)) {
-    const userData = activeUsers.get(username);
-    if (userData.userId === userId) {
-      userData.lastActivity = Date.now();
-      activeUsers.set(username, userData);
+  if (username) {
+    const userData = await storage.getActiveUser(username);
+    if (userData && userData.userId === userId) {
+      await storage.saveActiveUser(username, {
+        ...userData,
+        lastActivity: Date.now()
+      });
     }
   }
   
@@ -647,7 +693,7 @@ app.post('/api/ping', (req, res) => {
 });
 
 // Check if user or room needs warning
-app.post('/api/check-warning', (req, res) => {
+app.post('/api/check-warning', async (req, res) => {
   const { username, userId, roomId } = req.body;
   const now = Date.now();
   
@@ -657,19 +703,21 @@ app.post('/api/check-warning', (req, res) => {
   let roomTimeLeft = 0;
   
   // Check user inactivity warning
-  if (username && activeUsers.has(username)) {
-    const userData = activeUsers.get(username);
-    const inactiveTime = now - userData.lastActivity;
-    
-    if (inactiveTime >= USER_WARNING_MS && inactiveTime < USER_TIMEOUT_MS) {
-      userWarning = true;
-      userTimeLeft = Math.ceil((USER_TIMEOUT_MS - inactiveTime) / 1000); // seconds left
+  if (username) {
+    const userData = await storage.getActiveUser(username);
+    if (userData && userData.userId === userId) {
+      const inactiveTime = now - userData.lastActivity;
+      
+      if (inactiveTime >= USER_WARNING_MS && inactiveTime < USER_TIMEOUT_MS) {
+        userWarning = true;
+        userTimeLeft = Math.ceil((USER_TIMEOUT_MS - inactiveTime) / 1000); // seconds left
+      }
     }
   }
   
   // Check room inactivity warning (only for master)
   if (roomId) {
-    const room = rooms.get(roomId);
+    const room = await storage.getRoomById(roomId);
     if (room && room.users.size > 0) {
       const timeSinceActivity = now - (room.lastActivity || 0);
       
@@ -681,20 +729,14 @@ app.post('/api/check-warning', (req, res) => {
   }
   
   // Check if user was disconnected
-  let userDisconnected = false;
-  if (username && !activeUsers.has(username)) {
-    userDisconnected = true;
-  }
+  const userDisconnected = Boolean(username && !(await storage.getActiveUser(username)));
   
   // Check if room was deleted
   let roomDeleted = false;
-  if (roomId && !rooms.has(roomId)) {
-    const deletedAt = deletedRooms.get(roomId);
-    if (deletedAt) {
-      roomDeleted = true;
-    } else {
-      // If we have no record of deletion, this is likely a cold/warm boot of another instance.
-      console.warn(`⚠️ Room ${roomId} not found in current instance – treating as transient (no deletion record).`);
+  if (roomId) {
+    const roomExists = await storage.getRoomById(roomId);
+    if (!roomExists) {
+      roomDeleted = await storage.wasRoomDeleted(roomId);
     }
   }
   
@@ -710,25 +752,31 @@ app.post('/api/check-warning', (req, res) => {
 });
 
 // Keep user alive (extend timeout)
-app.post('/api/keep-alive-user', (req, res) => {
+app.post('/api/keep-alive-user', async (req, res) => {
   const { username } = req.body;
   
-  if (username && activeUsers.has(username)) {
-    const userData = activeUsers.get(username);
-    userData.lastActivity = Date.now();
-    console.log(`✅ User ${username} extended their session`);
+  if (username) {
+    const userData = await storage.getActiveUser(username);
+    if (userData) {
+      await storage.saveActiveUser(username, {
+        ...userData,
+        lastActivity: Date.now()
+      });
+      console.log(`✅ User ${username} extended their session`);
+    }
   }
   
   res.json({ success: true });
 });
 
 // Keep room alive (extend timeout)
-app.post('/api/keep-alive-room', (req, res) => {
+app.post('/api/keep-alive-room', async (req, res) => {
   const { roomId } = req.body;
   
-  const room = rooms.get(roomId);
+  const room = await storage.getRoomById(roomId);
   if (room) {
     room.lastActivity = Date.now();
+    await storage.saveRoom(room);
     console.log(`✅ Room "${room.roomName}" extended its lifetime`);
     res.json({ success: true });
   } else {
@@ -737,11 +785,11 @@ app.post('/api/keep-alive-room', (req, res) => {
 });
 
 // Remove user from active users when they exit
-app.post('/api/remove-user', (req, res) => {
+app.post('/api/remove-user', async (req, res) => {
   const { username } = req.body;
   
-  if (username && activeUsers.has(username)) {
-    activeUsers.delete(username);
+  if (username) {
+    await storage.deleteActiveUser(username);
     console.log(`👋 User ${username} removed from active users`);
   }
   
@@ -749,9 +797,9 @@ app.post('/api/remove-user', (req, res) => {
 });
 
 // Change user role (attender/observer)
-app.post('/api/change-role', (req, res) => {
+app.post('/api/change-role', async (req, res) => {
   const { roomId, userId, role } = req.body;
-  const room = rooms.get(roomId);
+  const room = await storage.getRoomById(roomId);
   
   if (!room) {
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
@@ -767,11 +815,15 @@ app.post('/api/change-role', (req, res) => {
   room.users.set(userId, user);
   
   // Update lastActivity to keep user and room alive
-  const activeUserData = activeUsers.get(user.username);
+  const activeUserData = await storage.getActiveUser(user.username);
   if (activeUserData) {
-    activeUserData.lastActivity = Date.now();
+    await storage.saveActiveUser(user.username, {
+      ...activeUserData,
+      lastActivity: Date.now()
+    });
   }
   room.lastActivity = Date.now(); // Prevent room deletion during active use
+  await storage.saveRoom(room);
   
   console.log(`🔄 User ${user.displayName} changed role to ${role}`);
   
@@ -790,9 +842,9 @@ app.post('/api/change-role', (req, res) => {
 });
 
 // Return to waiting room after results
-app.post('/api/return-to-waiting', (req, res) => {
+app.post('/api/return-to-waiting', async (req, res) => {
   const { roomId, userId } = req.body;
-  const room = rooms.get(roomId);
+  const room = await storage.getRoomById(roomId);
   
   if (!room) {
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
@@ -802,16 +854,18 @@ app.post('/api/return-to-waiting', (req, res) => {
   room.gameState = 'waiting';
   room.selections.clear();
   room.matchResult = null;
+  room.lastActivity = Date.now();
   
   console.log(`🔄 Room ${room.roomName} returned to waiting state`);
+  await storage.saveRoom(room);
   
   res.json({ success: true });
 });
 
 // Get room status
-app.get('/api/room/:roomId', (req, res) => {
+app.get('/api/room/:roomId', async (req, res) => {
   const { roomId } = req.params;
-  const room = rooms.get(roomId);
+  const room = await storage.getRoomById(roomId);
   
   if (!room) {
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
@@ -845,10 +899,10 @@ app.get('/api/room/:roomId', (req, res) => {
 });
 
 // Kick user (master only)
-app.post('/api/kick-user', (req, res) => {
+app.post('/api/kick-user', async (req, res) => {
   const { roomId, masterUserId, targetUserId } = req.body;
   
-  const room = rooms.get(roomId);
+  const room = await storage.getRoomById(roomId);
   if (!room) {
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
   }
@@ -872,8 +926,13 @@ app.post('/api/kick-user', (req, res) => {
   // Remove user from room
   room.users.delete(targetUserId);
   room.selections.delete(targetUserId);
-  activeUsers.delete(targetUser.username);
+  await storage.deleteActiveUser(targetUser.username);
   room.lastActivity = Date.now(); // Prevent room deletion during kick
+  if (room.users.size === 0) {
+    await storage.deleteRoom(roomId);
+  } else {
+    await storage.saveRoom(room);
+  }
   
   console.log(`User kicked: ${targetUser.displayName} from ${room.roomName} by master`);
   
@@ -885,10 +944,10 @@ app.post('/api/kick-user', (req, res) => {
 });
 
 // Leave room
-app.post('/api/leave-room', (req, res) => {
+app.post('/api/leave-room', async (req, res) => {
   const { roomId, userId } = req.body;
   
-  const room = rooms.get(roomId);
+  const room = await storage.getRoomById(roomId);
   if (!room) {
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
   }
@@ -901,7 +960,7 @@ app.post('/api/leave-room', (req, res) => {
   // Remove user from room
   room.users.delete(userId);
   room.selections.delete(userId);
-  activeUsers.delete(user.username);
+  await storage.deleteActiveUser(user.username);
   
   // If user was master, assign new master
   if (room.masterId === userId && room.users.size > 0) {
@@ -913,9 +972,10 @@ app.post('/api/leave-room', (req, res) => {
   
   // If no users left, delete room
   if (room.users.size === 0) {
-    rooms.delete(roomId);
-    deletedRooms.set(roomId, Date.now());
+    await storage.deleteRoom(roomId);
     console.log(`Room deleted: ${room.roomName}`);
+  } else {
+    await storage.saveRoom(room);
   }
   
   console.log(`User left room: ${user.displayName} from ${room.roomName}`);

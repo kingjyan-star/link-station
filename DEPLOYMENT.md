@@ -1,7 +1,7 @@
 # 🚀 Link Station - Deployment Guide
 
 **Live URL**: https://link-station-pro.vercel.app  
-**Status**: ✅ Active Development - Warning System & Room Management Deployed  
+**Status**: ✅ Active Development - Shared Redis Storage + Warning System Deployed  
 **Last Updated**: November 2025
 
 ---
@@ -11,6 +11,7 @@
 Link Station is deployed on Vercel as a hybrid application:
 - **Static Files**: React app served from root directory
 - **API**: Node.js serverless functions in `/api` directory
+- **Storage**: Upstash Redis (shared room/user state across instances)
 
 ---
 
@@ -21,6 +22,7 @@ Root Directory (Vercel)
 ├── index.html (React app entry)
 ├── static/ (CSS, JS assets)
 ├── api/game.js (Serverless API)
+├── api/storage.js (Upstash Redis helper)
 ├── vercel.json (Configuration)
 └── package.json (Dependencies)
 ```
@@ -118,6 +120,26 @@ Vercel automatically detects changes and redeploys.
 
 ---
 
+## ☁️ Environment Variables (Vercel)
+
+| Name | Purpose |
+| ---- | ------- |
+| `UPSTASH_REDIS_KV_REST_API_URL` | REST endpoint for Upstash Redis (used by `api/storage.js`) |
+| `UPSTASH_REDIS_KV_REST_API_TOKEN` | Auth token for REST reads/writes |
+| `UPSTASH_REDIS_KV_URL` | Dashboard convenience URL (optional) |
+| `UPSTASH_REDIS_REDIS_URL` | Redis protocol URL (optional for future TCP clients) |
+| `UPSTASH_REDIS_KV_REST_API_READ_ONLY_TOKEN` | Read-only token (optional) |
+
+**Setup Steps**
+1. In Vercel dashboard → Storage → Upstash Redis → `Connect Project`.
+2. Select the `link-station` project and enable **Development + Preview + Production**.
+3. Keep the default prefix (e.g., `UPSTASH_REDIS`) so Vercel injects the variables automatically.
+4. Redeploy so serverless functions pick up the new environment variables.
+
+> **Local development**: When these env vars are missing, `api/storage.js` automatically falls back to in-memory Maps so you can keep iterating without Redis.
+
+---
+
 ## 🔍 Troubleshooting
 
 ### Common Issues
@@ -177,6 +199,13 @@ ls -la static/
 
 ### Recent Improvements (November 2025)
 
+**Session 15: Shared Redis State & Stability** ✅ COMPLETED
+- Integrated Upstash Redis via new `api/storage.js` helper
+- Refactored all room/user endpoints to use shared storage (eliminates phantom deletions)
+- Cleanup + warning system now operate on Redis data (10-minute deletion markers)
+- Added Vercel env var checklist (`UPSTASH_REDIS_*`) and documentation
+- Benefits: Consistent multi-instance behaviour, no surprise logouts when serverless instances rotate
+
 **Session 14: Warning System & Room Management** ✅ COMPLETED
 - ⚠️ **Inactivity Warnings**: 1-minute warnings before user/room timeouts
   - User: 30min timeout with 29min warning
@@ -185,7 +214,11 @@ ls -la static/
 - 🚨 **Unexpected Event Alerts**: Notifications for kicks, disconnections, room deletions
 - 👥 **Observer/Attender System**: StarCraft-style role selection
 - **New Endpoints**: `/api/check-warning`, `/api/keep-alive-user`, `/api/keep-alive-room`, `/api/change-role`, `/api/return-to-waiting`
-- **Benefits**: No surprise disconnections, robust room management, clear user feedback
+- **UX Refinements** (Session 14b):
+  - Auto-disconnect now goes to `registerName` (complete logout)
+  - Regular users get helpful message: "방을 유지하려면 방장에게 알려주세요"
+  - Clearer button text: "로그아웃" (not "바로 로그아웃")
+- **Benefits**: No surprise disconnections, robust room management, clear user feedback, proper logout flow
 
 **Session 13: State Flow Improvements** ✅ COMPLETED
 - Added `makeOrJoinRoom` bridge state, renamed states for clarity
