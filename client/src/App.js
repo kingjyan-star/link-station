@@ -29,6 +29,7 @@ function App() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [hasVoted, setHasVoted] = useState(false);
   const [userRole, setUserRole] = useState('attender'); // 'attender' or 'observer'
+  const [gameState, setGameState] = useState('waiting'); // 'waiting', 'linking', 'completed'
   
   // UI state
   const [showQR, setShowQR] = useState(false);
@@ -252,6 +253,7 @@ function App() {
         console.log('👥 Users update:', data.room.users.map(u => ({ name: u.displayName, voted: u.hasVoted })));
         console.log('🔄 Setting users state with voting status...');
         setUsers(data.room.users);
+        setGameState(data.room.gameState || 'waiting'); // Track game state
         
         // SIMPLE FIX: Show results if they exist, regardless of game state
         if (data.matchResult) {
@@ -303,6 +305,7 @@ function App() {
         // Update users and master status
         setUsers(data.room.users);
         setIsMaster(data.room.masterId === userId);
+        setGameState(data.room.gameState || 'waiting'); // Track game state
         
         // Check if game started
         if (data.room.gameState === 'linking') {
@@ -453,6 +456,7 @@ function App() {
             setIsMaster(true);
             setRoomData(data.roomData);
             setUserRole('attender'); // Initialize as attender
+            setGameState('waiting'); // Initialize game state
             setCurrentState('waitingroom');
             setSuccess('방이 생성되었습니다!');
           } else {
@@ -486,6 +490,7 @@ function App() {
           setIsMaster(data.isMaster);
           setRoomData(data.roomData);
           setUserRole('attender'); // Initialize as attender
+          setGameState('waiting'); // Initialize game state
           setCurrentState('waitingroom');
           setSuccess('방에 참여했습니다!');
         }
@@ -806,6 +811,7 @@ function App() {
     setUnmatched([]);
     setSelectedUser(null);
     setHasVoted(false);
+    setGameState('waiting'); // Reset game state
     
     // Reset game state in API
     try {
@@ -1189,6 +1195,12 @@ function App() {
                 <span className="user-nickname">{user.displayName || user.nickname}</span>
                 {user.id === userId && <span className="you-badge">나</span>}
                 {user.isMaster && <span className="master-badge">방장</span>}
+                {gameState === 'completed' && !user.hasReturnedToWaiting && (
+                  <span className="viewing-results-badge" title="결과 화면을 보고 있습니다">결과 확인 중</span>
+                )}
+                {gameState === 'completed' && user.hasReturnedToWaiting && (
+                  <span className="returned-badge" title="대기실로 돌아왔습니다">대기실</span>
+                )}
               </div>
               {isMaster && user.id !== userId && (
                 <button
@@ -1234,11 +1246,14 @@ function App() {
           <button 
             className="start-game-button"
             onClick={handleStartGame}
-            disabled={users.filter(user => user.role === 'attender').length < 2 || isLoading}
+            disabled={gameState !== 'waiting' || users.filter(user => user.role === 'attender').length < 2 || isLoading}
           >
             {isLoading ? '게임 시작 중...' : `게임 시작 (참가자 ${users.filter(user => user.role === 'attender').length}명)`}
           </button>
-          {users.filter(user => user.role === 'attender').length < 2 && (
+          {gameState !== 'waiting' && (
+            <p className="waiting-message">모든 사용자가 대기실로 돌아올 때까지 기다려주세요.</p>
+          )}
+          {gameState === 'waiting' && users.filter(user => user.role === 'attender').length < 2 && (
             <p className="waiting-message">참가자는 최소 2명 이상 필요합니다.</p>
           )}
         </div>

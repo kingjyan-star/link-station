@@ -28,7 +28,8 @@ const memoryStore = {
 const toSerializableRoom = (room) => ({
   ...room,
   users: Array.from(room.users.entries()),
-  selections: Array.from(room.selections.entries())
+  selections: Array.from(room.selections.entries()),
+  returnedToWaiting: room.returnedToWaiting ? Array.from(room.returnedToWaiting) : []
 });
 
 const fromSerializableRoom = (room) => {
@@ -36,7 +37,8 @@ const fromSerializableRoom = (room) => {
   return {
     ...room,
     users: new Map(room.users || []),
-    selections: new Map(room.selections || [])
+    selections: new Map(room.selections || []),
+    returnedToWaiting: room.returnedToWaiting ? new Set(room.returnedToWaiting) : new Set()
   };
 };
 

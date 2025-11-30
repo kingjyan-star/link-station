@@ -186,6 +186,26 @@ body {
   letter-spacing: 0.5px;
 }
 
+.viewing-results-badge {
+  background: linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 15px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-left: 5px;
+}
+
+.returned-badge {
+  background: linear-gradient(135deg, #56ab2f 0%, #a8e063 100%);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 15px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-left: 5px;
+}
+
 .qr-section {
   margin: 30px 0;
 }

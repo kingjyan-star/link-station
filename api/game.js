@@ -243,6 +243,7 @@ app.post('/api/create-room', async (req, res) => {
     selections: new Map(),
     gameState: 'waiting', // waiting, linking, completed
     matchResult: null,
+    returnedToWaiting: new Set(), // Track which users have returned to waiting room after results
     masterId: userId,
     createdAt: new Date().toISOString(),
     lastActivity: Date.now() // Track room activity to prevent deletion during active games
@@ -515,6 +516,14 @@ app.post('/api/start-game', async (req, res) => {
     return res.status(403).json({ success: false, message: '방장만 게임을 시작할 수 있습니다.' });
   }
   
+  // Check if room is in waiting state (all users must be back from results)
+  if (room.gameState !== 'waiting') {
+    return res.status(400).json({ 
+      success: false, 
+      message: '모든 사용자가 대기실로 돌아올 때까지 기다려주세요.' 
+    });
+  }
+  
   // Check minimum attenders
   const attenders = Array.from(room.users.values()).filter(user => (user.role || 'attender') === 'attender');
   if (attenders.length < 2) {
@@ -525,6 +534,12 @@ app.post('/api/start-game', async (req, res) => {
   room.gameState = 'linking';
   room.selections.clear();
   room.matchResult = null;
+  // Clear returnedToWaiting tracking for new game
+  if (room.returnedToWaiting) {
+    room.returnedToWaiting.clear();
+  } else {
+    room.returnedToWaiting = new Set();
+  }
   room.lastActivity = Date.now(); // Prevent room deletion during game
   
   console.log(`Game started in room: ${room.roomName}`);
@@ -850,16 +865,37 @@ app.post('/api/return-to-waiting', async (req, res) => {
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
   }
   
-  // Reset game state to waiting
-  room.gameState = 'waiting';
-  room.selections.clear();
-  room.matchResult = null;
-  room.lastActivity = Date.now();
+  // Initialize returnedToWaiting Set if it doesn't exist (for rooms created before this update)
+  if (!room.returnedToWaiting) {
+    room.returnedToWaiting = new Set();
+  }
   
-  console.log(`🔄 Room ${room.roomName} returned to waiting state`);
+  // Mark this user as returned to waiting room
+  room.returnedToWaiting.add(userId);
+  
+  // Get all attenders (users who need to return)
+  const attenders = Array.from(room.users.values()).filter(user => (user.role || 'attender') === 'attender');
+  const allReturned = attenders.every(user => room.returnedToWaiting.has(user.id));
+  
+  // Only set gameState to 'waiting' when ALL attenders have returned
+  if (allReturned) {
+    room.gameState = 'waiting';
+    room.selections.clear();
+    room.matchResult = null;
+    console.log(`🔄 Room ${room.roomName} - All users returned to waiting state`);
+  } else {
+    console.log(`🔄 Room ${room.roomName} - User returned, waiting for others (${room.returnedToWaiting.size}/${attenders.length})`);
+  }
+  
+  room.lastActivity = Date.now();
   await storage.saveRoom(room);
   
-  res.json({ success: true });
+  res.json({ 
+    success: true,
+    allReturned,
+    returnedCount: room.returnedToWaiting.size,
+    totalAttenders: attenders.length
+  });
 });
 
 // Get room status
@@ -871,12 +907,18 @@ app.get('/api/room/:roomId', async (req, res) => {
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
   }
   
-  // Add voting status, master status, and role to users
+  // Initialize returnedToWaiting Set if it doesn't exist (for rooms created before this update)
+  if (!room.returnedToWaiting) {
+    room.returnedToWaiting = new Set();
+  }
+  
+  // Add voting status, master status, role, and returned status to users
   const usersWithVotingStatus = Array.from(room.users.values()).map(user => ({
     ...user,
     hasVoted: room.selections.has(user.id),
     isMaster: user.id === room.masterId,
-    role: user.role || 'attender' // Default to attender if no role set
+    role: user.role || 'attender', // Default to attender if no role set
+    hasReturnedToWaiting: room.returnedToWaiting.has(user.id) // Track if user returned from results
   }));
   
   console.log(`📊 Room status request for ${room.roomName}:`);
