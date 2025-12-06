@@ -61,6 +61,71 @@ function App() {
     };
   }, []);
 
+  // Free username when tab closes (but not when tab goes to background)
+  useEffect(() => {
+    if (!username) return; // No username = nothing to clean up
+    
+    const freeUsername = () => {
+      // Use sendBeacon for reliable delivery during page unload
+      // sendBeacon requires Blob or FormData with proper Content-Type
+      if (navigator.sendBeacon) {
+        try {
+          const blob = new Blob([JSON.stringify({ username })], {
+            type: 'application/json'
+          });
+          const success = navigator.sendBeacon(
+            `${API_URL}/api/remove-user`,
+            blob
+          );
+          if (success) {
+            console.log(`🔓 Username "${username}" freed on tab close`);
+          } else {
+            console.warn('Failed to send beacon - username may remain locked until timeout');
+          }
+        } catch (error) {
+          console.error('Error freeing username on tab close:', error);
+        }
+      } else {
+        // Fallback for browsers that don't support sendBeacon
+        // Use synchronous XMLHttpRequest (blocking, but only on unload)
+        try {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', `${API_URL}/api/remove-user`, false); // false = synchronous
+          xhr.setRequestHeader('Content-Type', 'application/json');
+          xhr.send(JSON.stringify({ username }));
+        } catch (error) {
+          console.error('Error freeing username (fallback):', error);
+        }
+      }
+    };
+    
+    const handleBeforeUnload = () => {
+      // Free username when tab is closing
+      freeUsername();
+    };
+    
+    const handlePageHide = (event) => {
+      // pagehide is more reliable on mobile browsers
+      if (event.persisted) {
+        // Page is being cached (not actually closed) - don't free username
+        console.log('📄 Page cached (back/forward navigation), keeping username');
+        return;
+      }
+      // Page is actually unloading - free username
+      freeUsername();
+    };
+    
+    // Add event listeners
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
+    
+    return () => {
+      // Cleanup event listeners
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, [username]);
+
   // Check URL parameters for QR code access
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
