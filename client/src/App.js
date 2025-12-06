@@ -47,6 +47,7 @@ function App() {
   const pollingInterval = useRef(null);
   const heartbeatInterval = useRef(null);
   const warningInterval = useRef(null);
+  const isLeavingRoom = useRef(false); // Flag to prevent "kicked" alert when user leaves voluntarily
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -231,9 +232,14 @@ function App() {
         // Check if current user is still in the room
         const currentUserInRoom = data.room.users.find(user => user.id === userId);
         if (!currentUserInRoom) {
-          // User has been kicked or removed (unexpected event - show alert)
-          console.log('❌ User not in room, redirecting...');
-          alert('⚠️ 방장에 의해 추방되었습니다.');
+          // User has been kicked or removed
+          // Only show alert if user didn't leave voluntarily
+          if (!isLeavingRoom.current) {
+            console.log('❌ User not in room (kicked), redirecting...');
+            alert('⚠️ 방장에 의해 추방되었습니다.');
+          } else {
+            console.log('✅ User left voluntarily, no alert needed');
+          }
           setRoomId('');
           setUserId('');
           setUsers([]);
@@ -245,6 +251,7 @@ function App() {
           setHasVoted(false);
           stopPolling();
           stopWarningCheck();
+          isLeavingRoom.current = false; // Reset flag
           setCurrentState('makeOrJoinRoom'); // Keep username, go to makeOrJoinRoom
           return;
         }
@@ -289,8 +296,11 @@ function App() {
         // Check if current user is still in the room
         const currentUserInRoom = data.room.users.find(user => user.id === userId);
         if (!currentUserInRoom) {
-          // User has been kicked or removed (unexpected event - show alert)
-          alert('⚠️ 방장에 의해 추방되었습니다.');
+          // User has been kicked or removed
+          // Only show alert if user didn't leave voluntarily
+          if (!isLeavingRoom.current) {
+            alert('⚠️ 방장에 의해 추방되었습니다.');
+          }
           setRoomId('');
           setUserId('');
           setUsers([]);
@@ -298,6 +308,7 @@ function App() {
           setRoomData(null);
           stopPolling();
           stopWarningCheck();
+          isLeavingRoom.current = false; // Reset flag
           setCurrentState('makeOrJoinRoom'); // Keep username, go to makeOrJoinRoom
           return;
         }
@@ -776,6 +787,13 @@ function App() {
   };
 
   const handleLeaveRoom = async () => {
+    // Set flag to prevent "kicked" alert when user leaves voluntarily
+    isLeavingRoom.current = true;
+    
+    // Stop polling FIRST to prevent race condition with alert
+    stopPolling();
+    stopWarningCheck();
+    
     // Remove user from room via API
     try {
       if (roomId && userId) {
@@ -799,7 +817,6 @@ function App() {
     setUnmatched([]);
     setSelectedUser(null);
     setHasVoted(false);
-    stopPolling();
     
     // Go back to makeOrJoinRoom state (user keeps their username)
     setCurrentState('makeOrJoinRoom');
@@ -1195,10 +1212,15 @@ function App() {
                 <span className="user-nickname">{user.displayName || user.nickname}</span>
                 {user.id === userId && <span className="you-badge">나</span>}
                 {user.isMaster && <span className="master-badge">방장</span>}
+                {/* Show badges to help master identify who has returned */}
                 {gameState === 'completed' && !user.hasReturnedToWaiting && (
                   <span className="viewing-results-badge" title="결과 화면을 보고 있습니다">결과 확인 중</span>
                 )}
                 {gameState === 'completed' && user.hasReturnedToWaiting && (
+                  <span className="returned-badge" title="대기실로 돌아왔습니다">대기실</span>
+                )}
+                {/* Also show "대기실" badge when gameState is waiting but user just returned (helps with visibility) */}
+                {gameState === 'waiting' && user.hasReturnedToWaiting && (
                   <span className="returned-badge" title="대기실로 돌아왔습니다">대기실</span>
                 )}
               </div>
