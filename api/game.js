@@ -1033,4 +1033,118 @@ app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'API is running' });
 });
 
+// Manual cleanup endpoint (for debugging/admin use)
+// This allows manual cleanup of stale usernames and rooms
+// SECURITY: Requires ADMIN_SECRET_KEY environment variable to prevent unauthorized access
+app.post('/api/manual-cleanup', async (req, res) => {
+  const { username, roomId, forceAll, secretKey } = req.body;
+  
+  // Check secret key (set in Vercel environment variables)
+  const ADMIN_SECRET_KEY = process.env.ADMIN_SECRET_KEY;
+  if (!ADMIN_SECRET_KEY) {
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Admin cleanup is not configured' 
+    });
+  }
+  
+  if (secretKey !== ADMIN_SECRET_KEY) {
+    return res.status(403).json({ 
+      success: false, 
+      message: 'Unauthorized: Invalid secret key' 
+    });
+  }
+  
+  try {
+    if (forceAll) {
+      // Force cleanup all inactive users and empty rooms
+      await cleanupInactiveUsersAndRooms();
+      const now = Date.now();
+      await cleanupEmptyRooms(now);
+      return res.json({ 
+        success: true, 
+        message: 'All inactive users and empty rooms cleaned up',
+        timestamp: Date.now()
+      });
+    }
+    
+    if (username) {
+      // Delete specific username
+      const userData = await storage.getActiveUser(username);
+      if (userData) {
+        await storage.deleteActiveUser(username);
+        
+        // Also remove from room if user is in a room
+        if (userData.roomId) {
+          const room = await storage.getRoomById(userData.roomId);
+          if (room) {
+            room.users.delete(userData.userId);
+            room.selections.delete(userData.userId);
+            
+            // If user was master, assign new master
+            if (room.masterId === userData.userId && room.users.size > 0) {
+              const newMaster = Array.from(room.users.values())[0];
+              room.masterId = newMaster.id;
+              newMaster.isMaster = true;
+              room.users.set(newMaster.id, newMaster);
+            }
+            
+            // Delete room if empty
+            if (room.users.size === 0) {
+              await storage.deleteRoom(userData.roomId);
+            } else {
+              await storage.saveRoom(room);
+            }
+          }
+        }
+        
+        return res.json({ 
+          success: true, 
+          message: `Username "${username}" has been manually removed`,
+          timestamp: Date.now()
+        });
+      } else {
+        return res.json({ 
+          success: false, 
+          message: `Username "${username}" not found in active users`
+        });
+      }
+    }
+    
+    if (roomId) {
+      // Delete specific room
+      const room = await storage.getRoomById(roomId);
+      if (room) {
+        // Delete all users in the room
+        for (const user of room.users.values()) {
+          await storage.deleteActiveUser(user.username);
+        }
+        await storage.deleteRoom(roomId);
+        return res.json({ 
+          success: true, 
+          message: `Room "${room.roomName}" has been manually deleted`,
+          timestamp: Date.now()
+        });
+      } else {
+        return res.json({ 
+          success: false, 
+          message: `Room with ID "${roomId}" not found`
+        });
+      }
+    }
+    
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Please provide username, roomId, or set forceAll=true'
+    });
+  } catch (error) {
+    console.error('Manual cleanup error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Error during manual cleanup',
+      error: error.message
+    });
+  }
+});
+
 module.exports = app;

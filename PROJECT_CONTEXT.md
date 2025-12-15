@@ -280,6 +280,18 @@ link-station/
 
 ---
 
+#### `POST /api/manual-cleanup`
+- **Purpose**: **Admin-only** manual cleanup of stale usernames and rooms (for debugging/maintenance)
+- **Security**: Requires `secretKey` in request body to match `process.env.ADMIN_SECRET_KEY`
+- **Body Options**:
+  - `{ username, secretKey }` → Remove a specific active username and detach it from its room
+  - `{ roomId, secretKey }` → Delete a specific room and all its users from `activeUsers`
+  - `{ forceAll: true, secretKey }` → Run full inactive-user and empty-room cleanup immediately
+- **Response**: `{ success, message, timestamp? }`
+- **Notes**:
+  - Intended for the owner via browser console or curl
+  - Returns `403` if `secretKey` is invalid, `500` if `ADMIN_SECRET_KEY` is not configured
+
 ## 🎯 Key Features & Implementation
 
 ### Real-time Updates (Polling-based)
@@ -579,6 +591,31 @@ link-station/
 - ✅ Deployment-ready instructions for adding Upstash Redis
 
 **Status**: ✅ COMPLETED - Shared storage live in production
+
+### Session 15b: Admin Cleanup & Tab-Close Username Freeing (December 2025 - COMPLETED)
+**Focus**: Give the owner a safe manual cleanup tool and improve username reuse after tab close
+
+**Changes Made**:
+1. **Admin-Only Manual Cleanup Endpoint**:
+   - Added `POST /api/manual-cleanup` in `api/game.js`
+   - Supports three modes:
+     - Remove a single username from `activeUsers` (and from its room if present)
+     - Delete a specific room and all its users
+     - Force-run full inactive-user and empty-room cleanup
+   - Secured via `ADMIN_SECRET_KEY` environment variable; requests without the correct `secretKey` are rejected with `403`
+   - Intended usage: Owner calls it from browser console or command line for debugging
+
+2. **Immediate Username Freeing on Tab Close**:
+   - Frontend (`client/src/App.js`) now listens to `beforeunload` and `pagehide`
+   - Uses `navigator.sendBeacon()` to call `/api/remove-user` when a tab is truly closing
+   - Keeps usernames locked when tabs are merely in the background (heartbeat keeps them alive)
+
+**Benefits**:
+- ✅ Owner can clean up stuck usernames/rooms on demand without exposing this to normal users
+- ✅ Usernames become reusable immediately after the browser tab is closed
+- ✅ Background tabs remain safe and keep their usernames reserved
+
+**Status**: ✅ COMPLETED - Admin tools and tab-close behavior are stable
 
 ---
 

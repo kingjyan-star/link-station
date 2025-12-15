@@ -129,12 +129,14 @@ Vercel automatically detects changes and redeploys.
 | `UPSTASH_REDIS_KV_URL` | Dashboard convenience URL (optional) |
 | `UPSTASH_REDIS_REDIS_URL` | Redis protocol URL (optional for future TCP clients) |
 | `UPSTASH_REDIS_KV_REST_API_READ_ONLY_TOKEN` | Read-only token (optional) |
+| `ADMIN_SECRET_KEY` | Secret used to secure the admin-only `/api/manual-cleanup` endpoint (known only to the owner) |
 
 **Setup Steps**
 1. In Vercel dashboard → Storage → Upstash Redis → `Connect Project`.
 2. Select the `link-station` project and enable **Development + Preview + Production**.
 3. Keep the default prefix (e.g., `UPSTASH_REDIS`) so Vercel injects the variables automatically.
 4. Redeploy so serverless functions pick up the new environment variables.
+5. Manually add `ADMIN_SECRET_KEY` under **Project → Settings → Environment Variables** with a strong secret (e.g. `my-secret-cleanup-key-2025`).
 
 > **Local development**: When these env vars are missing, `api/storage.js` automatically falls back to in-memory Maps so you can keep iterating without Redis.
 

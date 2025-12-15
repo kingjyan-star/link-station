@@ -15,7 +15,7 @@
 
 ## ✅ **RECENT IMPROVEMENTS - SUCCESSFULLY IMPLEMENTED**
 
-### **Session 15: Shared Redis State & Stability** (November 2025 - Latest)
+### **Session 15: Shared Redis State & Stability** (November 2025)
 - **Problem Solved**: Rooms/users stored per-instance causing phantom deletions & forced logouts
 - **Solution**: Integrated Upstash Redis + new `api/storage.js` layer so every serverless instance shares the same state
 - **Highlights**:
@@ -26,6 +26,20 @@
   - ✅ No more room disappearing/reappearing when instances change
   - ✅ User sessions survive instance switching (no surprise logouts)
   - ✅ Deployment-ready instructions for Upstash (production) with local memory fallback
+
+### **Session 15b: Admin Cleanup & Tab-Close Username Freeing** (December 2025 - Latest)
+- **Problem Solved**: Stuck usernames/rooms in storage and usernames staying locked after tab close
+- **Solution**:
+  - Added **admin-only** `POST /api/manual-cleanup` endpoint secured with `ADMIN_SECRET_KEY`
+  - Owner can:
+    - Remove a single active username (and detach it from its room)
+    - Delete a specific room and all its users
+    - Force-run full inactive-user + empty-room cleanup on demand
+  - Frontend now uses `beforeunload`/`pagehide` + `navigator.sendBeacon()` to call `/api/remove-user` when a tab truly closes
+- **Benefits**:
+  - ✅ Owner-only manual cleanup tool (not exposed to normal users)
+  - ✅ Usernames become reusable immediately after closing the browser tab
+  - ✅ Background tabs remain safe (heartbeat keeps usernames reserved)
 
 ### **Session 14: Warning System & Room Management** (November 2025)
 - **Problems Solved**: 
@@ -79,6 +93,7 @@ I'm working on **Link Station**, a multi-device real-time matching game where us
 - `UPSTASH_REDIS_KV_URL` (Upstash dashboard convenience)
 - `UPSTASH_REDIS_REDIS_URL`
 - `UPSTASH_REDIS_KV_REST_API_READ_ONLY_TOKEN` (optional for future read-only ops)
+- `ADMIN_SECRET_KEY` (required to access `/api/manual-cleanup`; shared only with owner)
 > For local development without these values, the backend automatically falls back to in-memory storage.
 
 ---
