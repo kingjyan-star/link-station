@@ -859,6 +859,11 @@ app.post('/api/change-role', async (req, res) => {
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
   }
   
+  // Block role changes during game (only allow in waiting state)
+  if (room.gameState !== 'waiting') {
+    return res.status(400).json({ success: false, message: '게임 중에는 역할을 변경할 수 없습니다.' });
+  }
+  
   const user = room.users.get(userId);
   if (!user) {
     return res.status(404).json({ success: false, message: '사용자를 찾을 수 없습니다.' });

@@ -507,6 +507,8 @@ function App() {
     if (pollingInterval.current) {
       clearInterval(pollingInterval.current);
     }
+    // Do an immediate poll, then start interval
+    pollRoomStatus();
     pollingInterval.current = setInterval(pollRoomStatus, 2000);
   }, [pollRoomStatus]);
 
@@ -598,6 +600,8 @@ function App() {
     if (pollingInterval.current) {
       clearInterval(pollingInterval.current);
     }
+    // Do an immediate poll, then start interval
+    pollWaitingRoomStatus();
     pollingInterval.current = setInterval(pollWaitingRoomStatus, 2000);
   }, [pollWaitingRoomStatus]);
 
