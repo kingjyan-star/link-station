@@ -341,6 +341,44 @@ async function listAdminSessions() {
   return sessions;
 }
 
+// ---------- Admin action markers (for alerts) ----------
+
+async function markUserKickedByAdmin(username) {
+  if (!username) return;
+  if (!REDIS_ENABLED) {
+    memoryStore.userKicked.set(username, Date.now());
+    return;
+  }
+  await redisRequest('setex', [USER_KICKED_KEY(username), USER_KICKED_TTL_SECONDS, '1'], { method: 'POST' });
+}
+
+async function wasUserKickedByAdmin(username) {
+  if (!username) return false;
+  if (!REDIS_ENABLED) {
+    return memoryStore.userKicked.has(username);
+  }
+  const result = await redisRequest('get', [USER_KICKED_KEY(username)]);
+  return Boolean(result);
+}
+
+async function markRoomDeletedByAdmin(roomId) {
+  if (!roomId) return;
+  if (!REDIS_ENABLED) {
+    memoryStore.roomDeletedByAdmin.set(roomId, Date.now());
+    return;
+  }
+  await redisRequest('setex', [ROOM_DELETED_KEY(roomId), ROOM_DELETED_TTL_SECONDS, '1'], { method: 'POST' });
+}
+
+async function wasRoomDeletedByAdmin(roomId) {
+  if (!roomId) return false;
+  if (!REDIS_ENABLED) {
+    return memoryStore.roomDeletedByAdmin.has(roomId);
+  }
+  const result = await redisRequest('get', [ROOM_DELETED_KEY(roomId)]);
+  return Boolean(result);
+}
+
 module.exports = {
   REDIS_ENABLED,
   getRoomById,
@@ -364,6 +402,10 @@ module.exports = {
   isAdminTokenValid,
   deleteAdminToken,
   getAdminTokenTtlSeconds,
-  listAdminSessions
+  listAdminSessions,
+  markUserKickedByAdmin,
+  wasUserKickedByAdmin,
+  markRoomDeletedByAdmin,
+  wasRoomDeletedByAdmin
 };
 
