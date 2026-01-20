@@ -399,8 +399,41 @@ function App() {
     console.log('🔄 Polling room status...', { roomId, currentState, userId, hasVoted });
     
     try {
-      const response = await fetch(`${API_URL}/api/room/${roomId}`);
+      const response = await fetch(`${API_URL}/api/room/${roomId}?username=${encodeURIComponent(username)}`);
       const data = await response.json();
+      
+      // Handle room not found (deleted or user kicked)
+      if (!data.success) {
+        console.log('❌ Room not found or access denied', data);
+        if (!isLeavingRoom.current) {
+          if (data.kickedByAdmin && data.kickedByAdmin.includes(username)) {
+            alert('⚠️ 관리자에 의해 추방되었습니다.');
+            setUsername('');
+            setCurrentState('registerName');
+          } else if (data.roomDeletedByAdmin) {
+            alert('⚠️ 관리자에 의해 방이 삭제되었습니다.');
+            setUsername('');
+            setCurrentState('registerName');
+          } else {
+            // Room was deleted normally (e.g., all users left)
+            alert('⚠️ 방이 삭제되었습니다.');
+            setCurrentState('makeOrJoinRoom');
+          }
+        }
+        setRoomId('');
+        setUserId('');
+        setUsers([]);
+        setIsMaster(false);
+        setRoomData(null);
+        setMatches([]);
+        setUnmatched([]);
+        setSelectedUser(null);
+        setHasVoted(false);
+        stopPolling();
+        stopWarningCheck();
+        isLeavingRoom.current = false;
+        return;
+      }
       
       if (data.success && data.room) {
         console.log('📊 Polling response:', {
@@ -516,8 +549,37 @@ function App() {
     if (!roomId) return;
     
     try {
-      const response = await fetch(`${API_URL}/api/room/${roomId}`);
+      const response = await fetch(`${API_URL}/api/room/${roomId}?username=${encodeURIComponent(username)}`);
       const data = await response.json();
+      
+      // Handle room not found (deleted or user kicked)
+      if (!data.success) {
+        console.log('❌ Room not found or access denied', data);
+        if (!isLeavingRoom.current) {
+          if (data.kickedByAdmin && data.kickedByAdmin.includes(username)) {
+            alert('⚠️ 관리자에 의해 추방되었습니다.');
+            setUsername('');
+            setCurrentState('registerName');
+          } else if (data.roomDeletedByAdmin) {
+            alert('⚠️ 관리자에 의해 방이 삭제되었습니다.');
+            setUsername('');
+            setCurrentState('registerName');
+          } else {
+            // Room was deleted normally
+            alert('⚠️ 방이 삭제되었습니다.');
+            setCurrentState('makeOrJoinRoom');
+          }
+        }
+        setRoomId('');
+        setUserId('');
+        setUsers([]);
+        setIsMaster(false);
+        setRoomData(null);
+        stopPolling();
+        stopWarningCheck();
+        isLeavingRoom.current = false;
+        return;
+      }
       
       if (data.success && data.room) {
         // Check if room was deleted by admin

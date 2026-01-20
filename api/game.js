@@ -945,15 +945,19 @@ app.post('/api/return-to-waiting', async (req, res) => {
 // Get room status
 app.get('/api/room/:roomId', async (req, res) => {
   const { roomId } = req.params;
+  const { username } = req.query; // Get requesting user's username for admin kick check
   const room = await storage.getRoomById(roomId);
   
   if (!room) {
     // Check if room was deleted by admin
     const wasDeletedByAdmin = await storage.wasRoomDeletedByAdmin(roomId);
-    return res.status(404).json({ 
+    // Also check if the requesting user was kicked by admin
+    const wasKickedByAdmin = username ? await storage.wasUserKickedByAdmin(username) : false;
+    return res.json({ 
       success: false, 
       message: '방을 찾을 수 없습니다.',
-      deletedByAdmin: wasDeletedByAdmin
+      roomDeletedByAdmin: wasDeletedByAdmin,
+      kickedByAdmin: wasKickedByAdmin ? [username] : undefined
     });
   }
   
@@ -977,11 +981,17 @@ app.get('/api/room/:roomId', async (req, res) => {
   console.log(`   Has match result: ${!!room.matchResult}`);
   console.log(`   Users voted: ${Array.from(room.users.values()).filter(u => room.selections.has(u.id)).length}/${room.users.size}`);
   
-  // Check if any users were kicked by admin (for alerts)
+  // Check if requesting user was kicked by admin (user not in room but was kicked)
   const kickedUsers = [];
+  if (username && await storage.wasUserKickedByAdmin(username)) {
+    kickedUsers.push(username);
+  }
+  // Also check users still in room (edge case)
   for (const user of usersWithVotingStatus) {
     if (await storage.wasUserKickedByAdmin(user.username)) {
-      kickedUsers.push(user.username);
+      if (!kickedUsers.includes(user.username)) {
+        kickedUsers.push(user.username);
+      }
     }
   }
   
