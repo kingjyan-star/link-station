@@ -182,7 +182,7 @@ app.post('/api/check-username', async (req, res) => {
   }
 
   if (username.trim().toLowerCase() === ADMIN_USERNAME) {
-    return res.json({ duplicate: true, available: false, reserved: true });
+    return res.json({ duplicate: false, available: true, reserved: true });
   }
   
   const userData = await storage.getActiveUser(username.trim());
@@ -1205,6 +1205,7 @@ app.post('/api/admin-status', async (req, res) => {
   if (!token) return;
   
   try {
+    const adminSessions = await storage.listAdminSessions();
     const allRooms = [];
     const allRoomIds = await storage.listRoomIds();
     for (const roomId of allRoomIds) {
@@ -1270,7 +1271,10 @@ app.post('/api/admin-status', async (req, res) => {
     return res.json({
       success: true,
       roomCounts,
-      userCounts
+      userCounts,
+      adminSessions: {
+        total: adminSessions.length
+      }
     });
   } catch (error) {
     console.error('Admin status error:', error);
@@ -1540,6 +1544,33 @@ app.post('/api/admin-change-password', async (req, res) => {
     success: true, 
     message: '비밀번호가 변경되었습니다.' 
   });
+});
+
+// Get admin sessions list
+app.get('/api/admin-sessions', async (req, res) => {
+  const token = await requireAdminToken(req, res);
+  if (!token) return;
+
+  const sessions = await storage.listAdminSessions();
+  return res.json({
+    success: true,
+    sessions,
+    total: sessions.length
+  });
+});
+
+// Kick admin session (revoke token)
+app.post('/api/admin-kick-session', async (req, res) => {
+  const { token: targetToken } = req.body;
+  const token = await requireAdminToken(req, res);
+  if (!token) return;
+
+  if (!targetToken) {
+    return res.status(400).json({ success: false, message: '토큰이 필요합니다.' });
+  }
+
+  await storage.deleteAdminToken(targetToken);
+  return res.json({ success: true, message: '관리자 세션이 종료되었습니다.' });
 });
 
 // Manual cleanup endpoint (for debugging/admin use)

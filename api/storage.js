@@ -19,6 +19,7 @@ const DELETED_ROOM_TTL_SECONDS = 10 * 60; // retain deletion info for 10 minutes
 const USER_KICKED_KEY = (username) => `user:kicked:${username}`;
 const ROOM_DELETED_KEY = (roomId) => `room:deleted:admin:${roomId}`;
 const ADMIN_TOKEN_KEY = (token) => `app:admin:token:${token}`;
+const ADMIN_SESSION_SET_KEY = 'admin:sessions';
 const USER_KICKED_TTL_SECONDS = 30; // 30 seconds - just enough for polling to detect
 const ROOM_DELETED_TTL_SECONDS = 30; // 30 seconds
 
@@ -270,6 +271,7 @@ async function storeAdminToken(token) {
     memoryStore.adminTokens.set(token, Date.now() + ADMIN_TOKEN_TTL_SECONDS * 1000);
     return;
   }
+  await redisRequest('sadd', [ADMIN_SESSION_SET_KEY, token], { method: 'POST' });
   await redisRequest('setex', [ADMIN_TOKEN_KEY(token), ADMIN_TOKEN_TTL_SECONDS, '1'], { method: 'POST' });
 }
 
@@ -294,6 +296,7 @@ async function deleteAdminToken(token) {
     memoryStore.adminTokens.delete(token);
     return;
   }
+  await redisRequest('srem', [ADMIN_SESSION_SET_KEY, token], { method: 'POST' });
   await redisRequest('del', [ADMIN_TOKEN_KEY(token)], { method: 'POST' });
 }
 
@@ -310,6 +313,32 @@ async function getAdminTokenTtlSeconds(token) {
     return 0;
   }
   return result;
+}
+
+async function listAdminSessions() {
+  if (!REDIS_ENABLED) {
+    return Array.from(memoryStore.adminTokens.entries())
+      .map(([token, expiresAt]) => ({
+        token,
+        remainingSeconds: Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000))
+      }))
+      .filter((session) => session.remainingSeconds > 0);
+  }
+
+  const tokens = await redisRequest('smembers', [ADMIN_SESSION_SET_KEY]);
+  if (!tokens) return [];
+  const normalized = Array.isArray(tokens) ? tokens : [tokens];
+  const sessions = [];
+
+  for (const token of normalized) {
+    const ttl = await redisRequest('ttl', [ADMIN_TOKEN_KEY(token)]);
+    if (typeof ttl !== 'number' || ttl <= 0) {
+      await redisRequest('srem', [ADMIN_SESSION_SET_KEY, token], { method: 'POST' });
+      continue;
+    }
+    sessions.push({ token, remainingSeconds: ttl });
+  }
+  return sessions;
 }
 
 module.exports = {
@@ -334,6 +363,7 @@ module.exports = {
   storeAdminToken,
   isAdminTokenValid,
   deleteAdminToken,
-  getAdminTokenTtlSeconds
+  getAdminTokenTtlSeconds,
+  listAdminSessions
 };
 

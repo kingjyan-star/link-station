@@ -21,6 +21,7 @@ function App() {
   const [adminStatusData, setAdminStatusData] = useState(null);
   const [adminUsersList, setAdminUsersList] = useState([]);
   const [adminRoomsList, setAdminRoomsList] = useState([]);
+  const [adminSessions, setAdminSessions] = useState(null);
   const [adminPasswordStep, setAdminPasswordStep] = useState(1); // 1 = second password, 2 = new password
   const [roomName, setRoomName] = useState('');
   const [roomPassword, setRoomPassword] = useState('');
@@ -247,7 +248,7 @@ function App() {
         setRoomData(null);
         setMatches([]);
         setUnmatched([]);
-        setSelectedUser(null);
+      setSelectedUser(null);
         setHasVoted(false);
         stopPolling();
         stopWarningCheck();
@@ -262,8 +263,8 @@ function App() {
         setUsers([]);
         setIsMaster(false);
         setRoomData(null);
-        setMatches([]);
-        setUnmatched([]);
+      setMatches([]);
+      setUnmatched([]);
         setSelectedUser(null);
         setHasVoted(false);
         stopPolling();
@@ -308,6 +309,7 @@ function App() {
     setAdminStatusData(null);
     setAdminUsersList([]);
     setAdminRoomsList([]);
+    setAdminSessions(null);
     setCurrentState('registerName');
   }, []);
 
@@ -338,7 +340,7 @@ function App() {
       if (data.warning) {
         setShowAdminWarning(true);
         setAdminTimeLeft(data.remainingSeconds);
-      } else {
+    } else {
         setShowAdminWarning(false);
       }
     } catch (error) {
@@ -434,12 +436,12 @@ function App() {
           }
           setRoomId('');
           setUserId('');
-          setUsers([]);
+    setUsers([]);
           setIsMaster(false);
           setRoomData(null);
-          setMatches([]);
-          setUnmatched([]);
-          setSelectedUser(null);
+    setMatches([]);
+    setUnmatched([]);
+    setSelectedUser(null);
           setHasVoted(false);
           stopPolling();
           stopWarningCheck();
@@ -716,17 +718,22 @@ function App() {
 
   // API functions
   const checkUsernameDuplication = async (name) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
     try {
       const response = await fetch(`${API_URL}/api/check-username`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: name })
+        body: JSON.stringify({ username: name }),
+        signal: controller.signal
       });
       const data = await response.json();
       return data.duplicate;
     } catch (error) {
       console.error('Error checking username:', error);
       return false;
+    } finally {
+      clearTimeout(timeoutId);
     }
   };
 
@@ -1122,7 +1129,7 @@ function App() {
     setRoomData(null);
     setMatches([]);
     setUnmatched([]);
-    setSelectedUser(null);
+      setSelectedUser(null);
     setHasVoted(false);
     
     // Go back to makeOrJoinRoom state (user keeps their username)
@@ -1131,8 +1138,8 @@ function App() {
 
   const handleReturnToWaitingRoom = async () => {
     // Return to waiting room after results - keep room alive
-    setMatches([]);
-    setUnmatched([]);
+      setMatches([]);
+      setUnmatched([]);
     setSelectedUser(null);
     setHasVoted(false);
     setGameState('waiting'); // Reset game state
@@ -1260,6 +1267,62 @@ function App() {
     } catch (error) {
       console.error('Admin status error:', error);
       setError('상태 조회 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleAdminSessions = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/admin-sessions`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken }
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setAdminSessions(data.sessions || []);
+      } else {
+        if (response.status === 401) {
+          handleAdminAuthFailure(data.message);
+          return;
+        }
+        setError(data.message || '관리자 목록 조회에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Admin sessions error:', error);
+      setError('관리자 목록 조회 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleAdminKickSession = async (targetToken) => {
+    if (!window.confirm('이 관리자 세션을 종료하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/api/admin-kick-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken },
+        body: JSON.stringify({ token: targetToken })
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        if (targetToken === adminToken) {
+          handleAdminAuthFailure('관리자 세션이 종료되었습니다.');
+          return;
+        }
+        await handleAdminSessions();
+        setSuccess(data.message);
+      } else {
+        if (response.status === 401) {
+          handleAdminAuthFailure(data.message);
+          return;
+        }
+        setError(data.message || '관리자 세션 종료에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Admin kick session error:', error);
+      setError('관리자 세션 종료 중 오류가 발생했습니다.');
     }
   };
 
@@ -2108,6 +2171,9 @@ function App() {
       handleAdminStatus();
       return <div>로딩 중...</div>;
     }
+    if (adminSessions === null) {
+      handleAdminSessions();
+    }
 
     if (adminStatusFilter === 'users' && adminUserFilter) {
       // Show users list
@@ -2306,6 +2372,51 @@ function App() {
               게임 중: {adminStatusData.userCounts.playing} | 
               결과: {adminStatusData.userCounts.result}
             </p>
+          </div>
+          
+          <div style={{ 
+            padding: '20px', 
+            background: '#f3f4f6', 
+            borderRadius: '10px',
+            border: '2px solid #e5e7eb'
+          }}>
+            <h3>관리자: {adminSessions ? adminSessions.length : 0}명</h3>
+            {adminSessions === null ? (
+              <p style={{ marginTop: '10px', color: '#666' }}>불러오는 중...</p>
+            ) : (
+              <div style={{ marginTop: '10px' }}>
+                {adminSessions.length === 0 && (
+                  <p style={{ color: '#666' }}>활성 관리자 세션이 없습니다.</p>
+                )}
+                {adminSessions.map((session) => (
+                  <div key={session.token} style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    padding: '8px 0',
+                    borderBottom: '1px solid #e5e7eb',
+                    gap: '10px'
+                  }}>
+                    <div style={{ flex: 1, color: '#374151' }}>
+                      세션 {session.token.slice(0, 6)}… (남은 {session.remainingSeconds}초)
+                    </div>
+                    <button 
+                      onClick={() => handleAdminKickSession(session.token)}
+                      style={{ 
+                        background: '#ef4444', 
+                        color: 'white', 
+                        border: 'none',
+                        padding: '5px 10px',
+                        borderRadius: '5px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      종료
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         
