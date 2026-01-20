@@ -56,6 +56,7 @@ function App() {
   const [roomTimeLeft, setRoomTimeLeft] = useState(0);
   const [showAdminWarning, setShowAdminWarning] = useState(false);
   const [adminTimeLeft, setAdminTimeLeft] = useState(0);
+  const [shutdownStatus, setShutdownStatus] = useState(null);
   
   // Polling
   const pollingInterval = useRef(null);
@@ -293,7 +294,7 @@ function App() {
     setShowRoomWarning(false);
   };
 
-  const clearAdminSession = () => {
+  const clearAdminSession = useCallback(() => {
     setUsername('');
     setAdminPassword('');
     setAdminToken('');
@@ -308,12 +309,12 @@ function App() {
     setAdminUsersList([]);
     setAdminRoomsList([]);
     setCurrentState('registerName');
-  };
+  }, []);
 
-  const handleAdminAuthFailure = (message) => {
+  const handleAdminAuthFailure = useCallback((message) => {
     clearAdminSession();
     setError(message || '관리자 세션이 만료되었습니다. 다시 로그인해주세요.');
-  };
+  }, [clearAdminSession]);
 
   const checkAdminTokenStatus = useCallback(async () => {
     if (!adminToken) return;
@@ -498,7 +499,7 @@ function App() {
     } catch (error) {
       console.error('❌ Error polling room status:', error);
     }
-  }, [roomId, currentState, userId, hasVoted]);
+  }, [roomId, currentState, userId, hasVoted, username]);
 
   const startPolling = useCallback(() => {
     if (pollingInterval.current) {
@@ -589,7 +590,7 @@ function App() {
     } catch (error) {
       console.error('Error polling waiting room status:', error);
     }
-  }, [roomId, userId, startPolling]);
+  }, [roomId, userId, startPolling, username]);
 
   const startWaitingRoomPolling = useCallback(() => {
     if (pollingInterval.current) {
@@ -652,6 +653,28 @@ function App() {
     
     return () => stopPolling();
   }, [currentState, startWaitingRoomPolling, startPolling]);
+
+  useEffect(() => {
+    if (currentState !== 'adminShutdown') return;
+    let isMounted = true;
+
+    const checkStatus = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/admin-shutdown-status`);
+        const data = await response.json();
+        if (isMounted && data.success) {
+          setShutdownStatus(data.isShutdown);
+        }
+      } catch (error) {
+        console.error('Error checking shutdown status:', error);
+      }
+    };
+
+    checkStatus();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentState]);
 
   // Validation functions
   const validateUsername = (name) => {
@@ -856,7 +879,7 @@ function App() {
     }
 
     // Check if admin username
-    if (username.trim() === 'link-station-admin') {
+    if (username.trim().toLowerCase() === 'link-station-admin') {
       setCurrentState('adminPassword');
       setError('');
       return;
@@ -951,7 +974,7 @@ function App() {
       setError(validation.message);
       return;
     }
-    if (username.trim() === 'link-station-admin') {
+    if (username.trim().toLowerCase() === 'link-station-admin') {
       setError('관리자 전용 이름입니다. 다른 이름을 사용해주세요.');
       return;
     }
@@ -2088,7 +2111,7 @@ function App() {
 
     if (adminStatusFilter === 'users' && adminUserFilter) {
       // Show users list
-      return (
+  return (
         <div className="register-name-container" style={{ maxWidth: '800px' }}>
           <div className="register-name-header">
             <h2>사용자 목록</h2>
@@ -2376,23 +2399,6 @@ function App() {
   );
 
   const renderAdminShutdown = () => {
-    const [shutdownStatus, setShutdownStatus] = React.useState(null);
-    
-    React.useEffect(() => {
-      const checkStatus = async () => {
-        try {
-          const response = await fetch(`${API_URL}/api/admin-shutdown-status`);
-          const data = await response.json();
-          if (data.success) {
-            setShutdownStatus(data.isShutdown);
-          }
-        } catch (error) {
-          console.error('Error checking shutdown status:', error);
-        }
-      };
-      checkStatus();
-    }, []);
-    
     return (
       <div className="register-name-container" style={{ maxWidth: '600px' }}>
         <div className="register-name-header">

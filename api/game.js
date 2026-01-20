@@ -181,7 +181,7 @@ app.post('/api/check-username', async (req, res) => {
     return res.json({ duplicate: false });
   }
 
-  if (username.trim() === ADMIN_USERNAME) {
+  if (username.trim().toLowerCase() === ADMIN_USERNAME) {
     return res.json({ duplicate: true, available: false, reserved: true });
   }
   
@@ -225,7 +225,7 @@ app.post('/api/create-room', async (req, res) => {
   const roomNameLower = trimmedRoomName.toLowerCase();
   const trimmedUsername = username ? username.trim() : '';
 
-  if (trimmedUsername === ADMIN_USERNAME) {
+  if (trimmedUsername.toLowerCase() === ADMIN_USERNAME) {
     return res.status(400).json({ success: false, message: '관리자 전용 이름입니다. 다른 이름을 사용해주세요.' });
   }
 
@@ -315,7 +315,7 @@ app.post('/api/join-room', async (req, res) => {
   const trimmedRoomName = roomName.trim();
   const trimmedUsername = username ? username.trim() : '';
 
-  if (trimmedUsername === ADMIN_USERNAME) {
+  if (trimmedUsername.toLowerCase() === ADMIN_USERNAME) {
     return res.status(400).json({ success: false, message: '관리자 전용 이름입니다. 다른 이름을 사용해주세요.' });
   }
   
@@ -425,7 +425,7 @@ app.post('/api/check-password', async (req, res) => {
   
   // Check username duplication
   const trimmedUsername = username ? username.trim() : '';
-  if (trimmedUsername === ADMIN_USERNAME) {
+  if (trimmedUsername.toLowerCase() === ADMIN_USERNAME) {
     return res.status(400).json({ success: false, message: '관리자 전용 이름입니다. 다른 이름을 사용해주세요.' });
   }
   const existingUser = await storage.getActiveUser(trimmedUsername);
@@ -497,7 +497,7 @@ app.post('/api/join-room-qr', async (req, res) => {
   
   // Check username duplication
   const trimmedUsername = username ? username.trim() : '';
-  if (trimmedUsername === ADMIN_USERNAME) {
+  if (trimmedUsername.toLowerCase() === ADMIN_USERNAME) {
     return res.status(400).json({ success: false, message: '관리자 전용 이름입니다. 다른 이름을 사용해주세요.' });
   }
   const existingUser = await storage.getActiveUser(trimmedUsername);
