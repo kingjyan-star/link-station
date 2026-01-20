@@ -1,8 +1,8 @@
 # 🔗 Link Station - Complete Project Context
 
 **Live URL**: https://link-station-pro.vercel.app  
-**Last Updated**: November 2025  
-**Status**: ✅ Active Development - Shared Redis Storage & Warning System Stable
+**Last Updated**: December 2025  
+**Status**: ✅ Active Development - Admin Dashboard & Shared Redis Storage Stable
 
 ---
 
@@ -277,6 +277,69 @@ link-station/
 - **Body**: `{ roomId, userId }`
 - **Response**: `{ success }`
 - **Effect**: Resets gameState to 'waiting', clears selections and matchResult
+
+### Admin Endpoints
+
+#### `POST /api/admin-login`
+- **Purpose**: Verify admin password
+- **Body**: `{ password }`
+- **Response**: `{ success, message }`
+- **Security**: Password verified against Redis-stored password (or `ADMIN_SECRET_KEY` env var)
+
+#### `GET /api/admin-shutdown-status`
+- **Purpose**: Check if app is shutdown
+- **Response**: `{ success, isShutdown }`
+
+#### `POST /api/admin-shutdown`
+- **Purpose**: Toggle app shutdown state
+- **Body**: `{ password, shutdown }`
+- **Response**: `{ success, message, isShutdown }`
+- **Security**: Requires admin password
+
+#### `POST /api/admin-status`
+- **Purpose**: Get room/user counts by type
+- **Body**: `{ password }`
+- **Response**: `{ success, roomCounts: { total, waiting, playing, result }, userCounts: { total, notInRoom, waiting, playing, result } }`
+- **Security**: Requires admin password
+
+#### `POST /api/admin-users`
+- **Purpose**: Get filtered user list
+- **Body**: `{ password, filter }` (filter: 'all', 'notInRoom', 'waiting', 'linking', 'completed')
+- **Response**: `{ success, users: [{ username, roomId, state, roomName, isMaster }] }`
+- **Security**: Requires admin password
+
+#### `POST /api/admin-rooms`
+- **Purpose**: Get filtered room list
+- **Body**: `{ password, filter }` (filter: 'all', 'waiting', 'linking', 'completed')
+- **Response**: `{ success, rooms: [{ id, roomName, gameState, userCount, memberLimit, hasPassword, password, masterId }] }`
+- **Security**: Requires admin password
+
+#### `POST /api/admin-kick-user`
+- **Purpose**: Kick user (admin version)
+- **Body**: `{ password, username }`
+- **Response**: `{ success, message }`
+- **Effect**: Removes user from room, deletes username, marks for admin alert
+- **Security**: Requires admin password
+
+#### `POST /api/admin-delete-room`
+- **Purpose**: Delete room (admin version)
+- **Body**: `{ password, roomId }`
+- **Response**: `{ success, message }`
+- **Effect**: Deletes all users in room, deletes room, marks for admin alert
+- **Security**: Requires admin password
+
+#### `POST /api/admin-cleanup`
+- **Purpose**: Cleanup users/rooms
+- **Body**: `{ password, cleanupType }` (cleanupType: 'users', 'rooms', 'both')
+- **Response**: `{ success, message }`
+- **Security**: Requires admin password
+
+#### `POST /api/admin-change-password`
+- **Purpose**: Change admin password
+- **Body**: `{ password, secondPassword, newPassword }`
+- **Response**: `{ success, message }`
+- **Security**: Requires current password + 2nd password (`"19951025"`)
+- **Effect**: Updates password in Redis (changeable without redeploy)
 
 ---
 
@@ -616,6 +679,91 @@ link-station/
 - ✅ Background tabs remain safe and keep their usernames reserved
 
 **Status**: ✅ COMPLETED - Admin tools and tab-close behavior are stable
+
+### Session 16: Comprehensive Admin Dashboard System (December 2025 - COMPLETED)
+**Focus**: Complete admin interface with status monitoring, cleanup, shutdown control, and password management
+
+**Changes Made**:
+
+1. **Admin Access Flow**:
+   - Username `"link-station-admin"` is reserved for admin UI only (cannot be used to play)
+   - Password verified against `ADMIN_SECRET_KEY` env var (first time) or Redis-stored password (after changes)
+   - Successful login issues a short-lived admin token (used for all admin API calls)
+   - Admin UI shows a warning before the token expires (30-minute inactivity timeout)
+   - Admin logout clears the token and returns to normal login screen
+   - Admin cannot create/join rooms (admin-only UI access)
+   - Shutdown state blocks all users except admin login
+
+2. **Admin Dashboard Features**:
+   - **Current Status**: Real-time counts of rooms/users by type (waiting/playing/result)
+   - Clickable breakdowns → detailed lists with kick/delete buttons
+   - Room password visibility (lock icon click shows password)
+   - User/room filtering by state
+   - **Cleanup**: User cleanup (also cleans empty rooms) or room-only cleanup
+   - **Shutdown/Revive**: Toggle app-wide shutdown state (blocks all room operations)
+   - **Change Password**: 2-step process (2nd password `"19951025"` → new password confirmation)
+
+3. **Backend Admin Endpoints**:
+   - `POST /api/admin-login` - Verify admin password and issue admin token
+   - `POST /api/admin-logout` - Revoke admin token
+   - `GET /api/admin-shutdown-status` - Check shutdown state
+   - `POST /api/admin-shutdown` - Toggle shutdown (requires token)
+   - `POST /api/admin-status` - Get room/user counts by type (requires token)
+   - `POST /api/admin-users` - Get filtered user list (requires token)
+   - `POST /api/admin-rooms` - Get filtered room list (requires token)
+   - `POST /api/admin-kick-user` - Kick user (admin version, requires token)
+   - `POST /api/admin-delete-room` - Delete room (admin version, requires token)
+   - `POST /api/admin-cleanup` - Cleanup users/rooms (requires token)
+   - `POST /api/admin-change-password` - Change admin password (requires token + 2nd password)
+
+4. **Admin Action Alerts**:
+   - Users kicked by admin → "⚠️ 관리자에 의해 추방되었습니다." (clears username, goes to `registerName`)
+   - Rooms deleted by admin → "⚠️ 관리자에 의해 방이 삭제되었습니다." (all users in room see alert)
+   - Admin action markers stored in Redis (30-second TTL) for polling detection
+   - Differentiated from master kicks (master kicks keep username, admin kicks clear it)
+
+5. **Storage Enhancements** (`api/storage.js`):
+   - `getAppShutdown()` / `setAppShutdown()` - Shutdown state in Redis
+   - `getAdminPassword()` / `setAdminPassword()` - Admin password in Redis (falls back to env var)
+   - `markUserKickedByAdmin()` / `wasUserKickedByAdmin()` - Admin kick markers
+   - `markRoomDeletedByAdmin()` / `wasRoomDeletedByAdmin()` - Admin deletion markers
+
+6. **Frontend Admin States**:
+   - `adminPassword` - Password entry screen
+   - `adminDashboard` - Main admin menu
+   - `adminStatus` - Status overview with clickable breakdowns
+   - `adminCleanup` - Cleanup interface
+   - `adminShutdown` - Shutdown/revive controls
+   - `adminChangePassword` - Password change interface
+
+7. **Shutdown Behavior**:
+   - When shutdown: All room creation/joining blocked (including admin)
+   - `registerName` shows shutdown message (except for admin username)
+   - `joinroomwithqr` shows shutdown message
+   - Admin can still access admin UI to revive app
+   - Shutdown state persists across serverless restarts (stored in Redis)
+
+**Files Modified**:
+- `api/game.js` - Added 10 admin endpoints, shutdown checks, admin action markers
+- `api/storage.js` - Added shutdown state, admin password, admin action markers
+- `client/src/App.js` - Added 6 admin states, admin handlers, admin UI components, shutdown checks, admin alert detection
+
+**Security**:
+- Admin password verified on every request (no token system)
+- 2nd password hardcoded: `"19951025"` (for password changes only)
+- Admin password stored in Redis (changeable via UI, initial from `ADMIN_SECRET_KEY` env var)
+- All admin endpoints require password verification
+
+**Benefits**:
+- ✅ Complete admin control panel for monitoring and management
+- ✅ Real-time status visibility (rooms/users by state)
+- ✅ On-demand cleanup without waiting for automatic cleanup
+- ✅ App-wide shutdown capability for maintenance
+- ✅ Secure password management (changeable without redeploy)
+- ✅ Clear user alerts for admin actions (differentiated from master actions)
+- ✅ Admin cannot interfere with normal gameplay (admin-only UI)
+
+**Status**: ✅ COMPLETED - Admin dashboard fully functional and ready for deployment
 
 ---
 

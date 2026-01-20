@@ -8,8 +8,20 @@ const API_URL = process.env.NODE_ENV === 'production'
 
 function App() {
   // State management
-  const [currentState, setCurrentState] = useState('registerName'); // registerName, makeOrJoinRoom, makeroom, joinroom, checkpassword, joinroomwithqr, waitingroom, linking, linkresult
+  const [currentState, setCurrentState] = useState('registerName'); // registerName, makeOrJoinRoom, makeroom, joinroom, checkpassword, joinroomwithqr, waitingroom, linking, linkresult, adminPassword, adminDashboard, adminStatus, adminCleanup, adminShutdown, adminChangePassword
   const [username, setUsername] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [adminToken, setAdminToken] = useState('');
+  const [adminSecondPassword, setAdminSecondPassword] = useState('');
+  const [adminNewPassword, setAdminNewPassword] = useState('');
+  const [adminNewPasswordConfirm, setAdminNewPasswordConfirm] = useState('');
+  const [adminStatusFilter, setAdminStatusFilter] = useState(null); // 'rooms' or 'users'
+  const [adminUserFilter, setAdminUserFilter] = useState(null); // 'all', 'notInRoom', 'waiting', 'playing', 'result'
+  const [adminRoomFilter, setAdminRoomFilter] = useState(null); // 'all', 'waiting', 'playing', 'result'
+  const [adminStatusData, setAdminStatusData] = useState(null);
+  const [adminUsersList, setAdminUsersList] = useState([]);
+  const [adminRoomsList, setAdminRoomsList] = useState([]);
+  const [adminPasswordStep, setAdminPasswordStep] = useState(1); // 1 = second password, 2 = new password
   const [roomName, setRoomName] = useState('');
   const [roomPassword, setRoomPassword] = useState('');
   const [memberLimit, setMemberLimit] = useState(8);
@@ -42,11 +54,14 @@ function App() {
   const [showRoomWarning, setShowRoomWarning] = useState(false);
   const [userTimeLeft, setUserTimeLeft] = useState(0);
   const [roomTimeLeft, setRoomTimeLeft] = useState(0);
+  const [showAdminWarning, setShowAdminWarning] = useState(false);
+  const [adminTimeLeft, setAdminTimeLeft] = useState(0);
   
   // Polling
   const pollingInterval = useRef(null);
   const heartbeatInterval = useRef(null);
   const warningInterval = useRef(null);
+  const adminWarningInterval = useRef(null);
   const isLeavingRoom = useRef(false); // Flag to prevent "kicked" alert when user leaves voluntarily
 
   // Cleanup polling on unmount
@@ -57,6 +72,9 @@ function App() {
       }
       if (heartbeatInterval.current) {
         clearInterval(heartbeatInterval.current);
+      }
+      if (adminWarningInterval.current) {
+        clearInterval(adminWarningInterval.current);
       }
     };
   }, []);
@@ -275,6 +293,102 @@ function App() {
     setShowRoomWarning(false);
   };
 
+  const clearAdminSession = () => {
+    setUsername('');
+    setAdminPassword('');
+    setAdminToken('');
+    setAdminSecondPassword('');
+    setAdminNewPassword('');
+    setAdminNewPasswordConfirm('');
+    setAdminPasswordStep(1);
+    setAdminStatusFilter(null);
+    setAdminUserFilter(null);
+    setAdminRoomFilter(null);
+    setAdminStatusData(null);
+    setAdminUsersList([]);
+    setAdminRoomsList([]);
+    setCurrentState('registerName');
+  };
+
+  const handleAdminAuthFailure = (message) => {
+    clearAdminSession();
+    setError(message || '관리자 세션이 만료되었습니다. 다시 로그인해주세요.');
+  };
+
+  const checkAdminTokenStatus = useCallback(async () => {
+    if (!adminToken) return;
+    if (!currentState.startsWith('admin')) return;
+
+    try {
+      const response = await fetch(`${API_URL}/api/admin-token-status`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken }
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          handleAdminAuthFailure(data.message);
+          return;
+        }
+        return;
+      }
+
+      if (data.warning) {
+        setShowAdminWarning(true);
+        setAdminTimeLeft(data.remainingSeconds);
+      } else {
+        setShowAdminWarning(false);
+      }
+    } catch (error) {
+      console.error('Admin token status error:', error);
+    }
+  }, [adminToken, currentState, handleAdminAuthFailure]);
+
+  const startAdminWarningCheck = useCallback(() => {
+    if (adminWarningInterval.current) {
+      clearInterval(adminWarningInterval.current);
+    }
+    adminWarningInterval.current = setInterval(checkAdminTokenStatus, 10000);
+    checkAdminTokenStatus();
+  }, [checkAdminTokenStatus]);
+
+  const stopAdminWarningCheck = useCallback(() => {
+    if (adminWarningInterval.current) {
+      clearInterval(adminWarningInterval.current);
+      adminWarningInterval.current = null;
+    }
+    setShowAdminWarning(false);
+  }, []);
+
+  const handleKeepAdminAlive = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/admin-keep-alive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken },
+        body: JSON.stringify({ token: adminToken })
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        if (response.status === 401) {
+          handleAdminAuthFailure(data.message);
+        }
+        return;
+      }
+      setShowAdminWarning(false);
+    } catch (error) {
+      console.error('Admin keep-alive error:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (adminToken && currentState.startsWith('admin')) {
+      startAdminWarningCheck();
+      return () => stopAdminWarningCheck();
+    }
+    stopAdminWarningCheck();
+  }, [adminToken, currentState, startAdminWarningCheck, stopAdminWarningCheck]);
+
   // Polling functions
   const pollRoomStatus = useCallback(async () => {
     if (!roomId) return;
@@ -301,7 +415,19 @@ function App() {
           // Only show alert if user didn't leave voluntarily
           if (!isLeavingRoom.current) {
             console.log('❌ User not in room (kicked), redirecting...');
-            alert('⚠️ 방장에 의해 추방되었습니다.');
+            // Check if kicked by admin or room deleted by admin
+            if (data.kickedByAdmin && data.kickedByAdmin.includes(username)) {
+              alert('⚠️ 관리자에 의해 추방되었습니다.');
+              setUsername(''); // Clear username on admin kick
+              setCurrentState('registerName');
+            } else if (data.roomDeletedByAdmin) {
+              alert('⚠️ 관리자에 의해 방이 삭제되었습니다.');
+              setUsername(''); // Clear username when room deleted by admin
+              setCurrentState('registerName');
+            } else {
+              alert('⚠️ 방장에 의해 추방되었습니다.');
+              setCurrentState('makeOrJoinRoom'); // Keep username for master kick
+            }
           } else {
             console.log('✅ User left voluntarily, no alert needed');
           }
@@ -317,7 +443,38 @@ function App() {
           stopPolling();
           stopWarningCheck();
           isLeavingRoom.current = false; // Reset flag
-          setCurrentState('makeOrJoinRoom'); // Keep username, go to makeOrJoinRoom
+          return;
+        }
+        
+        // Check if room was deleted by admin (room doesn't exist in response)
+        if (data.roomDeletedByAdmin) {
+          console.log('❌ Room deleted by admin');
+          alert('⚠️ 관리자에 의해 방이 삭제되었습니다.');
+          setUsername('');
+          setRoomId('');
+          setUserId('');
+          setUsers([]);
+          setIsMaster(false);
+          setRoomData(null);
+          stopPolling();
+          stopWarningCheck();
+          setCurrentState('registerName');
+          return;
+        }
+        
+        // Check if user was kicked by admin (but still in room response - edge case)
+        if (data.kickedByAdmin && data.kickedByAdmin.includes(username)) {
+          console.log('❌ User kicked by admin');
+          alert('⚠️ 관리자에 의해 추방되었습니다.');
+          setUsername('');
+          setRoomId('');
+          setUserId('');
+          setUsers([]);
+          setIsMaster(false);
+          setRoomData(null);
+          stopPolling();
+          stopWarningCheck();
+          setCurrentState('registerName');
           return;
         }
         
@@ -358,13 +515,37 @@ function App() {
       const data = await response.json();
       
       if (data.success && data.room) {
+        // Check if room was deleted by admin
+        if (data.roomDeletedByAdmin) {
+          console.log('❌ Room deleted by admin');
+          alert('⚠️ 관리자에 의해 방이 삭제되었습니다.');
+          setUsername('');
+          setRoomId('');
+          setUserId('');
+          setUsers([]);
+          setIsMaster(false);
+          setRoomData(null);
+          stopPolling();
+          stopWarningCheck();
+          setCurrentState('registerName');
+          return;
+        }
+        
         // Check if current user is still in the room
         const currentUserInRoom = data.room.users.find(user => user.id === userId);
         if (!currentUserInRoom) {
           // User has been kicked or removed
           // Only show alert if user didn't leave voluntarily
           if (!isLeavingRoom.current) {
-            alert('⚠️ 방장에 의해 추방되었습니다.');
+            // Check if kicked by admin
+            if (data.kickedByAdmin && data.kickedByAdmin.includes(username)) {
+              alert('⚠️ 관리자에 의해 추방되었습니다.');
+              setUsername(''); // Clear username on admin kick
+              setCurrentState('registerName');
+            } else {
+              alert('⚠️ 방장에 의해 추방되었습니다.');
+              setCurrentState('makeOrJoinRoom'); // Keep username for master kick
+            }
           }
           setRoomId('');
           setUserId('');
@@ -374,7 +555,22 @@ function App() {
           stopPolling();
           stopWarningCheck();
           isLeavingRoom.current = false; // Reset flag
-          setCurrentState('makeOrJoinRoom'); // Keep username, go to makeOrJoinRoom
+          return;
+        }
+        
+        // Check if user was kicked by admin (but still in room response - edge case)
+        if (data.kickedByAdmin && data.kickedByAdmin.includes(username)) {
+          console.log('❌ User kicked by admin');
+          alert('⚠️ 관리자에 의해 추방되었습니다.');
+          setUsername('');
+          setRoomId('');
+          setUserId('');
+          setUsers([]);
+          setIsMaster(false);
+          setRoomData(null);
+          stopPolling();
+          stopWarningCheck();
+          setCurrentState('registerName');
           return;
         }
         
@@ -528,7 +724,7 @@ function App() {
           if (data.success) {
             setRoomId(data.roomId);
             setUserId(data.userId);
-            setUsers(data.users);
+      setUsers(data.users);
             setIsMaster(true);
             setRoomData(data.roomData);
             setUserRole('attender'); // Initialize as attender
@@ -595,7 +791,7 @@ function App() {
       if (data.success) {
         setRoomId(data.roomId);
         setUserId(data.userId);
-        setUsers(data.users);
+      setUsers(data.users);
         setIsMaster(data.isMaster);
         setRoomData(data.roomData);
         setUserRole('attender'); // Initialize as attender
@@ -641,9 +837,28 @@ function App() {
 
   // Event handlers
   const handleRegisterName = async () => {
+    // Check if app is shutdown (except for admin)
+    try {
+      const shutdownResponse = await fetch(`${API_URL}/api/admin-shutdown-status`);
+      const shutdownData = await shutdownResponse.json();
+      if (shutdownData.success && shutdownData.isShutdown && username !== 'link-station-admin') {
+        setError('앱이 종료되어 게임을 할 수 없습니다.');
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking shutdown status:', error);
+    }
+
     const validation = validateUsername(username);
     if (!validation.valid) {
       setError(validation.message);
+      return;
+    }
+
+    // Check if admin username
+    if (username.trim() === 'link-station-admin') {
+      setCurrentState('adminPassword');
+      setError('');
       return;
     }
 
@@ -736,6 +951,10 @@ function App() {
       setError(validation.message);
       return;
     }
+    if (username.trim() === 'link-station-admin') {
+      setError('관리자 전용 이름입니다. 다른 이름을 사용해주세요.');
+      return;
+    }
 
     const isDuplicate = await checkUsernameDuplication(username);
     if (isDuplicate) {
@@ -765,7 +984,7 @@ function App() {
         // Start polling immediately when game starts
         console.log('🎮 Game started, starting polling...');
         startPolling();
-      } else {
+    } else {
         setError(data.message || '게임 시작에 실패했습니다.');
       }
     } catch (error) {
@@ -927,7 +1146,7 @@ function App() {
       if (data.success) {
         setUserRole(newRole);
         // Update users list to reflect role change
-        setUsers(data.users);
+      setUsers(data.users);
       } else {
         setError(data.message || '역할 변경에 실패했습니다.');
       }
@@ -971,6 +1190,307 @@ function App() {
     handleLeaveRoom();
   };
 
+  // Admin handlers
+  const handleAdminLogin = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/admin-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: adminPassword })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setCurrentState('adminDashboard');
+        setError('');
+        setAdminToken(data.token || '');
+      } else {
+        setAdminToken('');
+        setError(data.message || '비밀번호가 올바르지 않습니다.');
+      }
+    } catch (error) {
+      console.error('Admin login error:', error);
+      setError('관리자 로그인 중 오류가 발생했습니다.');
+    }
+  };
+
+
+  const handleAdminStatus = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/admin-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken }
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setAdminStatusData(data);
+        setCurrentState('adminStatus');
+        setError('');
+      } else {
+        if (response.status === 401) {
+          handleAdminAuthFailure(data.message);
+          return;
+        }
+        setError(data.message || '상태 조회에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Admin status error:', error);
+      setError('상태 조회 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleAdminUsersList = async (filter) => {
+    try {
+      const response = await fetch(`${API_URL}/api/admin-users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken },
+        body: JSON.stringify({ filter })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setAdminUsersList(data.users);
+        setAdminUserFilter(filter);
+        setError('');
+      } else {
+        if (response.status === 401) {
+          handleAdminAuthFailure(data.message);
+          return;
+        }
+        setError(data.message || '사용자 목록 조회에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Admin users list error:', error);
+      setError('사용자 목록 조회 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleAdminRoomsList = async (filter) => {
+    try {
+      const response = await fetch(`${API_URL}/api/admin-rooms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken },
+        body: JSON.stringify({ filter })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setAdminRoomsList(data.rooms);
+        setAdminRoomFilter(filter);
+        setError('');
+      } else {
+        if (response.status === 401) {
+          handleAdminAuthFailure(data.message);
+          return;
+        }
+        setError(data.message || '방 목록 조회에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Admin rooms list error:', error);
+      setError('방 목록 조회 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleAdminKickUser = async (targetUsername) => {
+    if (!window.confirm(`사용자 "${targetUsername}"를 추방하시겠습니까?`)) {
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API_URL}/api/admin-kick-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken },
+        body: JSON.stringify({ username: targetUsername })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess(data.message);
+        // Refresh user list
+        if (adminUserFilter) {
+          await handleAdminUsersList(adminUserFilter);
+        }
+      } else {
+        if (response.status === 401) {
+          handleAdminAuthFailure(data.message);
+          return;
+        }
+        setError(data.message || '사용자 추방에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Admin kick user error:', error);
+      setError('사용자 추방 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleAdminDeleteRoom = async (targetRoomId, roomName) => {
+    if (!window.confirm(`방 "${roomName}"를 삭제하시겠습니까? 방의 모든 사용자가 나가게 됩니다.`)) {
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API_URL}/api/admin-delete-room`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken },
+        body: JSON.stringify({ roomId: targetRoomId })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess(data.message);
+        // Refresh room list
+        if (adminRoomFilter) {
+          await handleAdminRoomsList(adminRoomFilter);
+        }
+      } else {
+        if (response.status === 401) {
+          handleAdminAuthFailure(data.message);
+          return;
+        }
+        setError(data.message || '방 삭제에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Admin delete room error:', error);
+      setError('방 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleAdminCleanup = async (cleanupType) => {
+    const confirmMessage = cleanupType === 'users' 
+      ? '모든 사용자를 정리하시겠습니까? (빈 방도 함께 정리됩니다)'
+      : cleanupType === 'both'
+      ? '모든 사용자와 방을 정리하시겠습니까?'
+      : '빈 방을 정리하시겠습니까?';
+    
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API_URL}/api/admin-cleanup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken },
+        body: JSON.stringify({ cleanupType })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess(data.message);
+      } else {
+        if (response.status === 401) {
+          handleAdminAuthFailure(data.message);
+          return;
+        }
+        setError(data.message || '정리에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Admin cleanup error:', error);
+      setError('정리 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleAdminShutdown = async (shutdown) => {
+    const confirmMessage = shutdown 
+      ? '앱을 종료하시겠습니까? 모든 사용자가 게임을 할 수 없게 됩니다.'
+      : '앱을 복구하시겠습니까?';
+    
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API_URL}/api/admin-shutdown`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken },
+        body: JSON.stringify({ shutdown })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess(data.message);
+      } else {
+        if (response.status === 401) {
+          handleAdminAuthFailure(data.message);
+          return;
+        }
+        setError(data.message || '작업에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Admin shutdown error:', error);
+      setError('작업 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleAdminChangePassword = async () => {
+    if (adminPasswordStep === 1) {
+      // Verify second password
+      if (adminSecondPassword !== '19951025') {
+        setError('2차 비밀번호가 올바르지 않습니다.');
+        return;
+      }
+      setAdminPasswordStep(2);
+      setError('');
+      return;
+    }
+    
+    // Step 2: Change password
+    if (!adminNewPassword || adminNewPassword.trim() === '') {
+      setError('새 비밀번호를 입력해주세요.');
+      return;
+    }
+    
+    if (adminNewPassword !== adminNewPasswordConfirm) {
+      setError('새 비밀번호가 일치하지 않습니다.');
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API_URL}/api/admin-change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken },
+        body: JSON.stringify({ 
+          currentPassword: adminPassword, 
+          secondPassword: adminSecondPassword,
+          newPassword: adminNewPassword.trim()
+        })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess('비밀번호가 변경되었습니다. 다음 로그인부터 새 비밀번호를 사용하세요.');
+        setAdminPassword(adminNewPassword.trim());
+        setAdminSecondPassword('');
+        setAdminNewPassword('');
+        setAdminNewPasswordConfirm('');
+        setAdminPasswordStep(1);
+        setCurrentState('adminDashboard');
+      } else {
+        if (response.status === 401) {
+          handleAdminAuthFailure(data.message);
+          return;
+        }
+        setError(data.message || '비밀번호 변경에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Admin change password error:', error);
+      setError('비밀번호 변경 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleAdminExit = async () => {
+    if (adminToken) {
+      fetch(`${API_URL}/api/admin-logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken },
+        body: JSON.stringify({ token: adminToken })
+      }).catch(error => console.error('Admin logout error:', error));
+    }
+    clearAdminSession();
+    setError('');
+    setSuccess('');
+  };
+
 
   // Render functions
   const renderRegisterName = () => (
@@ -981,18 +1501,18 @@ function App() {
       </div>
       
       <div className="register-name-form">
-        <div className="input-group">
+          <div className="input-group">
           <label htmlFor="username">사용자 이름 (최대 32자)</label>
-          <input
+            <input
             id="username"
-            type="text"
+              type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="사용자 이름을 입력하세요"
             maxLength={32}
-          />
-        </div>
-        
+            />
+          </div>
+          
         <div className="button-group">
           <button 
             className="register-button"
@@ -1053,9 +1573,9 @@ function App() {
             onChange={(e) => setRoomName(e.target.value)}
             placeholder="방 이름을 입력하세요"
             maxLength={128}
-          />
-        </div>
-        
+            />
+          </div>
+          
         <div className="input-group">
           <label htmlFor="roomPassword">방 비밀번호 (선택사항, 최대 16자)</label>
           <input
@@ -1266,7 +1786,7 @@ function App() {
           <h3>관전자</h3>
         </div>
       </div>
-
+      
       {/* Attender List */}
       <div className="attenders-list">
         <h3>참가자 목록</h3>
@@ -1302,7 +1822,7 @@ function App() {
           ))}
         </div>
       </div>
-
+      
       {/* Observer List */}
       <div className="observers-list">
         <h3>관전자 목록</h3>
@@ -1313,7 +1833,7 @@ function App() {
                 <span className="user-nickname">{user.displayName || user.nickname}</span>
                 {user.id === userId && <span className="you-badge">나</span>}
                 {user.isMaster && <span className="master-badge">방장</span>}
-              </div>
+        </div>
               {isMaster && user.id !== userId && (
                 <button
                   className="kick-button"
@@ -1403,9 +1923,9 @@ function App() {
                   className="select-button"
                   onClick={() => handleSelectUser(user.id)}
                   disabled={isLoading}
-                >
+          >
                   선택
-                </button>
+          </button>
               )}
             </div>
           ))}
@@ -1415,9 +1935,9 @@ function App() {
       {hasVoted && (
         <div className="voted-message">
           <p>투표가 완료되었습니다. 다른 참여자들의 선택을 기다리는 중...</p>
+            </div>
+          )}
         </div>
-      )}
-    </div>
   );
 
   const renderLinkResult = () => (
@@ -1461,7 +1981,525 @@ function App() {
         </button>
         <button className="leave-room-button" onClick={handleLeaveRoom}>
           방 나가기
+      </button>
+      </div>
+    </div>
+  );
+
+  // Admin render functions
+  const renderAdminPassword = () => (
+    <div className="register-name-container">
+      <div className="register-name-header">
+        <h1>🔐 관리자 로그인</h1>
+        <p>관리자 비밀번호를 입력하세요</p>
+      </div>
+      
+      <div className="register-name-form">
+        <div className="input-group">
+          <label htmlFor="adminPassword">관리자 비밀번호</label>
+          <input
+            id="adminPassword"
+            type="password"
+            value={adminPassword}
+            onChange={(e) => setAdminPassword(e.target.value)}
+            placeholder="비밀번호를 입력하세요"
+            onKeyPress={(e) => e.key === 'Enter' && handleAdminLogin()}
+          />
+        </div>
+        
+        <div className="button-group">
+          <button 
+            className="register-button"
+            onClick={handleAdminLogin}
+            disabled={!adminPassword || isLoading}
+          >
+            {isLoading ? '로그인 중...' : '로그인'}
+          </button>
+          <button 
+            className="cancel-button"
+            onClick={() => {
+              setUsername('');
+              setAdminPassword('');
+              setCurrentState('registerName');
+            }}
+          >
+            취소
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderAdminDashboard = () => (
+    <div className="register-name-container" style={{ maxWidth: '600px' }}>
+      <div className="register-name-header">
+        <h1>🔐 관리자 대시보드</h1>
+        <p>관리 기능을 선택하세요</p>
+      </div>
+      
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '30px' }}>
+        <button 
+          className="register-button"
+          onClick={handleAdminStatus}
+          style={{ padding: '15px', fontSize: '1.1rem' }}
+        >
+          1. 현재 상태
         </button>
+        <button 
+          className="register-button"
+          onClick={() => setCurrentState('adminCleanup')}
+          style={{ padding: '15px', fontSize: '1.1rem' }}
+        >
+          2. 정리
+        </button>
+        <button 
+          className="register-button"
+          onClick={() => setCurrentState('adminShutdown')}
+          style={{ padding: '15px', fontSize: '1.1rem' }}
+        >
+          3. 종료/복구
+        </button>
+        <button 
+          className="register-button"
+          onClick={() => {
+            setAdminPasswordStep(1);
+            setCurrentState('adminChangePassword');
+          }}
+          style={{ padding: '15px', fontSize: '1.1rem' }}
+        >
+          4. 비밀번호 변경
+        </button>
+        <button 
+          className="cancel-button"
+          onClick={handleAdminExit}
+          style={{ padding: '15px', fontSize: '1.1rem', marginTop: '20px' }}
+        >
+          나가기
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderAdminStatus = () => {
+    if (!adminStatusData) {
+      handleAdminStatus();
+      return <div>로딩 중...</div>;
+    }
+
+    if (adminStatusFilter === 'users' && adminUserFilter) {
+      // Show users list
+      return (
+        <div className="register-name-container" style={{ maxWidth: '800px' }}>
+          <div className="register-name-header">
+            <h2>사용자 목록</h2>
+            <p>
+              {adminUserFilter === 'all' && '전체 사용자'}
+              {adminUserFilter === 'notInRoom' && '방 없음'}
+              {adminUserFilter === 'waiting' && '대기 중'}
+              {adminUserFilter === 'playing' && '게임 중'}
+              {adminUserFilter === 'result' && '결과 확인 중'}
+            </p>
+          </div>
+          
+          <div style={{ marginTop: '20px', textAlign: 'left' }}>
+            {adminUsersList.map((user, idx) => (
+              <div key={idx} style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                padding: '10px',
+                borderBottom: '1px solid #eee',
+                gap: '10px'
+              }}>
+                <div style={{ flex: 1 }}>
+                  <strong>{user.username}</strong>
+                  {adminUserFilter === 'all' && (
+                    <span style={{ marginLeft: '10px', color: '#666', fontSize: '0.9rem' }}>
+                      ({user.state === 'notInRoom' ? '방 없음' : 
+                        user.state === 'waiting' ? '대기' :
+                        user.state === 'linking' ? '게임 중' : '결과 확인'})
+                    </span>
+                  )}
+                  {user.roomName && (
+                    <span style={{ marginLeft: '10px', color: '#666', fontSize: '0.9rem' }}>
+                      - {user.roomName}
+                    </span>
+                  )}
+                  {user.isMaster && (
+                    <span style={{ marginLeft: '10px', color: '#f59e0b', fontSize: '0.9rem' }}>
+                      (방장)
+                    </span>
+                  )}
+                </div>
+                <button 
+                  onClick={() => handleAdminKickUser(user.username)}
+                  style={{ 
+                    background: '#ef4444', 
+                    color: 'white', 
+                    border: 'none',
+                    padding: '5px 10px',
+                    borderRadius: '5px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            {adminUsersList.length === 0 && <p>사용자가 없습니다.</p>}
+          </div>
+          
+          <div className="button-group" style={{ marginTop: '20px' }}>
+            <button className="cancel-button" onClick={() => {
+              setAdminUserFilter(null);
+              setAdminUsersList([]);
+            }}>
+              뒤로
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (adminStatusFilter === 'rooms' && adminRoomFilter) {
+      // Show rooms list
+      return (
+        <div className="register-name-container" style={{ maxWidth: '800px' }}>
+          <div className="register-name-header">
+            <h2>방 목록</h2>
+            <p>
+              {adminRoomFilter === 'all' && '전체 방'}
+              {adminRoomFilter === 'waiting' && '대기 중인 방'}
+              {adminRoomFilter === 'linking' && '게임 중인 방'}
+              {adminRoomFilter === 'result' && '결과 확인 중인 방'}
+            </p>
+          </div>
+          
+          <div style={{ marginTop: '20px', textAlign: 'left' }}>
+            {adminRoomsList.map((room, idx) => (
+              <div key={idx} style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                padding: '10px',
+                borderBottom: '1px solid #eee',
+                gap: '10px'
+              }}>
+                <div style={{ flex: 1 }}>
+                  {room.hasPassword && (
+                    <span 
+                      onClick={() => alert(`방 비밀번호: ${room.password}`)}
+                      style={{ 
+                        marginRight: '10px', 
+                        cursor: 'pointer',
+                        fontSize: '1.2rem'
+                      }}
+                      title={`비밀번호: ${room.password}`}
+                    >
+                      🔒
+                    </span>
+                  )}
+                  <strong>{room.roomName}</strong>
+                  {adminRoomFilter === 'all' && (
+                    <span style={{ marginLeft: '10px', color: '#666', fontSize: '0.9rem' }}>
+                      ({room.gameState === 'waiting' ? '대기' :
+                        room.gameState === 'linking' ? '게임 중' : '결과 확인'})
+                    </span>
+                  )}
+                  <span style={{ marginLeft: '10px', color: '#666', fontSize: '0.9rem' }}>
+                    ({room.userCount}/{room.memberLimit}명)
+                  </span>
+                </div>
+                <button 
+                  onClick={() => handleAdminDeleteRoom(room.id, room.roomName)}
+                  style={{ 
+                    background: '#ef4444', 
+                    color: 'white', 
+                    border: 'none',
+                    padding: '5px 10px',
+                    borderRadius: '5px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            {adminRoomsList.length === 0 && <p>방이 없습니다.</p>}
+          </div>
+          
+          <div className="button-group" style={{ marginTop: '20px' }}>
+            <button className="cancel-button" onClick={() => {
+              setAdminRoomFilter(null);
+              setAdminRoomsList([]);
+            }}>
+              뒤로
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Show status overview
+    return (
+      <div className="register-name-container" style={{ maxWidth: '800px' }}>
+        <div className="register-name-header">
+          <h2>현재 상태</h2>
+        </div>
+        
+        <div style={{ marginTop: '30px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div 
+            onClick={() => setAdminStatusFilter('rooms')}
+            style={{ 
+              padding: '20px', 
+              background: '#f3f4f6', 
+              borderRadius: '10px',
+              cursor: 'pointer',
+              border: '2px solid #e5e7eb'
+            }}
+          >
+            <h3>방: {adminStatusData.roomCounts.total}개</h3>
+            <p style={{ marginTop: '10px', color: '#666' }}>
+              대기: {adminStatusData.roomCounts.waiting} | 
+              게임 중: {adminStatusData.roomCounts.playing} | 
+              결과: {adminStatusData.roomCounts.result}
+            </p>
+          </div>
+          
+          <div 
+            onClick={() => setAdminStatusFilter('users')}
+            style={{ 
+              padding: '20px', 
+              background: '#f3f4f6', 
+              borderRadius: '10px',
+              cursor: 'pointer',
+              border: '2px solid #e5e7eb'
+            }}
+          >
+            <h3>사용자: {adminStatusData.userCounts.total}명</h3>
+            <p style={{ marginTop: '10px', color: '#666' }}>
+              방 없음: {adminStatusData.userCounts.notInRoom} | 
+              대기: {adminStatusData.userCounts.waiting} | 
+              게임 중: {adminStatusData.userCounts.playing} | 
+              결과: {adminStatusData.userCounts.result}
+            </p>
+          </div>
+        </div>
+        
+        {adminStatusFilter === 'rooms' && (
+          <div style={{ marginTop: '30px' }}>
+            <h3>방 유형 선택</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '15px' }}>
+              <button className="register-button" onClick={() => handleAdminRoomsList('all')}>
+                전체 방 ({adminStatusData.roomCounts.total})
+              </button>
+              <button className="register-button" onClick={() => handleAdminRoomsList('waiting')}>
+                대기 중 ({adminStatusData.roomCounts.waiting})
+              </button>
+              <button className="register-button" onClick={() => handleAdminRoomsList('linking')}>
+                게임 중 ({adminStatusData.roomCounts.playing})
+              </button>
+              <button className="register-button" onClick={() => handleAdminRoomsList('completed')}>
+                결과 확인 ({adminStatusData.roomCounts.result})
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {adminStatusFilter === 'users' && (
+          <div style={{ marginTop: '30px' }}>
+            <h3>사용자 유형 선택</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '15px' }}>
+              <button className="register-button" onClick={() => handleAdminUsersList('all')}>
+                전체 사용자 ({adminStatusData.userCounts.total})
+              </button>
+              <button className="register-button" onClick={() => handleAdminUsersList('notInRoom')}>
+                방 없음 ({adminStatusData.userCounts.notInRoom})
+              </button>
+              <button className="register-button" onClick={() => handleAdminUsersList('waiting')}>
+                대기 중 ({adminStatusData.userCounts.waiting})
+              </button>
+              <button className="register-button" onClick={() => handleAdminUsersList('linking')}>
+                게임 중 ({adminStatusData.userCounts.playing})
+              </button>
+              <button className="register-button" onClick={() => handleAdminUsersList('completed')}>
+                결과 확인 ({adminStatusData.userCounts.result})
+              </button>
+            </div>
+          </div>
+        )}
+        
+        <div className="button-group" style={{ marginTop: '30px' }}>
+          <button className="cancel-button" onClick={() => {
+            setAdminStatusFilter(null);
+            setAdminStatusData(null);
+            setCurrentState('adminDashboard');
+          }}>
+            뒤로
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderAdminCleanup = () => (
+    <div className="register-name-container" style={{ maxWidth: '600px' }}>
+      <div className="register-name-header">
+        <h2>정리</h2>
+        <p>정리할 항목을 선택하세요</p>
+      </div>
+      
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '30px' }}>
+        <button 
+          className="register-button"
+          onClick={() => handleAdminCleanup('users')}
+          style={{ padding: '15px', fontSize: '1.1rem' }}
+        >
+          사용자 정리 (빈 방도 함께 정리)
+        </button>
+        <button 
+          className="register-button"
+          onClick={() => handleAdminCleanup('rooms')}
+          style={{ padding: '15px', fontSize: '1.1rem' }}
+        >
+          빈 방만 정리
+        </button>
+        <button 
+          className="cancel-button"
+          onClick={() => setCurrentState('adminDashboard')}
+          style={{ padding: '15px', fontSize: '1.1rem', marginTop: '20px' }}
+        >
+          뒤로
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderAdminShutdown = () => {
+    const [shutdownStatus, setShutdownStatus] = React.useState(null);
+    
+    React.useEffect(() => {
+      const checkStatus = async () => {
+        try {
+          const response = await fetch(`${API_URL}/api/admin-shutdown-status`);
+          const data = await response.json();
+          if (data.success) {
+            setShutdownStatus(data.isShutdown);
+          }
+        } catch (error) {
+          console.error('Error checking shutdown status:', error);
+        }
+      };
+      checkStatus();
+    }, []);
+    
+    return (
+      <div className="register-name-container" style={{ maxWidth: '600px' }}>
+        <div className="register-name-header">
+          <h2>종료/복구</h2>
+          <p>앱 상태: {shutdownStatus === null ? '확인 중...' : shutdownStatus ? '종료됨' : '활성'}</p>
+        </div>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '30px' }}>
+          <button 
+            className="register-button"
+            onClick={() => handleAdminShutdown(true)}
+            disabled={shutdownStatus === true}
+            style={{ padding: '15px', fontSize: '1.1rem', opacity: shutdownStatus === true ? 0.5 : 1 }}
+          >
+            종료하기
+          </button>
+          <button 
+            className="register-button"
+            onClick={() => handleAdminShutdown(false)}
+            disabled={shutdownStatus === false}
+            style={{ padding: '15px', fontSize: '1.1rem', opacity: shutdownStatus === false ? 0.5 : 1 }}
+          >
+            복구하기
+          </button>
+          <button 
+            className="cancel-button"
+            onClick={() => setCurrentState('adminDashboard')}
+            style={{ padding: '15px', fontSize: '1.1rem', marginTop: '20px' }}
+          >
+            뒤로
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderAdminChangePassword = () => (
+    <div className="register-name-container" style={{ maxWidth: '600px' }}>
+      <div className="register-name-header">
+        <h2>비밀번호 변경</h2>
+        <p>
+          {adminPasswordStep === 1 
+            ? '2차 비밀번호를 입력하세요' 
+            : '새 비밀번호를 입력하세요 (두 번 입력)'}
+        </p>
+      </div>
+      
+      <div className="register-name-form">
+        {adminPasswordStep === 1 ? (
+          <div className="input-group">
+            <label htmlFor="adminSecondPassword">2차 비밀번호</label>
+            <input
+              id="adminSecondPassword"
+              type="password"
+              value={adminSecondPassword}
+              onChange={(e) => setAdminSecondPassword(e.target.value)}
+              placeholder="2차 비밀번호를 입력하세요"
+              onKeyPress={(e) => e.key === 'Enter' && handleAdminChangePassword()}
+            />
+          </div>
+        ) : (
+          <>
+            <div className="input-group">
+              <label htmlFor="adminNewPassword">새 비밀번호</label>
+              <input
+                id="adminNewPassword"
+                type="password"
+                value={adminNewPassword}
+                onChange={(e) => setAdminNewPassword(e.target.value)}
+                placeholder="새 비밀번호를 입력하세요"
+              />
+            </div>
+            <div className="input-group">
+              <label htmlFor="adminNewPasswordConfirm">새 비밀번호 확인</label>
+              <input
+                id="adminNewPasswordConfirm"
+                type="password"
+                value={adminNewPasswordConfirm}
+                onChange={(e) => setAdminNewPasswordConfirm(e.target.value)}
+                placeholder="새 비밀번호를 다시 입력하세요"
+                onKeyPress={(e) => e.key === 'Enter' && handleAdminChangePassword()}
+              />
+            </div>
+          </>
+        )}
+        
+        <div className="button-group">
+          <button 
+            className="register-button"
+            onClick={handleAdminChangePassword}
+            disabled={isLoading || (adminPasswordStep === 1 ? !adminSecondPassword : !adminNewPassword || !adminNewPasswordConfirm)}
+          >
+            {isLoading ? '처리 중...' : adminPasswordStep === 1 ? '다음' : '변경하기'}
+          </button>
+          <button 
+            className="cancel-button"
+            onClick={() => {
+              setAdminPasswordStep(1);
+              setAdminSecondPassword('');
+              setAdminNewPassword('');
+              setAdminNewPasswordConfirm('');
+              setCurrentState('adminDashboard');
+            }}
+          >
+            취소
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1480,6 +2518,12 @@ function App() {
       {currentState === 'waitingroom' && renderWaitingRoom()}
       {currentState === 'linking' && renderLinking()}
       {currentState === 'linkresult' && renderLinkResult()}
+      {currentState === 'adminPassword' && renderAdminPassword()}
+      {currentState === 'adminDashboard' && renderAdminDashboard()}
+      {currentState === 'adminStatus' && renderAdminStatus()}
+      {currentState === 'adminCleanup' && renderAdminCleanup()}
+      {currentState === 'adminShutdown' && renderAdminShutdown()}
+      {currentState === 'adminChangePassword' && renderAdminChangePassword()}
       
       {/* User Inactivity Warning Modal */}
       {showUserWarning && (
@@ -1492,6 +2536,24 @@ function App() {
                 로그인 유지
               </button>
               <button className="immediate-exit-button" onClick={handleImmediateLogout}>
+                로그아웃
+              </button>
+      </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Session Warning Modal */}
+      {showAdminWarning && (
+        <div className="warning-modal-overlay">
+          <div className="warning-modal">
+            <h2>⚠️ 관리자 세션 경고</h2>
+            <p>비활동으로 <strong>{adminTimeLeft}초</strong> 후 관리자 로그아웃됩니다</p>
+            <div className="warning-buttons">
+              <button className="keep-alive-button" onClick={handleKeepAdminAlive}>
+                로그인 유지
+              </button>
+              <button className="immediate-exit-button" onClick={handleAdminExit}>
                 로그아웃
               </button>
             </div>

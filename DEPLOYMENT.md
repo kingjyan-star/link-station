@@ -1,8 +1,8 @@
 # 🚀 Link Station - Deployment Guide
 
 **Live URL**: https://link-station-pro.vercel.app  
-**Status**: ✅ Active Development - Shared Redis Storage + Warning System Deployed  
-**Last Updated**: November 2025
+**Status**: ✅ Active Development - Admin Dashboard + Shared Redis Storage Deployed  
+**Last Updated**: December 2025
 
 ---
 
@@ -129,6 +129,7 @@ Vercel automatically detects changes and redeploys.
 | `UPSTASH_REDIS_KV_URL` | Dashboard convenience URL (optional) |
 | `UPSTASH_REDIS_REDIS_URL` | Redis protocol URL (optional for future TCP clients) |
 | `UPSTASH_REDIS_KV_REST_API_READ_ONLY_TOKEN` | Read-only token (optional) |
+| `ADMIN_SECRET_KEY` | **NEW** Initial admin password (set to `"link-station-password-2025"` or your choice) |
 | `ADMIN_SECRET_KEY` | Secret used to secure the admin-only `/api/manual-cleanup` endpoint (known only to the owner) |
 
 **Setup Steps**
@@ -199,7 +200,21 @@ ls -la static/
 
 ## 🚨 Current Issues
 
-### Recent Improvements (November 2025)
+### Recent Improvements (December 2025)
+
+**Session 16: Comprehensive Admin Dashboard System** ✅ COMPLETED
+- Added complete admin interface with 4 main features:
+  1. **Current Status**: Real-time room/user counts by type, clickable breakdowns, detailed lists
+  2. **Cleanup**: User cleanup (also cleans rooms) or room-only cleanup
+  3. **Shutdown/Revive**: Toggle app-wide shutdown (blocks all room operations)
+  4. **Change Password**: 2-step password change (2nd password → new password)
+- Admin access via username `"link-station-admin"` → password entry → dashboard
+- 10 new admin endpoints (`/api/admin-*`) all secured with password verification
+- Admin action alerts: Users see "관리자에 의해 추방되었습니다" or "관리자에 의해 방이 삭제되었습니다"
+- Admin password stored in Redis (changeable via UI, initial from `ADMIN_SECRET_KEY` env var)
+- Shutdown state persists across serverless restarts (stored in Redis)
+- Admin cannot create/join rooms (admin-only UI access)
+- **New env var**: `ADMIN_SECRET_KEY` (set initial admin password)
 
 **Session 15: Shared Redis State & Stability** ✅ COMPLETED
 - Integrated Upstash Redis via new `api/storage.js` helper

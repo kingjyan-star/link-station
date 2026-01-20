@@ -1,9 +1,12 @@
 const express = require('express');
+const crypto = require('crypto');
 const app = express();
 
 app.use(express.json());
 
 const storage = require('./storage');
+
+const ADMIN_USERNAME = 'link-station-admin';
 
 // ============================================================================
 // ⏰ TIMEOUT & ALARM CONFIGURATION
@@ -177,6 +180,10 @@ app.post('/api/check-username', async (req, res) => {
   if (!username || username.trim() === '') {
     return res.json({ duplicate: false });
   }
+
+  if (username.trim() === ADMIN_USERNAME) {
+    return res.json({ duplicate: true, available: false, reserved: true });
+  }
   
   const userData = await storage.getActiveUser(username.trim());
   const isDuplicate = !!userData;
@@ -199,6 +206,12 @@ app.post('/api/check-roomname', async (req, res) => {
 app.post('/api/create-room', async (req, res) => {
   const { roomName, roomPassword, memberLimit, username } = req.body;
   
+  // Check if app is shutdown (block all users including admin from creating rooms)
+  const isShutdown = await storage.getAppShutdown();
+  if (isShutdown) {
+    return res.status(503).json({ success: false, message: '앱이 종료되어 게임을 할 수 없습니다.' });
+  }
+  
   // Validate input
   if (!roomName || roomName.trim() === '') {
     return res.status(400).json({ success: false, message: '방 이름을 입력해주세요.' });
@@ -211,6 +224,10 @@ app.post('/api/create-room', async (req, res) => {
   const trimmedRoomName = roomName.trim();
   const roomNameLower = trimmedRoomName.toLowerCase();
   const trimmedUsername = username ? username.trim() : '';
+
+  if (trimmedUsername === ADMIN_USERNAME) {
+    return res.status(400).json({ success: false, message: '관리자 전용 이름입니다. 다른 이름을 사용해주세요.' });
+  }
 
   // Check room name duplication
   console.log(`Creating room: "${roomName}"`);
@@ -289,8 +306,18 @@ app.post('/api/join-room', async (req, res) => {
   
   console.log(`Join room attempt: "${roomName}" by "${username}"`);
   
+  // Check if app is shutdown (block all users including admin from joining rooms)
+  const isShutdown = await storage.getAppShutdown();
+  if (isShutdown) {
+    return res.status(503).json({ success: false, message: '앱이 종료되어 게임을 할 수 없습니다.' });
+  }
+  
   const trimmedRoomName = roomName.trim();
   const trimmedUsername = username ? username.trim() : '';
+
+  if (trimmedUsername === ADMIN_USERNAME) {
+    return res.status(400).json({ success: false, message: '관리자 전용 이름입니다. 다른 이름을 사용해주세요.' });
+  }
   
   // Find room by name (case-insensitive)
   const targetRoom = await storage.getRoomByName(trimmedRoomName.toLowerCase());
@@ -398,6 +425,9 @@ app.post('/api/check-password', async (req, res) => {
   
   // Check username duplication
   const trimmedUsername = username ? username.trim() : '';
+  if (trimmedUsername === ADMIN_USERNAME) {
+    return res.status(400).json({ success: false, message: '관리자 전용 이름입니다. 다른 이름을 사용해주세요.' });
+  }
   const existingUser = await storage.getActiveUser(trimmedUsername);
   if (existingUser) {
     return res.status(400).json({ success: false, message: '이미 사용 중인 사용자 이름입니다.' });
@@ -444,6 +474,12 @@ app.post('/api/check-password', async (req, res) => {
 app.post('/api/join-room-qr', async (req, res) => {
   const { roomId, username } = req.body;
   
+  // Check if app is shutdown (block all users including admin from joining rooms)
+  const isShutdown = await storage.getAppShutdown();
+  if (isShutdown) {
+    return res.status(503).json({ success: false, message: '앱이 종료되어 게임을 할 수 없습니다.' });
+  }
+  
   const room = await storage.getRoomById(roomId);
   if (!room) {
     return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
@@ -461,6 +497,9 @@ app.post('/api/join-room-qr', async (req, res) => {
   
   // Check username duplication
   const trimmedUsername = username ? username.trim() : '';
+  if (trimmedUsername === ADMIN_USERNAME) {
+    return res.status(400).json({ success: false, message: '관리자 전용 이름입니다. 다른 이름을 사용해주세요.' });
+  }
   const existingUser = await storage.getActiveUser(trimmedUsername);
   if (existingUser) {
     return res.status(400).json({ success: false, message: '이미 사용 중인 사용자 이름입니다.' });
@@ -904,7 +943,13 @@ app.get('/api/room/:roomId', async (req, res) => {
   const room = await storage.getRoomById(roomId);
   
   if (!room) {
-    return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
+    // Check if room was deleted by admin
+    const wasDeletedByAdmin = await storage.wasRoomDeletedByAdmin(roomId);
+    return res.status(404).json({ 
+      success: false, 
+      message: '방을 찾을 수 없습니다.',
+      deletedByAdmin: wasDeletedByAdmin
+    });
   }
   
   // Initialize returnedToWaiting Set if it doesn't exist (for rooms created before this update)
@@ -927,6 +972,14 @@ app.get('/api/room/:roomId', async (req, res) => {
   console.log(`   Has match result: ${!!room.matchResult}`);
   console.log(`   Users voted: ${Array.from(room.users.values()).filter(u => room.selections.has(u.id)).length}/${room.users.size}`);
   
+  // Check if any users were kicked by admin (for alerts)
+  const kickedUsers = [];
+  for (const user of usersWithVotingStatus) {
+    if (await storage.wasUserKickedByAdmin(user.username)) {
+      kickedUsers.push(user.username);
+    }
+  }
+  
   res.json({
     success: true,
     room: {
@@ -936,7 +989,9 @@ app.get('/api/room/:roomId', async (req, res) => {
       gameState: room.gameState,
       masterId: room.masterId
     },
-    matchResult: room.matchResult
+    matchResult: room.matchResult,
+    kickedByAdmin: kickedUsers.length > 0 ? kickedUsers : undefined,
+    roomDeletedByAdmin: false // Room still exists, so not deleted
   });
 });
 
@@ -1031,6 +1086,460 @@ app.post('/api/leave-room', async (req, res) => {
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'API is running' });
+});
+
+// ============================================================================
+// 🔐 ADMIN ENDPOINTS
+// ============================================================================
+// Admin password is stored in ADMIN_SECRET_KEY environment variable
+// 2nd password for changing admin password is hardcoded: "19951025"
+// ============================================================================
+
+const ADMIN_SECOND_PASSWORD = '19951025'; // Hardcoded 2nd password for changing admin password
+const ADMIN_TOKEN_TTL_SECONDS = 30 * 60; // 30 minutes
+
+// Helper function to verify admin password
+async function verifyAdminPassword(password) {
+  const storedPassword = await storage.getAdminPassword();
+  if (!storedPassword) {
+    return false;
+  }
+  return password === storedPassword;
+}
+
+function getAdminToken(req) {
+  return req.get('x-admin-token') || (req.body ? req.body.token : null);
+}
+
+async function requireAdminToken(req, res, options = { refresh: true }) {
+  const token = getAdminToken(req);
+  if (!token) {
+    res.status(401).json({ success: false, message: '관리자 토큰이 필요합니다.' });
+    return null;
+  }
+  const isValid = await storage.isAdminTokenValid(token);
+  if (!isValid) {
+    res.status(401).json({ success: false, message: '관리자 세션이 만료되었습니다. 다시 로그인해주세요.' });
+    return null;
+  }
+  if (options.refresh) {
+    // Sliding expiration: keep admin logged in while actively using admin endpoints.
+    await storage.storeAdminToken(token);
+  }
+  return token;
+}
+
+// Admin login (verify password)
+app.post('/api/admin-login', async (req, res) => {
+  const { password } = req.body;
+  
+  if (await verifyAdminPassword(password)) {
+    const token = crypto.randomBytes(32).toString('hex');
+    await storage.storeAdminToken(token);
+    return res.json({ 
+      success: true, 
+      message: '관리자 인증 성공',
+      token,
+      expiresIn: ADMIN_TOKEN_TTL_SECONDS
+    });
+  } else {
+    return res.status(403).json({ success: false, message: '비밀번호가 올바르지 않습니다.' });
+  }
+});
+
+// Admin logout (revoke token)
+app.post('/api/admin-logout', async (req, res) => {
+  const token = getAdminToken(req);
+  if (token) {
+    await storage.deleteAdminToken(token);
+  }
+  return res.json({ success: true });
+});
+
+// Admin token status (for warning before logout)
+app.get('/api/admin-token-status', async (req, res) => {
+  const token = await requireAdminToken(req, res, { refresh: false });
+  if (!token) return;
+  const remainingSeconds = await storage.getAdminTokenTtlSeconds(token);
+  if (remainingSeconds <= 0) {
+    return res.status(401).json({ success: false, message: '관리자 세션이 만료되었습니다. 다시 로그인해주세요.' });
+  }
+  return res.json({
+    success: true,
+    remainingSeconds,
+    warning: remainingSeconds <= 60
+  });
+});
+
+// Keep admin session alive (explicit refresh)
+app.post('/api/admin-keep-alive', async (req, res) => {
+  const token = await requireAdminToken(req, res, { refresh: true });
+  if (!token) return;
+  return res.json({ success: true });
+});
+
+// Get shutdown status
+app.get('/api/admin-shutdown-status', async (req, res) => {
+  const isShutdown = await storage.getAppShutdown();
+  return res.json({ success: true, isShutdown });
+});
+
+// Toggle shutdown state
+app.post('/api/admin-shutdown', async (req, res) => {
+  const { shutdown } = req.body;
+  
+  const token = await requireAdminToken(req, res);
+  if (!token) return;
+  
+  await storage.setAppShutdown(shutdown === true);
+  return res.json({ 
+    success: true, 
+    message: shutdown ? '앱이 종료되었습니다.' : '앱이 복구되었습니다.',
+    isShutdown: shutdown === true
+  });
+});
+
+// Get admin status (counts of rooms and users by type)
+app.post('/api/admin-status', async (req, res) => {
+  const token = await requireAdminToken(req, res);
+  if (!token) return;
+  
+  try {
+    const allRooms = [];
+    const allRoomIds = await storage.listRoomIds();
+    for (const roomId of allRoomIds) {
+      const room = await storage.getRoomById(roomId);
+      if (room) {
+        allRooms.push(room);
+      }
+    }
+    
+    const allUsers = await storage.listActiveUsers();
+    
+    // Count rooms by type
+    const roomCounts = {
+      total: allRooms.length,
+      waiting: 0,
+      playing: 0,
+      result: 0
+    };
+    
+    // Count users by type
+    const userCounts = {
+      total: allUsers.length,
+      notInRoom: 0,
+      waiting: 0,
+      playing: 0,
+      result: 0
+    };
+    
+    // Categorize rooms
+    for (const room of allRooms) {
+      if (room.gameState === 'waiting') {
+        roomCounts.waiting++;
+      } else if (room.gameState === 'linking') {
+        roomCounts.playing++;
+      } else if (room.gameState === 'completed') {
+        roomCounts.result++;
+      }
+    }
+    
+    // Categorize users
+    const roomMap = new Map();
+    for (const room of allRooms) {
+      for (const user of room.users.values()) {
+        roomMap.set(user.username, room);
+      }
+    }
+    
+    for (const user of allUsers) {
+      const room = roomMap.get(user.username);
+      if (!room) {
+        userCounts.notInRoom++;
+      } else {
+        if (room.gameState === 'waiting') {
+          userCounts.waiting++;
+        } else if (room.gameState === 'linking') {
+          userCounts.playing++;
+        } else if (room.gameState === 'completed') {
+          userCounts.result++;
+        }
+      }
+    }
+    
+    return res.json({
+      success: true,
+      roomCounts,
+      userCounts
+    });
+  } catch (error) {
+    console.error('Admin status error:', error);
+    return res.status(500).json({ success: false, message: '상태 조회 중 오류가 발생했습니다.' });
+  }
+});
+
+// Get users list (with filter)
+app.post('/api/admin-users', async (req, res) => {
+  const { filter } = req.body; // filter: 'all', 'notInRoom', 'waiting', 'playing', 'result'
+  
+  const token = await requireAdminToken(req, res);
+  if (!token) return;
+  
+  try {
+    const allUsers = await storage.listActiveUsers();
+    const allRooms = [];
+    const allRoomIds = await storage.listRoomIds();
+    for (const roomId of allRoomIds) {
+      const room = await storage.getRoomById(roomId);
+      if (room) {
+        allRooms.push(room);
+      }
+    }
+    
+    // Build room map
+    const roomMap = new Map();
+    const userRoomState = new Map();
+    for (const room of allRooms) {
+      for (const user of room.users.values()) {
+        roomMap.set(user.username, room);
+        userRoomState.set(user.username, {
+          roomId: room.id,
+          roomName: room.roomName,
+          gameState: room.gameState,
+          isMaster: user.isMaster
+        });
+      }
+    }
+    
+    let filteredUsers = [];
+    
+    if (filter === 'all') {
+      filteredUsers = allUsers.map(u => ({
+        username: u.username,
+        roomId: u.roomId || null,
+        state: userRoomState.get(u.username) ? userRoomState.get(u.username).gameState : 'notInRoom',
+        roomName: userRoomState.get(u.username) ? userRoomState.get(u.username).roomName : null,
+        isMaster: userRoomState.get(u.username) ? userRoomState.get(u.username).isMaster : false
+      }));
+    } else if (filter === 'notInRoom') {
+      filteredUsers = allUsers
+        .filter(u => !userRoomState.has(u.username))
+        .map(u => ({ username: u.username, roomId: null, state: 'notInRoom', roomName: null, isMaster: false }));
+    } else {
+      filteredUsers = allUsers
+        .filter(u => {
+          const state = userRoomState.get(u.username);
+          return state && state.gameState === filter;
+        })
+        .map(u => {
+          const state = userRoomState.get(u.username);
+          return {
+            username: u.username,
+            roomId: state.roomId,
+            state: state.gameState,
+            roomName: state.roomName,
+            isMaster: state.isMaster
+          };
+        });
+    }
+    
+    return res.json({ success: true, users: filteredUsers });
+  } catch (error) {
+    console.error('Admin users error:', error);
+    return res.status(500).json({ success: false, message: '사용자 목록 조회 중 오류가 발생했습니다.' });
+  }
+});
+
+// Get rooms list (with filter)
+app.post('/api/admin-rooms', async (req, res) => {
+  const { filter } = req.body; // filter: 'all', 'waiting', 'playing', 'result'
+  
+  const token = await requireAdminToken(req, res);
+  if (!token) return;
+  
+  try {
+    const allRooms = [];
+    const allRoomIds = await storage.listRoomIds();
+    for (const roomId of allRoomIds) {
+      const room = await storage.getRoomById(roomId);
+      if (room) {
+        allRooms.push(room);
+      }
+    }
+    
+    let filteredRooms = [];
+    
+    if (filter === 'all') {
+      filteredRooms = allRooms.map(room => ({
+        id: room.id,
+        roomName: room.roomName,
+        gameState: room.gameState,
+        userCount: room.users.size,
+        memberLimit: room.memberLimit,
+        hasPassword: !!room.roomPassword,
+        password: room.roomPassword || null,
+        masterId: room.masterId
+      }));
+    } else {
+      filteredRooms = allRooms
+        .filter(room => room.gameState === filter)
+        .map(room => ({
+          id: room.id,
+          roomName: room.roomName,
+          gameState: room.gameState,
+          userCount: room.users.size,
+          memberLimit: room.memberLimit,
+          hasPassword: !!room.roomPassword,
+          password: room.roomPassword || null,
+          masterId: room.masterId
+        }));
+    }
+    
+    return res.json({ success: true, rooms: filteredRooms });
+  } catch (error) {
+    console.error('Admin rooms error:', error);
+    return res.status(500).json({ success: false, message: '방 목록 조회 중 오류가 발생했습니다.' });
+  }
+});
+
+// Admin kick user
+app.post('/api/admin-kick-user', async (req, res) => {
+  const { username } = req.body;
+  
+  const token = await requireAdminToken(req, res);
+  if (!token) return;
+  
+  try {
+    const userData = await storage.getActiveUser(username);
+    if (!userData) {
+      return res.status(404).json({ success: false, message: '사용자를 찾을 수 없습니다.' });
+    }
+    
+    // Remove from room if in a room
+    if (userData.roomId) {
+      const room = await storage.getRoomById(userData.roomId);
+      if (room) {
+        room.users.delete(userData.userId);
+        room.selections.delete(userData.userId);
+        
+        // If user was master, assign new master
+        if (room.masterId === userData.userId && room.users.size > 0) {
+          const newMaster = Array.from(room.users.values())[0];
+          room.masterId = newMaster.id;
+          newMaster.isMaster = true;
+          room.users.set(newMaster.id, newMaster);
+        }
+        
+        // Delete room if empty
+        if (room.users.size === 0) {
+          await storage.deleteRoom(userData.roomId);
+        } else {
+          await storage.saveRoom(room);
+        }
+      }
+    }
+    
+    // Mark user as kicked by admin (for alert)
+    await storage.markUserKickedByAdmin(username);
+    
+    // Delete user
+    await storage.deleteActiveUser(username);
+    
+    return res.json({ success: true, message: `사용자 "${username}"가 추방되었습니다.` });
+  } catch (error) {
+    console.error('Admin kick user error:', error);
+    return res.status(500).json({ success: false, message: '사용자 추방 중 오류가 발생했습니다.' });
+  }
+});
+
+// Admin delete room
+app.post('/api/admin-delete-room', async (req, res) => {
+  const { roomId } = req.body;
+  
+  const token = await requireAdminToken(req, res);
+  if (!token) return;
+  
+  try {
+    const room = await storage.getRoomById(roomId);
+    if (!room) {
+      return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
+    }
+    
+    // Mark room as deleted by admin (for alert)
+    await storage.markRoomDeletedByAdmin(roomId);
+    
+    // Delete all users in the room (they'll see the alert via polling)
+    for (const user of room.users.values()) {
+      await storage.deleteActiveUser(user.username);
+    }
+    
+    await storage.deleteRoom(roomId);
+    
+    return res.json({ success: true, message: `방 "${room.roomName}"가 삭제되었습니다.` });
+  } catch (error) {
+    console.error('Admin delete room error:', error);
+    return res.status(500).json({ success: false, message: '방 삭제 중 오류가 발생했습니다.' });
+  }
+});
+
+// Admin cleanup
+app.post('/api/admin-cleanup', async (req, res) => {
+  const { cleanupType } = req.body; // cleanupType: 'users', 'rooms', 'both'
+  
+  const token = await requireAdminToken(req, res);
+  if (!token) return;
+  
+  try {
+    if (cleanupType === 'users' || cleanupType === 'both') {
+      // Cleanup all inactive users (this will also cleanup empty rooms)
+      await cleanupInactiveUsersAndRooms();
+      const now = Date.now();
+      await cleanupEmptyRooms(now);
+    } else if (cleanupType === 'rooms') {
+      // Cleanup only empty rooms
+      const now = Date.now();
+      await cleanupEmptyRooms(now);
+    }
+    
+    return res.json({ 
+      success: true, 
+      message: cleanupType === 'users' ? '모든 사용자와 빈 방이 정리되었습니다.' : 
+               cleanupType === 'both' ? '모든 사용자와 방이 정리되었습니다.' :
+               '빈 방이 정리되었습니다.'
+    });
+  } catch (error) {
+    console.error('Admin cleanup error:', error);
+    return res.status(500).json({ success: false, message: '정리 중 오류가 발생했습니다.' });
+  }
+});
+
+// Admin change password
+app.post('/api/admin-change-password', async (req, res) => {
+  const { currentPassword, password, secondPassword, newPassword } = req.body;
+  
+  const token = await requireAdminToken(req, res);
+  if (!token) return;
+
+  const passwordToVerify = currentPassword || password;
+  if (!(await verifyAdminPassword(passwordToVerify))) {
+    return res.status(403).json({ success: false, message: '현재 비밀번호가 올바르지 않습니다.' });
+  }
+  
+  if (secondPassword !== ADMIN_SECOND_PASSWORD) {
+    return res.status(403).json({ success: false, message: '2차 비밀번호가 올바르지 않습니다.' });
+  }
+  
+  if (!newPassword || newPassword.trim() === '') {
+    return res.status(400).json({ success: false, message: '새 비밀번호를 입력해주세요.' });
+  }
+  
+  // Store new password in Redis (or memory fallback)
+  await storage.setAdminPassword(newPassword.trim());
+  
+  return res.json({ 
+    success: true, 
+    message: '비밀번호가 변경되었습니다.' 
+  });
 });
 
 // Manual cleanup endpoint (for debugging/admin use)

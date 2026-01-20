@@ -16,13 +16,23 @@ const ACTIVE_USER_KEY = (username) => `active:${username}`;
 const ACTIVE_USER_SET_KEY = 'active:users';
 const DELETED_ROOM_KEY = (roomId) => `room:deleted:${roomId}`;
 const DELETED_ROOM_TTL_SECONDS = 10 * 60; // retain deletion info for 10 minutes
+const USER_KICKED_KEY = (username) => `user:kicked:${username}`;
+const ROOM_DELETED_KEY = (roomId) => `room:deleted:admin:${roomId}`;
+const ADMIN_TOKEN_KEY = (token) => `app:admin:token:${token}`;
+const USER_KICKED_TTL_SECONDS = 30; // 30 seconds - just enough for polling to detect
+const ROOM_DELETED_TTL_SECONDS = 30; // 30 seconds
 
 // In-memory fallback (for local development with no Redis credentials)
 const memoryStore = {
   rooms: new Map(),
   roomNameIndex: new Map(), // roomNameLower -> roomId
   activeUsers: new Map(),
-  deletedRooms: new Map()
+  deletedRooms: new Map(),
+  appShutdown: false,
+  adminPassword: null,
+  userKicked: new Map(),
+  roomDeletedByAdmin: new Map(),
+  adminTokens: new Map()
 };
 
 const toSerializableRoom = (room) => ({
@@ -214,6 +224,94 @@ async function listActiveUsers() {
   return list;
 }
 
+// ---------- App state helpers (shutdown state & admin password) ----------
+
+const APP_SHUTDOWN_KEY = 'app:shutdown';
+const ADMIN_PASSWORD_KEY = 'app:admin:password';
+const ADMIN_TOKEN_TTL_SECONDS = 30 * 60; // 30 minutes
+
+async function getAppShutdown() {
+  if (!REDIS_ENABLED) {
+    return memoryStore.appShutdown || false;
+  }
+  const result = await redisRequest('get', [APP_SHUTDOWN_KEY]);
+  return result === 'true' || result === true;
+}
+
+async function setAppShutdown(shutdown) {
+  if (!REDIS_ENABLED) {
+    memoryStore.appShutdown = shutdown;
+    return;
+  }
+  await redisRequest('set', [APP_SHUTDOWN_KEY, shutdown ? 'true' : 'false'], { method: 'POST' });
+}
+
+async function getAdminPassword() {
+  // First check Redis/storage, then fall back to env var
+  if (!REDIS_ENABLED) {
+    return memoryStore.adminPassword || process.env.ADMIN_SECRET_KEY || null;
+  }
+  const result = await redisRequest('get', [ADMIN_PASSWORD_KEY]);
+  // If not in Redis, use env var as default
+  return result || process.env.ADMIN_SECRET_KEY || null;
+}
+
+async function setAdminPassword(password) {
+  if (!REDIS_ENABLED) {
+    memoryStore.adminPassword = password;
+    return;
+  }
+  await redisRequest('set', [ADMIN_PASSWORD_KEY, password], { method: 'POST' });
+}
+
+async function storeAdminToken(token) {
+  if (!token) return;
+  if (!REDIS_ENABLED) {
+    memoryStore.adminTokens.set(token, Date.now() + ADMIN_TOKEN_TTL_SECONDS * 1000);
+    return;
+  }
+  await redisRequest('setex', [ADMIN_TOKEN_KEY(token), ADMIN_TOKEN_TTL_SECONDS, '1'], { method: 'POST' });
+}
+
+async function isAdminTokenValid(token) {
+  if (!token) return false;
+  if (!REDIS_ENABLED) {
+    const expiresAt = memoryStore.adminTokens.get(token);
+    if (!expiresAt) return false;
+    if (Date.now() > expiresAt) {
+      memoryStore.adminTokens.delete(token);
+      return false;
+    }
+    return true;
+  }
+  const result = await redisRequest('get', [ADMIN_TOKEN_KEY(token)]);
+  return Boolean(result);
+}
+
+async function deleteAdminToken(token) {
+  if (!token) return;
+  if (!REDIS_ENABLED) {
+    memoryStore.adminTokens.delete(token);
+    return;
+  }
+  await redisRequest('del', [ADMIN_TOKEN_KEY(token)], { method: 'POST' });
+}
+
+async function getAdminTokenTtlSeconds(token) {
+  if (!token) return 0;
+  if (!REDIS_ENABLED) {
+    const expiresAt = memoryStore.adminTokens.get(token);
+    if (!expiresAt) return 0;
+    const remainingMs = expiresAt - Date.now();
+    return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
+  }
+  const result = await redisRequest('ttl', [ADMIN_TOKEN_KEY(token)]);
+  if (typeof result !== 'number' || result < 0) {
+    return 0;
+  }
+  return result;
+}
+
 module.exports = {
   REDIS_ENABLED,
   getRoomById,
@@ -228,6 +326,14 @@ module.exports = {
   deleteActiveUser,
   listActiveUsers,
   fromSerializableRoom,
-  toSerializableRoom
+  toSerializableRoom,
+  getAppShutdown,
+  setAppShutdown,
+  getAdminPassword,
+  setAdminPassword,
+  storeAdminToken,
+  isAdminTokenValid,
+  deleteAdminToken,
+  getAdminTokenTtlSeconds
 };
 

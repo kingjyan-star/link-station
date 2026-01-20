@@ -9,7 +9,7 @@
 **Name**: Link Station  
 **Type**: Real-time matching game web application  
 **Live URL**: https://link-station-pro.vercel.app  
-**Status**: ✅ Active Development - Shared Redis Storage + Warning System Stable
+**Status**: ✅ Active Development - Admin Dashboard + Shared Redis Storage Stable
 
 ---
 
@@ -27,7 +27,25 @@
   - ✅ User sessions survive instance switching (no surprise logouts)
   - ✅ Deployment-ready instructions for Upstash (production) with local memory fallback
 
-### **Session 15b: Admin Cleanup & Tab-Close Username Freeing** (December 2025 - Latest)
+### **Session 16: Comprehensive Admin Dashboard System** (December 2025 - Latest)
+- **Major Feature**: Complete admin interface with 4 main features
+- **Admin Access**: Username `"link-station-admin"` → password entry → admin dashboard
+- **Features**:
+  1. **Current Status**: Real-time room/user counts by type, clickable breakdowns, detailed lists with kick/delete buttons
+  2. **Cleanup**: User cleanup (also cleans rooms) or room-only cleanup
+  3. **Shutdown/Revive**: Toggle app-wide shutdown (blocks all room operations, admin can still access UI)
+  4. **Change Password**: 2-step password change (2nd password `"19951025"` → new password)
+- **Admin Endpoints**: 10 new endpoints (`/api/admin-*`) all secured with password verification
+- **Admin Alerts**: Users see "관리자에 의해 추방되었습니다" or "관리자에 의해 방이 삭제되었습니다" when affected
+- **Storage**: Admin password stored in Redis (changeable via UI, initial from `ADMIN_SECRET_KEY` env var)
+- **Security**: Password verified on every request, admin cannot create/join rooms (admin-only UI)
+- **Benefits**:
+  - ✅ Complete admin control panel for monitoring and management
+  - ✅ Real-time status visibility
+  - ✅ On-demand cleanup and shutdown control
+  - ✅ Secure password management without redeploy
+
+### **Session 15b: Admin Cleanup & Tab-Close Username Freeing** (December 2025)
 - **Problem Solved**: Stuck usernames/rooms in storage and usernames staying locked after tab close
 - **Solution**:
   - Added **admin-only** `POST /api/manual-cleanup` endpoint secured with `ADMIN_SECRET_KEY`
@@ -88,13 +106,14 @@ I'm working on **Link Station**, a multi-device real-time matching game where us
 - No WebSockets (using REST + polling)
 
 ### Environment Variables (Vercel)
-- `UPSTASH_REDIS_KV_REST_API_URL`
-- `UPSTASH_REDIS_KV_REST_API_TOKEN`
-- `UPSTASH_REDIS_KV_URL` (Upstash dashboard convenience)
-- `UPSTASH_REDIS_REDIS_URL`
-- `UPSTASH_REDIS_KV_REST_API_READ_ONLY_TOKEN` (optional for future read-only ops)
-- `ADMIN_SECRET_KEY` (required to access `/api/manual-cleanup`; shared only with owner)
+- `UPSTASH_REDIS_KV_REST_API_URL` - REST endpoint for Upstash Redis
+- `UPSTASH_REDIS_KV_REST_API_TOKEN` - Auth token for REST reads/writes
+- `UPSTASH_REDIS_KV_URL` - Dashboard convenience URL (optional)
+- `UPSTASH_REDIS_REDIS_URL` - Redis protocol URL (optional)
+- `UPSTASH_REDIS_KV_REST_API_READ_ONLY_TOKEN` - Read-only token (optional)
+- `ADMIN_SECRET_KEY` - **NEW** Initial admin password (set to `"link-station-password-2025"` or your choice)
 > For local development without these values, the backend automatically falls back to in-memory storage.
+> Admin password is stored in Redis after first login and can be changed via admin UI.
 
 ---
 
@@ -111,7 +130,13 @@ I'm working on **Link Station**, a multi-device real-time matching game where us
 
 ---
 
-## 🎮 9-State Flow Overview (Updated)
+## 🎮 State Flow Overview (Updated - Now 15 States)
+
+**Regular User States (9):**
+1. registerName → 2. makeOrJoinRoom → 3. makeroom/joinroom → 4. checkpassword/joinroomwithqr → 5. waitingroom → 6. linking → 7. linkresult → (back to waitingroom)
+
+**Admin States (6):**
+- registerName (enter "link-station-admin") → adminPassword → adminDashboard → (adminStatus/adminCleanup/adminShutdown/adminChangePassword)
 
 1. **RegisterName** (formerly Enter) - Username registration only
 2. **MakeOrJoinRoom** (NEW) - Bridge state: choose make/join/exit
@@ -149,12 +174,28 @@ I'm working on **Link Station**, a multi-device real-time matching game where us
 **Role System**:
 - `POST /api/change-role` - Switch between attender/observer
 
+**Admin System** (NEW):
+- `POST /api/admin-login` - Verify admin password
+- `GET /api/admin-shutdown-status` - Check shutdown state
+- `POST /api/admin-shutdown` - Toggle shutdown
+- `POST /api/admin-status` - Get room/user counts
+- `POST /api/admin-users` - Get filtered user list
+- `POST /api/admin-rooms` - Get filtered room list
+- `POST /api/admin-kick-user` - Kick user (admin)
+- `POST /api/admin-delete-room` - Delete room (admin)
+- `POST /api/admin-cleanup` - Cleanup users/rooms
+- `POST /api/admin-change-password` - Change admin password
+
 ---
 
 ## ✅ Latest Status (November 2025)
 
 ### What's Working
-- ✅ Complete 9-state flow (registerName → makeOrJoinRoom → game → results → back to waitingroom)
+- ✅ Complete 15-state flow (9 regular + 6 admin states)
+- ✅ Admin dashboard with 4 main features (status, cleanup, shutdown, password change)
+- ✅ Admin access via "link-station-admin" username
+- ✅ Admin action alerts (users see alerts when kicked/deleted by admin)
+- ✅ Shutdown system (blocks all room operations, admin can revive)
 - ✅ Inactivity warning system (user & room warnings 1min before timeout)
 - ✅ Room activity tracking (prevents disappearing during games)
 - ✅ Observer/Attender system (flexible role selection)
