@@ -520,13 +520,20 @@ function App() {
         setUsers(data.room.users);
         setGameState(data.room.gameState || 'waiting'); // Track game state
         
-        // SIMPLE FIX: Show results if they exist, regardless of game state
-        if (data.matchResult) {
-          console.log('✅ Match results found, showing results to all users');
+        // Check if current user has returned to waiting room
+        const currentUserData = data.room.users.find(u => u.id === userId);
+        const hasCurrentUserReturned = currentUserData?.hasReturnedToWaiting || false;
+        
+        // Show results ONLY if matchResult exists AND user has NOT returned to waiting room
+        // This prevents overriding user's navigation to waiting room
+        if (data.matchResult && !hasCurrentUserReturned) {
+          console.log('✅ Match results found, showing results to user');
           setMatches(data.matchResult.matches || []);
           setUnmatched(data.matchResult.unmatched || []);
           setCurrentState('linkresult');
           // Don't stop polling - let the useEffect handle it
+        } else if (hasCurrentUserReturned) {
+          console.log('👤 User has returned to waiting room, staying in waitingroom state');
         }
       } else {
         console.log('❌ Polling failed:', data);
@@ -1203,14 +1210,21 @@ function App() {
   };
 
   const handleReturnToWaitingRoom = async () => {
-    // Return to waiting room after results - keep room alive
-      setMatches([]);
-      setUnmatched([]);
+    // IMPORTANT: Stop polling FIRST to prevent race condition
+    // Without this, an in-flight poll could redirect user back to linkresult
+    stopPolling();
+    
+    // Reset local state
+    setMatches([]);
+    setUnmatched([]);
     setSelectedUser(null);
     setHasVoted(false);
-    setGameState('waiting'); // Reset game state
+    setGameState('waiting');
     
-    // Reset game state in API
+    // Change state to waitingroom BEFORE API call
+    setCurrentState('waitingroom');
+    
+    // Notify server that user has returned to waiting room
     try {
       if (roomId && userId) {
         await fetch(`${API_URL}/api/return-to-waiting`, {
@@ -1223,8 +1237,7 @@ function App() {
       console.error('Error returning to waiting room:', error);
     }
     
-    setCurrentState('waitingroom');
-    // Start waiting room polling
+    // Start waiting room polling (this will now use pollWaitingRoomStatus, not pollRoomStatus)
     startWaitingRoomPolling();
   };
 
