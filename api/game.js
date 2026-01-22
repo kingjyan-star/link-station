@@ -91,6 +91,10 @@ async function cleanupInactiveUsersAndRooms() {
     }
 
     console.log(`   Found inactive user: ${username} (inactive for ${Math.floor(inactiveTime / 1000)}s)`);
+    
+    // Set kick marker for inactivity
+    await storage.setUserKickMarker(username, storage.KICK_REASONS.INACTIVITY);
+    
     const room = processedRooms.get(roomId) || (await storage.getRoomById(roomId));
 
     if (room) {
@@ -122,6 +126,7 @@ async function cleanupInactiveUsersAndRooms() {
 
   for (const [roomId, room] of processedRooms.entries()) {
     if (room.users.size === 0) {
+      await storage.setRoomDeleteMarker(roomId, storage.ROOM_DELETE_REASONS.EMPTY);
       await storage.deleteRoom(roomId);
       console.log(`   🗑️ Room "${room.roomName}" deleted - all users left`);
     } else {
@@ -149,12 +154,15 @@ async function cleanupEmptyRooms(now) {
       await storage.deleteRoom(roomId);
       console.log(`   🗑️ Room "${room.roomName}" deleted - empty room`);
     } else if (timeSinceActivity > ZOMBIE_ROOM_TIMEOUT) {
-      await storage.deleteRoom(roomId);
-      console.log(`   🧟 Room "${room.roomName}" deleted - zombie room (inactive for ${Math.floor(timeSinceActivity / 1000 / 60)} minutes)`);
-
+      await storage.setRoomDeleteMarker(roomId, storage.ROOM_DELETE_REASONS.INACTIVITY);
+      
       for (const user of room.users.values()) {
+        await storage.setUserKickMarker(user.username, storage.KICK_REASONS.ROOM_DELETED, storage.ROOM_DELETE_REASONS.INACTIVITY);
         await storage.deleteActiveUser(user.username);
       }
+      
+      await storage.deleteRoom(roomId);
+      console.log(`   🧟 Room "${room.roomName}" deleted - zombie room (inactive for ${Math.floor(timeSinceActivity / 1000 / 60)} minutes)`);
     }
   }
 }
@@ -782,12 +790,28 @@ app.post('/api/check-warning', async (req, res) => {
     }
   }
   
-  // Check if user was disconnected
-  const userDisconnected = Boolean(username && !(await storage.getActiveUser(username)));
+  // ========== UNIFIED MARKER CHECK ==========
+  const userKickMarker = username ? await storage.getUserKickMarker(username) : null;
+  const roomDeleteMarker = roomId ? await storage.getRoomDeleteMarker(roomId) : null;
   
-  // Check if room was deleted
+  let kickReason = userKickMarker ? userKickMarker.reason : null;
+  let roomDeleteReason = null;
+  
+  if (userKickMarker && userKickMarker.roomDeleteReason) {
+    roomDeleteReason = userKickMarker.roomDeleteReason;
+  } else if (roomDeleteMarker) {
+    roomDeleteReason = roomDeleteMarker.reason;
+  }
+  
+  // Legacy: Check if user was disconnected (only if no marker)
+  let userDisconnected = false;
+  if (!kickReason) {
+    userDisconnected = Boolean(username && !(await storage.getActiveUser(username)));
+  }
+  
+  // Legacy: Check if room was deleted (only if no marker)
   let roomDeleted = false;
-  if (roomId) {
+  if (!roomDeleteReason && roomId) {
     const roomExists = await storage.getRoomById(roomId);
     if (!roomExists) {
       roomDeleted = await storage.wasRoomDeleted(roomId);
@@ -800,6 +824,8 @@ app.post('/api/check-warning', async (req, res) => {
     userTimeLeft,
     roomWarning,
     roomTimeLeft,
+    kickReason,
+    roomDeleteReason,
     userDisconnected,
     roomDeleted
   });
@@ -1035,12 +1061,16 @@ app.post('/api/kick-user', async (req, res) => {
     return res.status(400).json({ success: false, message: '자신을 추방할 수 없습니다.' });
   }
   
+  // Set kick marker for master kick
+  await storage.setUserKickMarker(targetUser.username, storage.KICK_REASONS.MASTER);
+  
   // Remove user from room
   room.users.delete(targetUserId);
   room.selections.delete(targetUserId);
   await storage.deleteActiveUser(targetUser.username);
-  room.lastActivity = Date.now(); // Prevent room deletion during kick
+  room.lastActivity = Date.now();
   if (room.users.size === 0) {
+    await storage.setRoomDeleteMarker(roomId, storage.ROOM_DELETE_REASONS.EMPTY);
     await storage.deleteRoom(roomId);
   } else {
     await storage.saveRoom(room);
@@ -1434,6 +1464,9 @@ app.post('/api/admin-kick-user', async (req, res) => {
       return res.status(404).json({ success: false, message: '사용자를 찾을 수 없습니다.' });
     }
     
+    // Set kick marker for admin kick (highest priority)
+    await storage.setUserKickMarker(username, storage.KICK_REASONS.ADMIN);
+    
     // Remove from room if in a room
     if (userData.roomId) {
       const room = await storage.getRoomById(userData.roomId);
@@ -1451,15 +1484,13 @@ app.post('/api/admin-kick-user', async (req, res) => {
         
         // Delete room if empty
         if (room.users.size === 0) {
+          await storage.setRoomDeleteMarker(userData.roomId, storage.ROOM_DELETE_REASONS.EMPTY);
           await storage.deleteRoom(userData.roomId);
         } else {
           await storage.saveRoom(room);
         }
       }
     }
-    
-    // Mark user as kicked by admin (for alert)
-    await storage.markUserKickedByAdmin(username);
     
     // Delete user
     await storage.deleteActiveUser(username);
@@ -1484,11 +1515,12 @@ app.post('/api/admin-delete-room', async (req, res) => {
       return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
     }
     
-    // Mark room as deleted by admin (for alert)
-    await storage.markRoomDeletedByAdmin(roomId);
+    // Set room delete marker (admin has highest priority)
+    await storage.setRoomDeleteMarker(roomId, storage.ROOM_DELETE_REASONS.ADMIN);
     
-    // Delete all users in the room (they'll see the alert via polling)
+    // Set kick markers for all users in the room (include room delete reason)
     for (const user of room.users.values()) {
+      await storage.setUserKickMarker(user.username, storage.KICK_REASONS.ROOM_DELETED, storage.ROOM_DELETE_REASONS.ADMIN);
       await storage.deleteActiveUser(user.username);
     }
     

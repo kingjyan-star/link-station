@@ -16,24 +16,43 @@ const ACTIVE_USER_KEY = (username) => `active:${username}`;
 const ACTIVE_USER_SET_KEY = 'active:users';
 const DELETED_ROOM_KEY = (roomId) => `room:deleted:${roomId}`;
 const DELETED_ROOM_TTL_SECONDS = 10 * 60; // retain deletion info for 10 minutes
-const USER_KICKED_KEY = (username) => `user:kicked:${username}`;
-const ROOM_DELETED_KEY = (roomId) => `room:deleted:admin:${roomId}`;
 const ADMIN_TOKEN_KEY = (token) => `app:admin:token:${token}`;
 const ADMIN_SESSION_SET_KEY = 'admin:sessions';
-const USER_KICKED_TTL_SECONDS = 30; // 30 seconds - just enough for polling to detect
-const ROOM_DELETED_TTL_SECONDS = 30; // 30 seconds
+
+// ========== UNIFIED MARKER SYSTEM ==========
+// Kick reasons for users (priority order: ADMIN > MASTER > ROOM_DELETED > INACTIVITY)
+const KICK_REASONS = {
+  ADMIN: 'ADMIN',
+  MASTER: 'MASTER',
+  ROOM_DELETED: 'ROOM_DELETED',
+  INACTIVITY: 'INACTIVITY'
+};
+
+// Room delete reasons (priority order: ADMIN > INACTIVITY > EMPTY)
+const ROOM_DELETE_REASONS = {
+  ADMIN: 'ADMIN',
+  INACTIVITY: 'INACTIVITY',
+  EMPTY: 'EMPTY'
+};
+
+const KICK_PRIORITY = ['INACTIVITY', 'ROOM_DELETED', 'MASTER', 'ADMIN'];
+const ROOM_DELETE_PRIORITY = ['EMPTY', 'INACTIVITY', 'ADMIN'];
+
+const USER_KICK_MARKER_KEY = (username) => `marker:user:kick:${username}`;
+const ROOM_DELETE_MARKER_KEY = (roomId) => `marker:room:delete:${roomId}`;
+const MARKER_TTL_SECONDS = 60;
 
 // In-memory fallback (for local development with no Redis credentials)
 const memoryStore = {
   rooms: new Map(),
-  roomNameIndex: new Map(), // roomNameLower -> roomId
+  roomNameIndex: new Map(),
   activeUsers: new Map(),
   deletedRooms: new Map(),
   appShutdown: false,
   adminPassword: null,
-  userKicked: new Map(),
-  roomDeletedByAdmin: new Map(),
-  adminTokens: new Map()
+  adminTokens: new Map(),
+  userKickMarkers: new Map(),
+  roomDeleteMarkers: new Map()
 };
 
 const toSerializableRoom = (room) => ({
@@ -341,42 +360,99 @@ async function listAdminSessions() {
   return sessions;
 }
 
-// ---------- Admin action markers (for alerts) ----------
+// ========== UNIFIED MARKER FUNCTIONS ==========
 
-async function markUserKickedByAdmin(username) {
-  if (!username) return;
+async function setUserKickMarker(username, reason, roomDeleteReason = null) {
+  if (!username || !reason) return;
+  
+  const now = Date.now();
+  const marker = { reason, timestamp: now };
+  if (roomDeleteReason) marker.roomDeleteReason = roomDeleteReason;
+  
   if (!REDIS_ENABLED) {
-    memoryStore.userKicked.set(username, Date.now());
+    const existing = memoryStore.userKickMarkers.get(username);
+    if (existing && existing.expiresAt > now) {
+      const existingPriority = KICK_PRIORITY.indexOf(existing.reason);
+      const newPriority = KICK_PRIORITY.indexOf(reason);
+      if (existingPriority >= newPriority) return;
+    }
+    memoryStore.userKickMarkers.set(username, { ...marker, expiresAt: now + MARKER_TTL_SECONDS * 1000 });
     return;
   }
-  await redisRequest('setex', [USER_KICKED_KEY(username), USER_KICKED_TTL_SECONDS, '1'], { method: 'POST' });
-}
-
-async function wasUserKickedByAdmin(username) {
-  if (!username) return false;
-  if (!REDIS_ENABLED) {
-    return memoryStore.userKicked.has(username);
+  
+  const existingRaw = await redisRequest('get', [USER_KICK_MARKER_KEY(username)]);
+  if (existingRaw) {
+    const existing = JSON.parse(existingRaw);
+    const existingPriority = KICK_PRIORITY.indexOf(existing.reason);
+    const newPriority = KICK_PRIORITY.indexOf(reason);
+    if (existingPriority >= newPriority) return;
   }
-  const result = await redisRequest('get', [USER_KICKED_KEY(username)]);
-  return Boolean(result);
+  
+  await redisRequest('setex', [USER_KICK_MARKER_KEY(username), MARKER_TTL_SECONDS, JSON.stringify(marker)], { method: 'POST' });
 }
 
-async function markRoomDeletedByAdmin(roomId) {
-  if (!roomId) return;
+async function getUserKickMarker(username) {
+  if (!username) return null;
+  
   if (!REDIS_ENABLED) {
-    memoryStore.roomDeletedByAdmin.set(roomId, Date.now());
+    const marker = memoryStore.userKickMarkers.get(username);
+    if (!marker) return null;
+    if (Date.now() > marker.expiresAt) {
+      memoryStore.userKickMarkers.delete(username);
+      return null;
+    }
+    return { reason: marker.reason, timestamp: marker.timestamp, roomDeleteReason: marker.roomDeleteReason };
+  }
+  
+  const result = await redisRequest('get', [USER_KICK_MARKER_KEY(username)]);
+  if (!result) return null;
+  return JSON.parse(result);
+}
+
+async function setRoomDeleteMarker(roomId, reason) {
+  if (!roomId || !reason) return;
+  
+  const now = Date.now();
+  const marker = { reason, timestamp: now };
+  
+  if (!REDIS_ENABLED) {
+    const existing = memoryStore.roomDeleteMarkers.get(roomId);
+    if (existing && existing.expiresAt > now) {
+      const existingPriority = ROOM_DELETE_PRIORITY.indexOf(existing.reason);
+      const newPriority = ROOM_DELETE_PRIORITY.indexOf(reason);
+      if (existingPriority >= newPriority) return;
+    }
+    memoryStore.roomDeleteMarkers.set(roomId, { ...marker, expiresAt: now + MARKER_TTL_SECONDS * 1000 });
     return;
   }
-  await redisRequest('setex', [ROOM_DELETED_KEY(roomId), ROOM_DELETED_TTL_SECONDS, '1'], { method: 'POST' });
+  
+  const existingRaw = await redisRequest('get', [ROOM_DELETE_MARKER_KEY(roomId)]);
+  if (existingRaw) {
+    const existing = JSON.parse(existingRaw);
+    const existingPriority = ROOM_DELETE_PRIORITY.indexOf(existing.reason);
+    const newPriority = ROOM_DELETE_PRIORITY.indexOf(reason);
+    if (existingPriority >= newPriority) return;
+  }
+  
+  await redisRequest('setex', [ROOM_DELETE_MARKER_KEY(roomId), MARKER_TTL_SECONDS, JSON.stringify(marker)], { method: 'POST' });
 }
 
-async function wasRoomDeletedByAdmin(roomId) {
-  if (!roomId) return false;
+async function getRoomDeleteMarker(roomId) {
+  if (!roomId) return null;
+  
   if (!REDIS_ENABLED) {
-    return memoryStore.roomDeletedByAdmin.has(roomId);
+    const marker = memoryStore.roomDeleteMarkers.get(roomId);
+    if (!marker) return null;
+    if (Date.now() > marker.expiresAt) {
+      memoryStore.roomDeleteMarkers.delete(roomId);
+      return null;
+    }
+    return { reason: marker.reason, timestamp: marker.timestamp };
   }
-  const result = await redisRequest('get', [ROOM_DELETED_KEY(roomId)]);
-  return Boolean(result);
+  
+  const result = await redisRequest('get', [ROOM_DELETE_MARKER_KEY(roomId)]);
+  if (!result) return null;
+  return JSON.parse(result);
 }
 
 module.exports = {
@@ -403,9 +479,11 @@ module.exports = {
   deleteAdminToken,
   getAdminTokenTtlSeconds,
   listAdminSessions,
-  markUserKickedByAdmin,
-  wasUserKickedByAdmin,
-  markRoomDeletedByAdmin,
-  wasRoomDeletedByAdmin
+  KICK_REASONS,
+  ROOM_DELETE_REASONS,
+  setUserKickMarker,
+  getUserKickMarker,
+  setRoomDeleteMarker,
+  getRoomDeleteMarker
 };
 

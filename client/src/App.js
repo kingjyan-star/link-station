@@ -209,6 +209,65 @@ function App() {
     }
   };
 
+  // ========== UNIFIED KICK HANDLER ==========
+  // Handles all kick scenarios with proper alerts and state transitions
+  // Priority: ADMIN > MASTER > ROOM_DELETED > INACTIVITY
+  const handleKickByReason = useCallback((kickReason, roomDeleteReason = null) => {
+    let alertMessage = '';
+    let clearUsername = false;
+    
+    switch (kickReason) {
+      case 'ADMIN':
+        alertMessage = '⚠️ 관리자에 의해 추방되었습니다.';
+        clearUsername = true; // Admin kick = clear username
+        break;
+      case 'MASTER':
+        alertMessage = '⚠️ 방장에 의해 추방되었습니다.';
+        clearUsername = true; // Master kick = clear username
+        break;
+      case 'ROOM_DELETED':
+        // Show different message based on why the room was deleted
+        if (roomDeleteReason === 'ADMIN') {
+          alertMessage = '⚠️ 관리자에 의해 방이 삭제되었습니다.';
+        } else if (roomDeleteReason === 'INACTIVITY') {
+          alertMessage = '⚠️ 장시간 활동이 없어 방이 삭제되었습니다.';
+        } else {
+          alertMessage = '⚠️ 방이 삭제되었습니다.';
+        }
+        clearUsername = false; // Room deleted = keep username
+        break;
+      case 'INACTIVITY':
+        alertMessage = '⚠️ 장시간 활동이 감지되지 않아 로그아웃되었습니다.';
+        clearUsername = true; // Inactivity = clear username
+        break;
+      default:
+        alertMessage = '⚠️ 연결이 끊어졌습니다.';
+        clearUsername = true;
+    }
+    
+    alert(alertMessage);
+    
+    // Clear room-related state
+    setRoomId('');
+    setUserId('');
+    setUsers([]);
+    setIsMaster(false);
+    setRoomData(null);
+    setMatches([]);
+    setUnmatched([]);
+    setSelectedUser(null);
+    setHasVoted(false);
+    stopPolling();
+    stopWarningCheck();
+    
+    if (clearUsername) {
+      setUsername('');
+      setCurrentState('registerName');
+    } else {
+      setCurrentState('makeOrJoinRoom');
+    }
+  }, []);
+
   // Warning check function
   const checkWarning = useCallback(async () => {
     if (!username || !userId) return;
@@ -236,45 +295,28 @@ function App() {
         setShowRoomWarning(false);
       }
       
-      // Handle disconnection - user is completely logged out
-      if (data.userDisconnected) {
-        alert('⚠️ 장시간 활동이 감지되지 않아 로그아웃되었습니다.');
-        // Complete logout - clear everything including username
-        setUsername('');
-        setRoomId('');
-        setUserId('');
-        setUsers([]);
-        setIsMaster(false);
-        setRoomData(null);
-        setMatches([]);
-        setUnmatched([]);
-      setSelectedUser(null);
-        setHasVoted(false);
-        stopPolling();
-        stopWarningCheck();
-        setCurrentState('registerName'); // Go back to name registration (complete logout)
+      // ========== UNIFIED MARKER CHECK ==========
+      // Check kick marker first (has priority info)
+      if (data.kickReason) {
+        handleKickByReason(data.kickReason, data.roomDeleteReason);
+        return;
       }
       
-      // Handle room deletion
+      // Legacy fallback: Handle disconnection
+      if (data.userDisconnected) {
+        handleKickByReason('INACTIVITY');
+        return;
+      }
+      
+      // Legacy fallback: Handle room deletion
       if (data.roomDeleted) {
-        alert('⚠️ 장시간 활동이 감지되지 않아 방이 사라졌습니다.');
-        setRoomId('');
-        setUserId('');
-        setUsers([]);
-        setIsMaster(false);
-        setRoomData(null);
-      setMatches([]);
-      setUnmatched([]);
-        setSelectedUser(null);
-        setHasVoted(false);
-        stopPolling();
-        stopWarningCheck();
-        setCurrentState('makeOrJoinRoom');
+        handleKickByReason('ROOM_DELETED', data.roomDeleteReason);
+        return;
       }
     } catch (error) {
       console.error('Warning check error:', error);
     }
-  }, [username, userId, roomId]); // Removed isMaster (not used), stopPolling and stopWarningCheck (refs, stable)
+  }, [username, userId, roomId, handleKickByReason]);
 
   const startWarningCheck = useCallback(() => {
     if (warningInterval.current) {
@@ -399,38 +441,29 @@ function App() {
     console.log('🔄 Polling room status...', { roomId, currentState, userId, hasVoted });
     
     try {
-      const response = await fetch(`${API_URL}/api/room/${roomId}?username=${encodeURIComponent(username)}`);
+      const response = await fetch(`${API_URL}/api/room/${roomId}`);
       const data = await response.json();
       
       // Handle room not found (deleted or user kicked)
       if (!data.success) {
         console.log('❌ Room not found or access denied', data);
         if (!isLeavingRoom.current) {
-          if (data.kickedByAdmin && data.kickedByAdmin.includes(username)) {
-            alert('⚠️ 관리자에 의해 추방되었습니다.');
-            setUsername('');
-            setCurrentState('registerName');
-          } else if (data.roomDeletedByAdmin) {
-            alert('⚠️ 관리자에 의해 방이 삭제되었습니다.');
-            setUsername('');
-            setCurrentState('registerName');
-          } else {
-            // Room was deleted normally (e.g., all users left)
-            alert('⚠️ 방이 삭제되었습니다.');
-            setCurrentState('makeOrJoinRoom');
-          }
+          // Use unified marker system - roomDeleteReason tells us why
+          handleKickByReason('ROOM_DELETED', data.roomDeleteReason);
+        } else {
+          // User left voluntarily, just clean up state
+          setRoomId('');
+          setUserId('');
+          setUsers([]);
+          setIsMaster(false);
+          setRoomData(null);
+          setMatches([]);
+          setUnmatched([]);
+          setSelectedUser(null);
+          setHasVoted(false);
+          stopPolling();
+          stopWarningCheck();
         }
-        setRoomId('');
-        setUserId('');
-        setUsers([]);
-        setIsMaster(false);
-        setRoomData(null);
-        setMatches([]);
-        setUnmatched([]);
-        setSelectedUser(null);
-        setHasVoted(false);
-        stopPolling();
-        stopWarningCheck();
         isLeavingRoom.current = false;
         return;
       }
@@ -444,73 +477,41 @@ function App() {
           allUsersVotingStatus: data.room.users.map(u => ({ name: u.displayName, voted: u.hasVoted, id: u.id }))
         });
         
+        // ========== UNIFIED MARKER CHECK ==========
+        // Check if current user has a kick marker
+        if (data.userKickMarkers && data.userKickMarkers[username]) {
+          const kickMarker = data.userKickMarkers[username];
+          console.log('❌ User has kick marker:', kickMarker);
+          if (!isLeavingRoom.current) {
+            handleKickByReason(kickMarker.reason, kickMarker.roomDeleteReason);
+          }
+          isLeavingRoom.current = false;
+          return;
+        }
+        
         // Check if current user is still in the room
         const currentUserInRoom = data.room.users.find(user => user.id === userId);
         if (!currentUserInRoom) {
           // User has been kicked or removed
-          // Only show alert if user didn't leave voluntarily
           if (!isLeavingRoom.current) {
             console.log('❌ User not in room (kicked), redirecting...');
-            // Check if kicked by admin or room deleted by admin
-            if (data.kickedByAdmin && data.kickedByAdmin.includes(username)) {
-              alert('⚠️ 관리자에 의해 추방되었습니다.');
-              setUsername(''); // Clear username on admin kick
-              setCurrentState('registerName');
-            } else if (data.roomDeletedByAdmin) {
-              alert('⚠️ 관리자에 의해 방이 삭제되었습니다.');
-              setUsername(''); // Clear username when room deleted by admin
-              setCurrentState('registerName');
-            } else {
-              alert('⚠️ 방장에 의해 추방되었습니다.');
-              setCurrentState('makeOrJoinRoom'); // Keep username for master kick
-            }
+            // Fallback: assume master kick if no marker
+            handleKickByReason('MASTER');
           } else {
             console.log('✅ User left voluntarily, no alert needed');
+            setRoomId('');
+            setUserId('');
+            setUsers([]);
+            setIsMaster(false);
+            setRoomData(null);
+            setMatches([]);
+            setUnmatched([]);
+            setSelectedUser(null);
+            setHasVoted(false);
+            stopPolling();
+            stopWarningCheck();
           }
-          setRoomId('');
-          setUserId('');
-    setUsers([]);
-          setIsMaster(false);
-          setRoomData(null);
-    setMatches([]);
-    setUnmatched([]);
-    setSelectedUser(null);
-          setHasVoted(false);
-          stopPolling();
-          stopWarningCheck();
-          isLeavingRoom.current = false; // Reset flag
-          return;
-        }
-        
-        // Check if room was deleted by admin (room doesn't exist in response)
-        if (data.roomDeletedByAdmin) {
-          console.log('❌ Room deleted by admin');
-          alert('⚠️ 관리자에 의해 방이 삭제되었습니다.');
-          setUsername('');
-          setRoomId('');
-          setUserId('');
-          setUsers([]);
-          setIsMaster(false);
-          setRoomData(null);
-          stopPolling();
-          stopWarningCheck();
-          setCurrentState('registerName');
-          return;
-        }
-        
-        // Check if user was kicked by admin (but still in room response - edge case)
-        if (data.kickedByAdmin && data.kickedByAdmin.includes(username)) {
-          console.log('❌ User kicked by admin');
-          alert('⚠️ 관리자에 의해 추방되었습니다.');
-          setUsername('');
-          setRoomId('');
-          setUserId('');
-          setUsers([]);
-          setIsMaster(false);
-          setRoomData(null);
-          stopPolling();
-          stopWarningCheck();
-          setCurrentState('registerName');
+          isLeavingRoom.current = false;
           return;
         }
         
@@ -518,20 +519,18 @@ function App() {
         console.log('👥 Users update:', data.room.users.map(u => ({ name: u.displayName, voted: u.hasVoted })));
         console.log('🔄 Setting users state with voting status...');
         setUsers(data.room.users);
-        setGameState(data.room.gameState || 'waiting'); // Track game state
+        setGameState(data.room.gameState || 'waiting');
         
         // Check if current user has returned to waiting room
         const currentUserData = data.room.users.find(u => u.id === userId);
         const hasCurrentUserReturned = currentUserData?.hasReturnedToWaiting || false;
         
         // Show results ONLY if matchResult exists AND user has NOT returned to waiting room
-        // This prevents overriding user's navigation to waiting room
         if (data.matchResult && !hasCurrentUserReturned) {
           console.log('✅ Match results found, showing results to user');
           setMatches(data.matchResult.matches || []);
           setUnmatched(data.matchResult.unmatched || []);
           setCurrentState('linkresult');
-          // Don't stop polling - let the useEffect handle it
         } else if (hasCurrentUserReturned) {
           console.log('👤 User has returned to waiting room, staying in waitingroom state');
         }
@@ -541,7 +540,7 @@ function App() {
     } catch (error) {
       console.error('❌ Error polling room status:', error);
     }
-  }, [roomId, currentState, userId, hasVoted, username]);
+  }, [roomId, currentState, userId, hasVoted, username, handleKickByReason]);
 
   const startPolling = useCallback(() => {
     if (pollingInterval.current) {
@@ -556,44 +555,16 @@ function App() {
     if (!roomId) return;
     
     try {
-      const response = await fetch(`${API_URL}/api/room/${roomId}?username=${encodeURIComponent(username)}`);
+      const response = await fetch(`${API_URL}/api/room/${roomId}`);
       const data = await response.json();
       
       // Handle room not found (deleted or user kicked)
       if (!data.success) {
         console.log('❌ Room not found or access denied', data);
         if (!isLeavingRoom.current) {
-          if (data.kickedByAdmin && data.kickedByAdmin.includes(username)) {
-            alert('⚠️ 관리자에 의해 추방되었습니다.');
-            setUsername('');
-            setCurrentState('registerName');
-          } else if (data.roomDeletedByAdmin) {
-            alert('⚠️ 관리자에 의해 방이 삭제되었습니다.');
-            setUsername('');
-            setCurrentState('registerName');
-          } else {
-            // Room was deleted normally
-            alert('⚠️ 방이 삭제되었습니다.');
-            setCurrentState('makeOrJoinRoom');
-          }
-        }
-        setRoomId('');
-        setUserId('');
-        setUsers([]);
-        setIsMaster(false);
-        setRoomData(null);
-        stopPolling();
-        stopWarningCheck();
-        isLeavingRoom.current = false;
-        return;
-      }
-      
-      if (data.success && data.room) {
-        // Check if room was deleted by admin
-        if (data.roomDeletedByAdmin) {
-          console.log('❌ Room deleted by admin');
-          alert('⚠️ 관리자에 의해 방이 삭제되었습니다.');
-          setUsername('');
+          // Use unified marker system
+          handleKickByReason('ROOM_DELETED', data.roomDeleteReason);
+        } else {
           setRoomId('');
           setUserId('');
           setUsers([]);
@@ -601,69 +572,59 @@ function App() {
           setRoomData(null);
           stopPolling();
           stopWarningCheck();
-          setCurrentState('registerName');
+        }
+        isLeavingRoom.current = false;
+        return;
+      }
+      
+      if (data.success && data.room) {
+        // ========== UNIFIED MARKER CHECK ==========
+        // Check if current user has a kick marker
+        if (data.userKickMarkers && data.userKickMarkers[username]) {
+          const kickMarker = data.userKickMarkers[username];
+          console.log('❌ User has kick marker:', kickMarker);
+          if (!isLeavingRoom.current) {
+            handleKickByReason(kickMarker.reason, kickMarker.roomDeleteReason);
+          }
+          isLeavingRoom.current = false;
           return;
         }
         
         // Check if current user is still in the room
         const currentUserInRoom = data.room.users.find(user => user.id === userId);
         if (!currentUserInRoom) {
-          // User has been kicked or removed
-          // Only show alert if user didn't leave voluntarily
           if (!isLeavingRoom.current) {
-            // Check if kicked by admin
-            if (data.kickedByAdmin && data.kickedByAdmin.includes(username)) {
-              alert('⚠️ 관리자에 의해 추방되었습니다.');
-              setUsername(''); // Clear username on admin kick
-              setCurrentState('registerName');
-            } else {
-              alert('⚠️ 방장에 의해 추방되었습니다.');
-              setCurrentState('makeOrJoinRoom'); // Keep username for master kick
-            }
+            // Fallback: assume master kick if no marker
+            handleKickByReason('MASTER');
+          } else {
+            setRoomId('');
+            setUserId('');
+            setUsers([]);
+            setIsMaster(false);
+            setRoomData(null);
+            stopPolling();
+            stopWarningCheck();
           }
-          setRoomId('');
-          setUserId('');
-          setUsers([]);
-          setIsMaster(false);
-          setRoomData(null);
-          stopPolling();
-          stopWarningCheck();
-          isLeavingRoom.current = false; // Reset flag
-          return;
-        }
-        
-        // Check if user was kicked by admin (but still in room response - edge case)
-        if (data.kickedByAdmin && data.kickedByAdmin.includes(username)) {
-          console.log('❌ User kicked by admin');
-          alert('⚠️ 관리자에 의해 추방되었습니다.');
-          setUsername('');
-          setRoomId('');
-          setUserId('');
-          setUsers([]);
-          setIsMaster(false);
-          setRoomData(null);
-          stopPolling();
-          stopWarningCheck();
-          setCurrentState('registerName');
+          isLeavingRoom.current = false;
           return;
         }
         
         // Update users and master status
         setUsers(data.room.users);
         setIsMaster(data.room.masterId === userId);
-        setGameState(data.room.gameState || 'waiting'); // Track game state
+        setGameState(data.room.gameState || 'waiting');
         
         // Check if game started
         if (data.room.gameState === 'linking') {
           console.log('🎮 Game state changed to linking, switching to game polling...');
           setCurrentState('linking');
-          startPolling(); // Switch to game polling
+          startPolling();
         }
       }
     } catch (error) {
       console.error('Error polling waiting room status:', error);
     }
-  }, [roomId, userId, startPolling, username]);
+  }, [roomId, userId, startPolling, username, handleKickByReason]);
 
   const startWaitingRoomPolling = useCallback(() => {
     if (pollingInterval.current) {
