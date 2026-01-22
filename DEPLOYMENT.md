@@ -1,8 +1,8 @@
 # 🚀 Link Station - Deployment Guide
 
 **Live URL**: https://link-station-pro.vercel.app  
-**Status**: ✅ Active Development - Admin Dashboard + Shared Redis Storage Deployed  
-**Last Updated**: December 2025
+**Status**: ✅ Active Development - Unified Marker System & Admin UI Modernization Deployed  
+**Last Updated**: January 2026
 
 ---
 
@@ -200,7 +200,31 @@ ls -la static/
 
 ## 🚨 Current Issues
 
-### Recent Improvements (December 2025)
+### Recent Improvements (January 2026)
+
+**Session 17: Unified Marker System & Admin UI Modernization** ✅ COMPLETED
+- Fixed multiple alert issues (was showing 3 pop-ups when admin deleted room)
+- Fixed "대기실로 돌아가기" button requiring multiple clicks (race condition)
+- Implemented unified marker system in `api/storage.js`:
+  - `KICK_REASONS`: ADMIN, MASTER, ROOM_DELETED, INACTIVITY
+  - `ROOM_DELETE_REASONS`: ADMIN, INACTIVITY, EMPTY
+  - Markers auto-expire after 60 seconds
+- Single `handleKickByReason()` handler in frontend for all kick scenarios
+- Alert messages now correctly identify the cause:
+  - "⚠️ 관리자에 의해 추방되었습니다." (admin kick)
+  - "⚠️ 방장에 의해 추방되었습니다." (master kick)
+  - "⚠️ 관리자에 의해 방이 삭제되었습니다." (admin room delete)
+  - "⚠️ 장시간 활동이 감지되지 않아 방이 삭제되었습니다." (inactivity room delete)
+- Proper state transitions:
+  - ADMIN/INACTIVITY kick → Clear username → `registerName`
+  - MASTER kick/ROOM_DELETED → Keep username → `makeOrJoinRoom`
+- Modernized admin UI with new CSS classes:
+  - Card-based design with gradients and shadows
+  - Color-coded status badges
+  - Hover effects and consistent styling
+- **Benefits**: Single alert per event, correct messages, proper states, modern UI
+
+### Previous Improvements (December 2025)
 
 **Session 16: Comprehensive Admin Dashboard System** ✅ COMPLETED
 - Added complete admin interface with 4 main features:

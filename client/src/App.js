@@ -65,6 +65,10 @@ function App() {
   const warningInterval = useRef(null);
   const adminWarningInterval = useRef(null);
   const isLeavingRoom = useRef(false); // Flag to prevent "kicked" alert when user leaves voluntarily
+  
+  // Refs to hold the latest polling callbacks (fixes stale closure issue)
+  const pollWaitingRoomStatusRef = useRef(null);
+  const pollRoomStatusRef = useRef(null);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -223,7 +227,7 @@ function App() {
         break;
       case 'MASTER':
         alertMessage = '⚠️ 방장에 의해 추방되었습니다.';
-        clearUsername = true; // Master kick = clear username
+        clearUsername = false; // Master kick = keep username, go to makeOrJoinRoom
         break;
       case 'ROOM_DELETED':
         // Show different message based on why the room was deleted
@@ -542,14 +546,22 @@ function App() {
     }
   }, [roomId, currentState, userId, hasVoted, username, handleKickByReason]);
 
+  // Keep ref updated with latest pollRoomStatus
+  useEffect(() => {
+    pollRoomStatusRef.current = pollRoomStatus;
+  }, [pollRoomStatus]);
+
   const startPolling = useCallback(() => {
     if (pollingInterval.current) {
       clearInterval(pollingInterval.current);
     }
     // Do an immediate poll, then start interval
-    pollRoomStatus();
-    pollingInterval.current = setInterval(pollRoomStatus, 2000);
-  }, [pollRoomStatus]);
+    // Use ref to always call the latest version of the callback
+    pollRoomStatusRef.current?.();
+    pollingInterval.current = setInterval(() => {
+      pollRoomStatusRef.current?.();
+    }, 2000);
+  }, []); // No dependencies - uses ref for latest callback
 
   const pollWaitingRoomStatus = useCallback(async () => {
     if (!roomId) return;
@@ -626,14 +638,22 @@ function App() {
     }
   }, [roomId, userId, startPolling, username, handleKickByReason]);
 
+  // Keep ref updated with latest pollWaitingRoomStatus
+  useEffect(() => {
+    pollWaitingRoomStatusRef.current = pollWaitingRoomStatus;
+  }, [pollWaitingRoomStatus]);
+
   const startWaitingRoomPolling = useCallback(() => {
     if (pollingInterval.current) {
       clearInterval(pollingInterval.current);
     }
     // Do an immediate poll, then start interval
-    pollWaitingRoomStatus();
-    pollingInterval.current = setInterval(pollWaitingRoomStatus, 2000);
-  }, [pollWaitingRoomStatus]);
+    // Use ref to always call the latest version of the callback
+    pollWaitingRoomStatusRef.current?.();
+    pollingInterval.current = setInterval(() => {
+      pollWaitingRoomStatusRef.current?.();
+    }, 2000);
+  }, []); // No dependencies - uses ref for latest callback
 
   const stopPolling = () => {
     if (pollingInterval.current) {
@@ -678,17 +698,20 @@ function App() {
   }, [currentState, startWarningCheck]);
 
   // SIMPLE FIX: Start polling for any state that needs real-time updates
+  // Also restart polling when roomId changes (fixes issue where new members aren't visible)
   useEffect(() => {
     if (currentState === 'waitingroom') {
+      console.log('🔄 Starting waiting room polling for room:', roomId);
       startWaitingRoomPolling();
     } else if (currentState === 'linking' || currentState === 'linkresult') {
+      console.log('🔄 Starting game polling for room:', roomId);
       startPolling(); // Start polling for linking and result states
     } else {
       stopPolling(); // Stop polling for other states
     }
     
     return () => stopPolling();
-  }, [currentState, startWaitingRoomPolling, startPolling]);
+  }, [currentState, roomId, startWaitingRoomPolling, startPolling]);
 
   useEffect(() => {
     if (currentState !== 'adminShutdown') return;

@@ -1,8 +1,8 @@
 # 🔗 Link Station - Complete Project Context
 
 **Live URL**: https://link-station-pro.vercel.app  
-**Last Updated**: December 2025  
-**Status**: ✅ Active Development - Admin Dashboard & Shared Redis Storage Stable
+**Last Updated**: January 2026  
+**Status**: ✅ Active Development - Unified Marker System & Admin UI Modernization Complete
 
 ---
 
@@ -765,6 +765,113 @@ link-station/
 
 **Status**: ✅ COMPLETED - Admin dashboard fully functional and ready for deployment
 
+### Session 17: Unified Marker System & Admin UI Modernization (January 2026 - COMPLETED)
+**Focus**: Fix multiple alert issues, proper state transitions, race conditions, and modernize admin UI
+
+**Problems Addressed**:
+1. Multiple alerts (3 pop-ups) when admin deletes a room
+2. Master user needing to click "대기실로 돌아가기" button twice
+3. Incorrect alert messages (showing inactivity instead of admin action)
+4. Users going to wrong states after kick/room deletion
+5. Admin UI looking outdated (gray background with black borders)
+
+**Solutions Implemented**:
+
+#### **1. Unified Marker System** (`api/storage.js`)
+- **New Constants**:
+  - `KICK_REASONS`: `ADMIN`, `MASTER`, `ROOM_DELETED`, `INACTIVITY`
+  - `ROOM_DELETE_REASONS`: `ADMIN`, `INACTIVITY`, `EMPTY`
+- **New Functions**:
+  - `setUserKickMarker(username, reason, roomDeleteReason)` - Mark user with kick reason
+  - `getUserKickMarker(username)` - Get user's kick marker
+  - `clearUserKickMarker(username)` - Clear marker after handling
+  - `setRoomDeleteMarker(roomId, reason)` - Mark room with deletion reason
+  - `getRoomDeleteMarker(roomId)` - Get room's deletion marker
+  - `clearRoomDeleteMarker(roomId)` - Clear marker after handling
+- **TTL**: Markers auto-expire after 60 seconds (enough time for polling to detect)
+- **Priority**: ADMIN > MASTER > ROOM_DELETED > INACTIVITY
+
+#### **2. Backend Integration** (`api/game.js`)
+- **Cleanup Functions**:
+  - `cleanupInactiveUsersAndRooms()` sets `INACTIVITY` markers on users/rooms
+  - Empty room cleanup sets `EMPTY` marker
+  - Zombie room cleanup sets `INACTIVITY` marker and `ROOM_DELETED` kick markers for users
+- **Admin Actions**:
+  - `/api/admin-kick-user` sets `ADMIN` kick marker
+  - `/api/admin-delete-room` sets `ADMIN` room marker AND `ROOM_DELETED` kick markers for all users
+- **Master Actions**:
+  - `/api/kick-user` sets `MASTER` kick marker
+- **API Responses**:
+  - `/api/check-warning` returns `kickReason` and `roomDeleteReason`
+  - `/api/room/:roomId` returns `userKickMarkers` object for all relevant users
+
+#### **3. Frontend Unified Handler** (`client/src/App.js`)
+- **Single Handler**: `handleKickByReason(kickReason, roomDeleteReason)` centralizes all kick logic
+- **Alert Messages by Reason**:
+  - `ADMIN` → "⚠️ 관리자에 의해 추방되었습니다."
+  - `MASTER` → "⚠️ 방장에 의해 추방되었습니다."
+  - `ROOM_DELETED` + `ADMIN` → "⚠️ 관리자에 의해 방이 삭제되었습니다."
+  - `ROOM_DELETED` + `INACTIVITY` → "⚠️ 장시간 활동이 감지되지 않아 방이 삭제되었습니다."
+  - `ROOM_DELETED` + `EMPTY` → "⚠️ 방의 모든 사용자가 나가서 방이 삭제되었습니다."
+  - `INACTIVITY` → "⚠️ 장시간 활동이 감지되지 않아 로그아웃되었습니다."
+- **State Transitions**:
+  - `ADMIN` kick → Clear username → `registerName`
+  - `MASTER` kick → Keep username → `makeOrJoinRoom`
+  - `ROOM_DELETED` (any reason) → Keep username → `makeOrJoinRoom`
+  - `INACTIVITY` → Clear username → `registerName`
+- **Single Alert**: Each scenario shows exactly ONE alert (no duplicates)
+
+#### **4. Race Condition Fix**
+- **Problem**: Master clicking "대기실로 돌아가기" required multiple clicks
+- **Root Cause**: Polling was overwriting state change before it could complete
+- **Solution**:
+  - `handleReturnToWaitingRoom()` calls `stopPolling()` FIRST
+  - Sets `isLeavingRoom.current = true` to prevent kick alerts
+  - Changes state BEFORE API call for immediate UI feedback
+  - Starts `waitingRoomPolling` (not game polling) after API completes
+
+#### **5. Admin UI Modernization** (`client/src/App.css`)
+- **New CSS Classes**:
+  - `.admin-container` - Modern card-based container with subtle gradient
+  - `.admin-header` - Clean header with proper spacing
+  - `.admin-menu` - Menu layout with flexbox
+  - `.admin-menu-button` - Modern buttons with hover effects
+  - `.admin-status-grid` - Grid layout for status cards
+  - `.admin-status-card` - Clickable cards with hover states
+  - `.admin-list` - Clean list styling
+  - `.admin-list-item` - Individual item styling with badges
+  - `.admin-list-item-badge` - Status badges (waiting/playing/result/master)
+  - `.admin-filter-buttons` - Filter button group
+  - `.admin-action-button` - Action buttons with variants (danger/success)
+  - `.admin-back-button` - Consistent back navigation
+  - `.admin-kick-button` - Red delete/kick buttons
+  - `.admin-session-item` - Admin session list items
+  - `.stat-badge` - Statistics badges
+- **Visual Improvements**:
+  - Removed gray backgrounds with black borders
+  - Added subtle gradients and shadows
+  - Improved typography and spacing
+  - Color-coded status badges (green/orange/yellow)
+  - Hover effects and transitions
+  - Consistent button styling
+
+**Files Modified**:
+- `api/storage.js` - Added unified marker system with KICK_REASONS, ROOM_DELETE_REASONS
+- `api/game.js` - Integrated markers into all kick/delete operations
+- `client/src/App.js` - Added `handleKickByReason`, updated polling and admin UI renders
+- `client/src/App.css` - Added modern admin styling classes
+
+**Benefits**:
+- ✅ Single alert per event (no more 3 pop-ups)
+- ✅ Correct alert messages for each scenario
+- ✅ Proper state transitions (username cleared or kept appropriately)
+- ✅ "대기실로 돌아가기" works on first click
+- ✅ Modern, professional admin interface
+- ✅ Clear visual hierarchy in admin pages
+- ✅ Consistent design language
+
+**Status**: ✅ COMPLETED - Unified marker system and admin UI fully functional
+
 ---
 
 ## 🚀 Deployment Process
@@ -970,7 +1077,7 @@ link-station/
 ---
 
 **Status**: ✅ Production Ready  
-**Last Major Update**: October 2025 - Voting status and result broadcasting fixes  
+**Last Major Update**: January 2026 - Unified Marker System & Admin UI Modernization  
 **Next Review**: As needed for new features or bug reports
 
 ---
