@@ -6,6 +6,35 @@ const API_URL = process.env.NODE_ENV === 'production'
   ? window.location.origin 
   : 'http://localhost:3000';
 
+// Session persistence helpers
+const SESSION_KEY = 'linkstation_session';
+
+const saveSession = (data) => {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.error('Failed to save session:', e);
+  }
+};
+
+const loadSession = () => {
+  try {
+    const data = sessionStorage.getItem(SESSION_KEY);
+    return data ? JSON.parse(data) : null;
+  } catch (e) {
+    console.error('Failed to load session:', e);
+    return null;
+  }
+};
+
+const clearSession = () => {
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch (e) {
+    console.error('Failed to clear session:', e);
+  }
+};
+
 function App() {
   // State management
   const [currentState, setCurrentState] = useState('registerName'); // registerName, makeOrJoinRoom, makeroom, joinroom, checkpassword, joinroomwithqr, waitingroom, linking, linkresult, adminPassword, adminDashboard, adminStatus, adminCleanup, adminShutdown, adminChangePassword
@@ -92,6 +121,68 @@ function App() {
       }
     };
   }, []);
+
+  // Session recovery on page load (handles F5 refresh)
+  useEffect(() => {
+    const recoverSession = async () => {
+      // Skip if URL has room parameter (QR code join)
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('room')) {
+        return;
+      }
+
+      const session = loadSession();
+      if (!session || !session.username || !session.roomId || !session.userId) {
+        return;
+      }
+
+      console.log('🔄 Attempting to recover session:', session.username);
+
+      try {
+        // Check if the room still exists and user is still in it
+        const response = await fetch(`${API_URL}/api/room/${session.roomId}`);
+        const data = await response.json();
+
+        if (data.success && data.room) {
+          // Check if user is still in the room
+          const userInRoom = data.room.users.find(u => u.id === session.userId);
+          if (userInRoom) {
+            console.log('✅ Session recovered successfully');
+            // Restore state
+            setUsername(session.username);
+            setRoomId(session.roomId);
+            setUserId(session.userId);
+            setUsers(data.room.users);
+            setIsMaster(data.room.masterId === session.userId);
+            setRoomData(session.roomData);
+            setUserRole(userInRoom.role || 'attender');
+            setGameState(data.room.gameState || 'waiting');
+
+            // Navigate to appropriate state based on game state
+            if (data.room.gameState === 'linking') {
+              setCurrentState('linking');
+            } else if (data.room.gameState === 'completed' && data.matchResult) {
+              setMatches(data.matchResult.matches || []);
+              setUnmatched(data.matchResult.unmatched || []);
+              setCurrentState('linkresult');
+            } else {
+              setCurrentState('waitingroom');
+            }
+            return;
+          }
+        }
+
+        // Room not found or user not in room - clear session
+        console.log('❌ Session invalid, clearing');
+        clearSession();
+      } catch (error) {
+        console.error('Session recovery error:', error);
+        clearSession();
+      }
+    };
+
+    recoverSession();
+  }, []); // Only run on mount
 
   // Free username when tab closes (but not when tab goes to background)
   useEffect(() => {
@@ -258,6 +349,9 @@ function App() {
     }
     
     alert(alertMessage);
+    
+    // Clear session when kicked
+    clearSession();
     
     // Clear room-related state
     setRoomId('');
@@ -554,22 +648,25 @@ function App() {
     }
   }, [roomId, currentState, userId, hasVoted, username, handleKickByReason]);
 
-  // Keep ref updated with latest pollRoomStatus
-  useEffect(() => {
-    pollRoomStatusRef.current = pollRoomStatus;
-  }, [pollRoomStatus]);
+  // Update ref synchronously during render (not in useEffect) to avoid stale closure
+  pollRoomStatusRef.current = pollRoomStatus;
 
   const startPolling = useCallback(() => {
+    console.log('🚀 startPolling called, roomId:', roomId);
     if (pollingInterval.current) {
       clearInterval(pollingInterval.current);
     }
     // Do an immediate poll, then start interval
     // Use ref to always call the latest version of the callback
-    pollRoomStatusRef.current?.();
+    if (pollRoomStatusRef.current) {
+      pollRoomStatusRef.current();
+    }
     pollingInterval.current = setInterval(() => {
-      pollRoomStatusRef.current?.();
+      if (pollRoomStatusRef.current) {
+        pollRoomStatusRef.current();
+      }
     }, 2000);
-  }, []); // No dependencies - uses ref for latest callback
+  }, [roomId]); // Include roomId to restart polling when room changes
 
   const pollWaitingRoomStatus = useCallback(async () => {
     if (!roomId) return;
@@ -646,22 +743,25 @@ function App() {
     }
   }, [roomId, userId, startPolling, username, handleKickByReason]);
 
-  // Keep ref updated with latest pollWaitingRoomStatus
-  useEffect(() => {
-    pollWaitingRoomStatusRef.current = pollWaitingRoomStatus;
-  }, [pollWaitingRoomStatus]);
+  // Update ref synchronously during render (not in useEffect) to avoid stale closure
+  pollWaitingRoomStatusRef.current = pollWaitingRoomStatus;
 
   const startWaitingRoomPolling = useCallback(() => {
+    console.log('🚀 startWaitingRoomPolling called, roomId:', roomId);
     if (pollingInterval.current) {
       clearInterval(pollingInterval.current);
     }
     // Do an immediate poll, then start interval
     // Use ref to always call the latest version of the callback
-    pollWaitingRoomStatusRef.current?.();
+    if (pollWaitingRoomStatusRef.current) {
+      pollWaitingRoomStatusRef.current();
+    }
     pollingInterval.current = setInterval(() => {
-      pollWaitingRoomStatusRef.current?.();
+      if (pollWaitingRoomStatusRef.current) {
+        pollWaitingRoomStatusRef.current();
+      }
     }, 2000);
-  }, []); // No dependencies - uses ref for latest callback
+  }, [roomId]); // Include roomId to restart polling when room changes
 
   const stopPolling = () => {
     if (pollingInterval.current) {
@@ -816,17 +916,24 @@ function App() {
       });
       const data = await response.json();
       
-          if (data.success) {
-            setRoomId(data.roomId);
-            setUserId(data.userId);
-      setUsers(data.users);
-            setIsMaster(true);
-            setRoomData(data.roomData);
-            setUserRole('attender'); // Initialize as attender
-            setGameState('waiting'); // Initialize game state
-            setCurrentState('waitingroom');
-            setSuccess('방이 생성되었습니다!');
-          } else {
+      if (data.success) {
+        setRoomId(data.roomId);
+        setUserId(data.userId);
+        setUsers(data.users);
+        setIsMaster(true);
+        setRoomData(data.roomData);
+        setUserRole('attender'); // Initialize as attender
+        setGameState('waiting'); // Initialize game state
+        setCurrentState('waitingroom');
+        setSuccess('방이 생성되었습니다!');
+        // Save session for refresh recovery
+        saveSession({
+          username,
+          roomId: data.roomId,
+          userId: data.userId,
+          roomData: data.roomData
+        });
+      } else {
         setError(data.message || '방 생성에 실패했습니다.');
       }
     } catch (error) {
@@ -860,6 +967,13 @@ function App() {
           setGameState('waiting'); // Initialize game state
           setCurrentState('waitingroom');
           setSuccess('방에 참여했습니다!');
+          // Save session for refresh recovery
+          saveSession({
+            username,
+            roomId: data.roomId,
+            userId: data.userId,
+            roomData: data.roomData
+          });
         }
       } else {
         setError(data.message || '방 참여에 실패했습니다.');
@@ -886,12 +1000,19 @@ function App() {
       if (data.success) {
         setRoomId(data.roomId);
         setUserId(data.userId);
-      setUsers(data.users);
+        setUsers(data.users);
         setIsMaster(data.isMaster);
         setRoomData(data.roomData);
         setUserRole('attender'); // Initialize as attender
         setCurrentState('waitingroom');
         setSuccess('방에 참여했습니다!');
+        // Save session for refresh recovery
+        saveSession({
+          username,
+          roomId: data.roomId,
+          userId: data.userId,
+          roomData: data.roomData
+        });
       } else {
         setError(data.message || '비밀번호가 올바르지 않습니다.');
       }
@@ -921,7 +1042,14 @@ function App() {
         setUserRole('attender'); // Initialize as attender
         setCurrentState('waitingroom');
         setSuccess('방에 참여했습니다!');
-    } else {
+        // Save session for refresh recovery
+        saveSession({
+          username,
+          roomId: roomId,
+          userId: data.userId,
+          roomData: data.roomData
+        });
+      } else {
         setError(data.message || '방 참여에 실패했습니다.');
       }
     } catch (error) {
@@ -959,7 +1087,47 @@ function App() {
 
     const isDuplicate = await checkUsernameDuplication(username);
     if (isDuplicate) {
-      setError('이미 사용 중인 사용자 이름입니다.');
+      // Check if we have a session for this username - maybe user refreshed
+      const session = loadSession();
+      if (session && session.username === username.trim()) {
+        console.log('🔄 Username is duplicate but we have a session, attempting recovery...');
+        try {
+          const response = await fetch(`${API_URL}/api/room/${session.roomId}`);
+          const data = await response.json();
+          
+          if (data.success && data.room) {
+            const userInRoom = data.room.users.find(u => u.id === session.userId);
+            if (userInRoom) {
+              console.log('✅ Session recovered via handleRegisterName');
+              setUsername(session.username);
+              setRoomId(session.roomId);
+              setUserId(session.userId);
+              setUsers(data.room.users);
+              setIsMaster(data.room.masterId === session.userId);
+              setRoomData(session.roomData);
+              setUserRole(userInRoom.role || 'attender');
+              setGameState(data.room.gameState || 'waiting');
+              
+              if (data.room.gameState === 'linking') {
+                setCurrentState('linking');
+              } else if (data.room.gameState === 'completed' && data.matchResult) {
+                setMatches(data.matchResult.matches || []);
+                setUnmatched(data.matchResult.unmatched || []);
+                setCurrentState('linkresult');
+              } else {
+                setCurrentState('waitingroom');
+              }
+              return;
+            }
+          }
+        } catch (error) {
+          console.error('Session recovery in handleRegisterName failed:', error);
+        }
+        // Session recovery failed, clear it
+        clearSession();
+      }
+      
+      setError('이미 사용 중인 사용자 이름입니다. 다른 이름을 사용하거나 잠시 후 다시 시도해주세요.');
       return;
     }
 
@@ -987,6 +1155,8 @@ function App() {
         body: JSON.stringify({ username })
       }).catch(error => console.error('Error removing user:', error));
     }
+    // Clear session
+    clearSession();
     setUsername('');
     setCurrentState('registerName');
     setError('');
@@ -1186,6 +1356,9 @@ function App() {
       console.error('Error leaving room:', error);
     }
     
+    // Clear session (user is intentionally leaving)
+    clearSession();
+    
     // Clean up state and go back to makeOrJoinRoom (complete exit)
     setRoomId('');
     setUserId('');
@@ -1194,7 +1367,7 @@ function App() {
     setRoomData(null);
     setMatches([]);
     setUnmatched([]);
-      setSelectedUser(null);
+    setSelectedUser(null);
     setHasVoted(false);
     
     // Go back to makeOrJoinRoom state (user keeps their username)

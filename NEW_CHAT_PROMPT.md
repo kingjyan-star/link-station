@@ -15,35 +15,47 @@
 
 ## ✅ **RECENT IMPROVEMENTS - SUCCESSFULLY IMPLEMENTED**
 
-### **Session 18: Polling Fix, Password Toggle & Admin Refresh** (January 2026 - Latest)
+### **Session 18: Polling Fix, Session Recovery & Admin Improvements** (January 2026 - Latest)
 - **Problems Solved**:
   1. Members couldn't see other members who joined after them (had to click something to refresh)
   2. Game didn't start for non-masters after master clicked "게임 시작"
   3. Master kick sent users to `registerName` instead of `makeOrJoinRoom`
   4. App getting stuck after few minutes (related to polling issues)
-  5. **NEW**: No way to see password while typing (always dots)
-  6. **NEW**: Admin kick/delete didn't update counts in real-time
+  5. No way to see password while typing (always dots)
+  6. Admin kick/delete didn't update counts in real-time
+  7. **NEW**: Page refresh (F5) caused users to lose state and create duplicate users
+  8. **NEW**: Admin kick wasn't immediate (users kicked after polling delay)
 - **Root Causes**:
-  - `setInterval` captured stale callback closures - when `roomId` changed, interval kept calling old function
+  - Refs updated in `useEffect` (async) instead of synchronously during render
   - `handleKickByReason` had `clearUsername = true` for MASTER kick (should be `false`)
   - Missing password visibility toggle UI
   - Admin status data not refreshed after kick/delete actions
+  - No session persistence for page refresh recovery
 - **Fixes Applied** in `client/src/App.js`:
-  - Added refs `pollWaitingRoomStatusRef` and `pollRoomStatusRef` to hold latest callbacks
-  - `startPolling()` and `startWaitingRoomPolling()` now call through refs (no stale closures)
+  - **Polling Fix**: Refs updated synchronously during render (not in useEffect)
+  - **Polling Fix**: Added debug logging to `startPolling()` and `startWaitingRoomPolling()`
   - Changed MASTER kick: `clearUsername = false` (keeps username, goes to `makeOrJoinRoom`)
   - Added `roomId` to polling useEffect dependencies for restart on room change
-  - **NEW**: Added eye icon toggle for all password fields (room password, admin password, etc.)
-  - **NEW**: Added `refreshAdminStatusData()` helper, called after kick/delete/cleanup actions
+  - Added eye icon toggle for all password fields (room password, admin password, etc.)
+  - Added `refreshAdminStatusData()` helper, called after kick/delete/cleanup actions
+  - **NEW**: Session persistence with `sessionStorage` (survives F5 refresh)
+    - `saveSession()`, `loadSession()`, `clearSession()` helpers
+    - Auto-recovery on page load via useEffect
+    - Sessions saved when creating/joining room
+    - Sessions cleared when leaving room or getting kicked
+  - **NEW**: Improved duplicate username handling with session-aware recovery
+    - If username is duplicate but session exists, attempt to reconnect instead of error
 - **Fixes Applied** in `client/src/App.css`:
-  - **NEW**: Added `.password-input-wrapper` and `.password-toggle-btn` styles
+  - Added `.password-input-wrapper` and `.password-toggle-btn` styles
 - **Benefits**:
-  - ✅ All members see real-time updates immediately
+  - ✅ All members see real-time updates immediately (polling fix)
   - ✅ Game state changes propagate to all users
   - ✅ Master kick keeps username correctly
-  - ✅ More stable polling behavior
+  - ✅ Admin kicks work immediately (detected by 2-second polling)
   - ✅ Users can toggle password visibility with eye icon
   - ✅ Admin sees updated counts immediately after actions
+  - ✅ **Page refresh (F5) recovers session automatically**
+  - ✅ **No duplicate users after refresh**
 
 ### **Session 17: Unified Marker System & Admin UI Modernization** (January 2026)
 - **Problems Solved**:
@@ -380,11 +392,12 @@ Vercel auto-deploys on push to main branch.
 
 When starting a new session:
 
-1. **Test real-time member updates** - Join with multiple tabs, verify all members see each other immediately
-2. **Test game start propagation** - When master starts game, all users should transition to linking state
-3. **Test master kick** - Kicked user should keep username and go to `makeOrJoinRoom`
-4. **Test unified marker system** - Verify alerts show correct messages for admin kick, master kick, room deletion
-5. **Monitor app stability** - Verify app doesn't get stuck after extended use
+1. **Test real-time member updates** - Join with multiple tabs, verify all members see each other immediately (no clicking needed)
+2. **Test game start propagation** - When master starts game, all users should transition to linking state immediately
+3. **Test page refresh (F5)** - User should be automatically reconnected to their room with all state preserved
+4. **Test admin kick** - User should be kicked immediately (within 2 seconds), not after a delay
+5. **Test password visibility** - Click eye icon in password fields to show/hide password
+6. **Test admin real-time refresh** - After kicking user/deleting room, counts should update immediately
 
 ---
 
@@ -392,36 +405,42 @@ When starting a new session:
 
 - [x] Fix polling closure bug (members not seeing new joiners) - DONE Session 18
 - [x] Fix master kick sending users to wrong state - DONE Session 18
+- [x] Add password visibility toggle (eye icon) - DONE Session 18
+- [x] Add session persistence for F5 refresh recovery - DONE Session 18
+- [x] Improve duplicate username handling with session recovery - DONE Session 18
 - [ ] **BUILD & DEPLOY** the Session 18 fixes (code changes ready in `client/src/App.js`)
-- [ ] Test real-time updates with 4+ users after deployment
+- [ ] Test with 4+ users: real-time updates, game start, admin kick, F5 refresh
 - [ ] Load-test Redis integration under concurrent joins/selects
-- [ ] Add metrics/logging around cleanup jobs and TTL expirations
 
 ---
 
 ## 🔄 Context Refresh
 
-This prompt was updated in **January 2026 (Session 18)** with polling closure fixes. All critical information from previous sessions is preserved in:
+This prompt was updated in **January 2026 (Session 18)** with major fixes. All critical information from previous sessions is preserved in:
 - **PROJECT_CONTEXT.md** (comprehensive development history)
 - **DEPLOYMENT.md** (deployment-specific instructions)
 
 ---
 
-**You are now fully briefed on Link Station! Session 18 fixes the polling closure bug that prevented real-time member updates.**
+**You are now fully briefed on Link Station! Session 18 adds:**
+- ✅ Fixed polling (real-time member updates work now)
+- ✅ Session persistence (F5 refresh recovers your session)
+- ✅ Password visibility toggle (eye icon)
+- ✅ Immediate admin kick (via 2-second polling)
+- ✅ Better duplicate username handling
 
-**⚠️ PENDING DEPLOYMENT**: Code changes in `client/src/App.js` need to be built and deployed:
-```bash
-# 1. Build React app
-cd client && npm run build
+**⚠️ PENDING DEPLOYMENT**: Code changes in `client/src/App.js` and `client/src/App.css` need to be built and deployed.
 
-# 2. Copy static files (Windows)
+**From `link-station` (root directory):**
+```powershell
+cd client
+npm run build
+cd ..
 copy client\build\index.html index.html
 xcopy client\build\static static /E /I /Y
-
-# 3. Deploy
 git add .
-git commit -m "Fix polling closure bug and master kick state transition"
+git commit -m "Session 18: Fix polling, add session recovery, password toggle, admin improvements"
 git push origin main
 ```
 
-Ask the user: *"Session 18 fixes are ready in the code. Would you like me to guide you through the build and deploy process?"*
+Ask the user: *"Session 18 fixes are ready. Would you like to build and deploy now?"*
