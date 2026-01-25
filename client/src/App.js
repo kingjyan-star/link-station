@@ -50,6 +50,14 @@ function App() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   
+  // Password visibility toggles
+  const [showRoomPassword, setShowRoomPassword] = useState(false);
+  const [showEnteredPassword, setShowEnteredPassword] = useState(false);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [showAdminSecondPassword, setShowAdminSecondPassword] = useState(false);
+  const [showAdminNewPassword, setShowAdminNewPassword] = useState(false);
+  const [showAdminNewPasswordConfirm, setShowAdminNewPasswordConfirm] = useState(false);
+  
   // Warning state
   const [showUserWarning, setShowUserWarning] = useState(false);
   const [showRoomWarning, setShowRoomWarning] = useState(false);
@@ -1441,6 +1449,22 @@ function App() {
     }
   };
 
+  // Helper to refresh admin status data
+  const refreshAdminStatusData = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/admin-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAdminStatusData(data);
+      }
+    } catch (error) {
+      console.error('Error refreshing admin status:', error);
+    }
+  };
+
   const handleAdminKickUser = async (targetUsername) => {
     if (!window.confirm(`사용자 "${targetUsername}"를 추방하시겠습니까?`)) {
       return;
@@ -1456,10 +1480,11 @@ function App() {
       
       if (data.success) {
         setSuccess(data.message);
-        // Refresh user list
+        // Refresh user list AND status data
         if (adminUserFilter) {
           await handleAdminUsersList(adminUserFilter);
         }
+        await refreshAdminStatusData();
       } else {
         if (response.status === 401) {
           handleAdminAuthFailure(data.message);
@@ -1488,10 +1513,11 @@ function App() {
       
       if (data.success) {
         setSuccess(data.message);
-        // Refresh room list
+        // Refresh room list AND status data
         if (adminRoomFilter) {
           await handleAdminRoomsList(adminRoomFilter);
         }
+        await refreshAdminStatusData();
       } else {
         if (response.status === 401) {
           handleAdminAuthFailure(data.message);
@@ -1526,6 +1552,8 @@ function App() {
       
       if (data.success) {
         setSuccess(data.message);
+        // Refresh status data after cleanup
+        await refreshAdminStatusData();
       } else {
         if (response.status === 401) {
           handleAdminAuthFailure(data.message);
@@ -1727,15 +1755,35 @@ function App() {
           
         <div className="input-group">
           <label htmlFor="roomPassword">방 비밀번호 (선택사항, 최대 16자)</label>
-          <input
-            id="roomPassword"
-            type="password"
-            value={roomPassword}
-            onChange={(e) => setRoomPassword(e.target.value)}
-            placeholder="비밀번호를 입력하세요 (선택사항)"
-            maxLength={16}
+          <div className="password-input-wrapper">
+            <input
+              id="roomPassword"
+              type={showRoomPassword ? "text" : "password"}
+              value={roomPassword}
+              onChange={(e) => setRoomPassword(e.target.value)}
+              placeholder="비밀번호를 입력하세요 (선택사항)"
+              maxLength={16}
             />
+            <button
+              type="button"
+              className="password-toggle-btn"
+              onClick={() => setShowRoomPassword(!showRoomPassword)}
+              tabIndex={-1}
+            >
+              {showRoomPassword ? (
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                  <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+              )}
+            </button>
           </div>
+        </div>
           
           <div className="input-group">
           <label htmlFor="memberLimit">최대 인원 (2-99명)</label>
@@ -1825,15 +1873,35 @@ function App() {
       <div className="checkpassword-form">
         <div className="input-group">
           <label htmlFor="enteredPassword">방 비밀번호 (최대 16자)</label>
-          <input
-            id="enteredPassword"
-            type="password"
-            value={enteredPassword}
-            onChange={(e) => setEnteredPassword(e.target.value)}
-            placeholder="비밀번호를 입력하세요"
-            maxLength={16}
+          <div className="password-input-wrapper">
+            <input
+              id="enteredPassword"
+              type={showEnteredPassword ? "text" : "password"}
+              value={enteredPassword}
+              onChange={(e) => setEnteredPassword(e.target.value)}
+              placeholder="비밀번호를 입력하세요"
+              maxLength={16}
             />
+            <button
+              type="button"
+              className="password-toggle-btn"
+              onClick={() => setShowEnteredPassword(!showEnteredPassword)}
+              tabIndex={-1}
+            >
+              {showEnteredPassword ? (
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                  <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+              )}
+            </button>
           </div>
+        </div>
           
         <div className="button-group">
           <button 
@@ -2146,14 +2214,34 @@ function App() {
       <div className="register-name-form">
         <div className="input-group">
           <label htmlFor="adminPassword">관리자 비밀번호</label>
-          <input
-            id="adminPassword"
-            type="password"
-            value={adminPassword}
-            onChange={(e) => setAdminPassword(e.target.value)}
-            placeholder="비밀번호를 입력하세요"
-            onKeyPress={(e) => e.key === 'Enter' && handleAdminLogin()}
-          />
+          <div className="password-input-wrapper">
+            <input
+              id="adminPassword"
+              type={showAdminPassword ? "text" : "password"}
+              value={adminPassword}
+              onChange={(e) => setAdminPassword(e.target.value)}
+              placeholder="비밀번호를 입력하세요"
+              onKeyPress={(e) => e.key === 'Enter' && handleAdminLogin()}
+            />
+            <button
+              type="button"
+              className="password-toggle-btn"
+              onClick={() => setShowAdminPassword(!showAdminPassword)}
+              tabIndex={-1}
+            >
+              {showAdminPassword ? (
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                  <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
         
         <div className="button-group">
@@ -2169,6 +2257,7 @@ function App() {
             onClick={() => {
               setUsername('');
               setAdminPassword('');
+              setShowAdminPassword(false);
               setCurrentState('registerName');
             }}
           >
@@ -2624,37 +2713,97 @@ function App() {
         {adminPasswordStep === 1 ? (
           <div className="input-group">
             <label htmlFor="adminSecondPassword">2차 비밀번호</label>
-            <input
-              id="adminSecondPassword"
-              type="password"
-              value={adminSecondPassword}
-              onChange={(e) => setAdminSecondPassword(e.target.value)}
-              placeholder="2차 비밀번호를 입력하세요"
-              onKeyPress={(e) => e.key === 'Enter' && handleAdminChangePassword()}
-            />
+            <div className="password-input-wrapper">
+              <input
+                id="adminSecondPassword"
+                type={showAdminSecondPassword ? "text" : "password"}
+                value={adminSecondPassword}
+                onChange={(e) => setAdminSecondPassword(e.target.value)}
+                placeholder="2차 비밀번호를 입력하세요"
+                onKeyPress={(e) => e.key === 'Enter' && handleAdminChangePassword()}
+              />
+              <button
+                type="button"
+                className="password-toggle-btn"
+                onClick={() => setShowAdminSecondPassword(!showAdminSecondPassword)}
+                tabIndex={-1}
+              >
+                {showAdminSecondPassword ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                )}
+              </button>
+            </div>
           </div>
         ) : (
           <>
             <div className="input-group">
               <label htmlFor="adminNewPassword">새 비밀번호</label>
-              <input
-                id="adminNewPassword"
-                type="password"
-                value={adminNewPassword}
-                onChange={(e) => setAdminNewPassword(e.target.value)}
-                placeholder="새 비밀번호를 입력하세요"
-              />
+              <div className="password-input-wrapper">
+                <input
+                  id="adminNewPassword"
+                  type={showAdminNewPassword ? "text" : "password"}
+                  value={adminNewPassword}
+                  onChange={(e) => setAdminNewPassword(e.target.value)}
+                  placeholder="새 비밀번호를 입력하세요"
+                />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowAdminNewPassword(!showAdminNewPassword)}
+                  tabIndex={-1}
+                >
+                  {showAdminNewPassword ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                      <line x1="1" y1="1" x2="23" y2="23"></line>
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
             <div className="input-group">
               <label htmlFor="adminNewPasswordConfirm">새 비밀번호 확인</label>
-              <input
-                id="adminNewPasswordConfirm"
-                type="password"
-                value={adminNewPasswordConfirm}
-                onChange={(e) => setAdminNewPasswordConfirm(e.target.value)}
-                placeholder="새 비밀번호를 다시 입력하세요"
-                onKeyPress={(e) => e.key === 'Enter' && handleAdminChangePassword()}
-              />
+              <div className="password-input-wrapper">
+                <input
+                  id="adminNewPasswordConfirm"
+                  type={showAdminNewPasswordConfirm ? "text" : "password"}
+                  value={adminNewPasswordConfirm}
+                  onChange={(e) => setAdminNewPasswordConfirm(e.target.value)}
+                  placeholder="새 비밀번호를 다시 입력하세요"
+                  onKeyPress={(e) => e.key === 'Enter' && handleAdminChangePassword()}
+                />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowAdminNewPasswordConfirm(!showAdminNewPasswordConfirm)}
+                  tabIndex={-1}
+                >
+                  {showAdminNewPasswordConfirm ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                      <line x1="1" y1="1" x2="23" y2="23"></line>
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
           </>
         )}

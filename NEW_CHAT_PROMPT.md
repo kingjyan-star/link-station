@@ -15,25 +15,35 @@
 
 ## ✅ **RECENT IMPROVEMENTS - SUCCESSFULLY IMPLEMENTED**
 
-### **Session 18: Polling Closure Fix & Master Kick Bug** (January 2026 - Latest)
+### **Session 18: Polling Fix, Password Toggle & Admin Refresh** (January 2026 - Latest)
 - **Problems Solved**:
   1. Members couldn't see other members who joined after them (had to click something to refresh)
   2. Game didn't start for non-masters after master clicked "게임 시작"
   3. Master kick sent users to `registerName` instead of `makeOrJoinRoom`
   4. App getting stuck after few minutes (related to polling issues)
+  5. **NEW**: No way to see password while typing (always dots)
+  6. **NEW**: Admin kick/delete didn't update counts in real-time
 - **Root Causes**:
   - `setInterval` captured stale callback closures - when `roomId` changed, interval kept calling old function
   - `handleKickByReason` had `clearUsername = true` for MASTER kick (should be `false`)
+  - Missing password visibility toggle UI
+  - Admin status data not refreshed after kick/delete actions
 - **Fixes Applied** in `client/src/App.js`:
   - Added refs `pollWaitingRoomStatusRef` and `pollRoomStatusRef` to hold latest callbacks
   - `startPolling()` and `startWaitingRoomPolling()` now call through refs (no stale closures)
   - Changed MASTER kick: `clearUsername = false` (keeps username, goes to `makeOrJoinRoom`)
   - Added `roomId` to polling useEffect dependencies for restart on room change
+  - **NEW**: Added eye icon toggle for all password fields (room password, admin password, etc.)
+  - **NEW**: Added `refreshAdminStatusData()` helper, called after kick/delete/cleanup actions
+- **Fixes Applied** in `client/src/App.css`:
+  - **NEW**: Added `.password-input-wrapper` and `.password-toggle-btn` styles
 - **Benefits**:
   - ✅ All members see real-time updates immediately
   - ✅ Game state changes propagate to all users
   - ✅ Master kick keeps username correctly
   - ✅ More stable polling behavior
+  - ✅ Users can toggle password visibility with eye icon
+  - ✅ Admin sees updated counts immediately after actions
 
 ### **Session 17: Unified Marker System & Admin UI Modernization** (January 2026)
 - **Problems Solved**:
