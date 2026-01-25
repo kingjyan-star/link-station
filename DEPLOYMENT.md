@@ -1,8 +1,31 @@
 # 🚀 Link Station - Deployment Guide
 
 **Live URL**: https://link-station-pro.vercel.app  
-**Status**: ✅ Active Development - Unified Marker System & Admin UI Modernization Deployed  
+**Status**: ✅ Active Development - Session 18 Ready (Pending Build & Deploy)  
 **Last Updated**: January 2026
+
+---
+
+## 🆕 **Pending Deployment - Session 18**
+
+**Changes ready to deploy:**
+- ✅ Polling fix (real-time member updates)
+- ✅ Session persistence (F5 refresh recovery)
+- ✅ Password visibility toggle (eye icon)
+- ✅ Admin real-time refresh
+- ✅ Improved duplicate username handling
+
+**Deploy commands:**
+```powershell
+cd client
+npm run build
+cd ..
+copy client\build\index.html index.html
+xcopy client\build\static static /E /I /Y
+git add .
+git commit -m "Session 18: Polling fix, session recovery, admin improvements"
+git push origin main
+```
 
 ---
 

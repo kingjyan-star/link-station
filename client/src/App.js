@@ -36,6 +36,9 @@ const clearSession = () => {
 };
 
 function App() {
+  // VERSION: Session 18 - 2026-01-25 (check console to verify deployment)
+  console.log('🔗 Link Station v18 loaded');
+  
   // State management
   const [currentState, setCurrentState] = useState('registerName'); // registerName, makeOrJoinRoom, makeroom, joinroom, checkpassword, joinroomwithqr, waitingroom, linking, linkresult, adminPassword, adminDashboard, adminStatus, adminCleanup, adminShutdown, adminChangePassword
   const [username, setUsername] = useState('');
@@ -125,29 +128,38 @@ function App() {
   // Session recovery on page load (handles F5 refresh)
   useEffect(() => {
     const recoverSession = async () => {
+      console.log('🔄 Session recovery starting...');
+      
       // Skip if URL has room parameter (QR code join)
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('room')) {
+        console.log('📍 QR code URL detected, skipping session recovery');
         return;
       }
 
       const session = loadSession();
+      console.log('📦 Loaded session:', session);
+      
       if (!session || !session.username || !session.roomId || !session.userId) {
+        console.log('❌ No valid session found');
         return;
       }
 
-      console.log('🔄 Attempting to recover session:', session.username);
+      console.log('🔄 Attempting to recover session for:', session.username, 'in room:', session.roomId);
 
       try {
         // Check if the room still exists and user is still in it
         const response = await fetch(`${API_URL}/api/room/${session.roomId}`);
         const data = await response.json();
+        console.log('📡 Room API response:', data.success, 'users:', data.room?.users?.length);
 
         if (data.success && data.room) {
           // Check if user is still in the room
           const userInRoom = data.room.users.find(u => u.id === session.userId);
+          console.log('👤 User in room:', userInRoom ? 'YES' : 'NO', 'userId:', session.userId);
+          
           if (userInRoom) {
-            console.log('✅ Session recovered successfully');
+            console.log('✅ Session recovered successfully!');
             // Restore state
             setUsername(session.username);
             setRoomId(session.roomId);
@@ -160,23 +172,30 @@ function App() {
 
             // Navigate to appropriate state based on game state
             if (data.room.gameState === 'linking') {
+              console.log('🎮 Restoring to linking state');
               setCurrentState('linking');
             } else if (data.room.gameState === 'completed' && data.matchResult) {
+              console.log('🎉 Restoring to linkresult state');
               setMatches(data.matchResult.matches || []);
               setUnmatched(data.matchResult.unmatched || []);
               setCurrentState('linkresult');
             } else {
+              console.log('⏳ Restoring to waitingroom state');
               setCurrentState('waitingroom');
             }
             return;
+          } else {
+            console.log('❌ User not found in room users list');
           }
+        } else {
+          console.log('❌ Room not found or API error:', data.message);
         }
 
         // Room not found or user not in room - clear session
-        console.log('❌ Session invalid, clearing');
+        console.log('🗑️ Clearing invalid session');
         clearSession();
       } catch (error) {
-        console.error('Session recovery error:', error);
+        console.error('❌ Session recovery error:', error);
         clearSession();
       }
     };
@@ -184,13 +203,21 @@ function App() {
     recoverSession();
   }, []); // Only run on mount
 
-  // Free username when tab closes (but not when tab goes to background)
+  // Free username when tab closes (but NOT on refresh - we want session recovery)
   useEffect(() => {
     if (!username) return; // No username = nothing to clean up
     
     const freeUsername = () => {
+      // IMPORTANT: Don't free username if we have a stored session
+      // sessionStorage persists across refresh but clears on tab close
+      // If session exists, this is likely a refresh, not a tab close
+      const session = loadSession();
+      if (session && session.username === username) {
+        console.log('📄 Session exists, skipping username cleanup (likely refresh)');
+        return;
+      }
+      
       // Use sendBeacon for reliable delivery during page unload
-      // sendBeacon requires Blob or FormData with proper Content-Type
       if (navigator.sendBeacon) {
         try {
           const blob = new Blob([JSON.stringify({ username })], {
@@ -210,10 +237,9 @@ function App() {
         }
       } else {
         // Fallback for browsers that don't support sendBeacon
-        // Use synchronous XMLHttpRequest (blocking, but only on unload)
         try {
           const xhr = new XMLHttpRequest();
-          xhr.open('POST', `${API_URL}/api/remove-user`, false); // false = synchronous
+          xhr.open('POST', `${API_URL}/api/remove-user`, false);
           xhr.setRequestHeader('Content-Type', 'application/json');
           xhr.send(JSON.stringify({ username }));
         } catch (error) {
@@ -223,18 +249,14 @@ function App() {
     };
     
     const handleBeforeUnload = () => {
-      // Free username when tab is closing
       freeUsername();
     };
     
     const handlePageHide = (event) => {
-      // pagehide is more reliable on mobile browsers
       if (event.persisted) {
-        // Page is being cached (not actually closed) - don't free username
         console.log('📄 Page cached (back/forward navigation), keeping username');
         return;
       }
-      // Page is actually unloading - free username
       freeUsername();
     };
     
@@ -669,11 +691,18 @@ function App() {
   }, [roomId]); // Include roomId to restart polling when room changes
 
   const pollWaitingRoomStatus = useCallback(async () => {
-    if (!roomId) return;
+    if (!roomId) {
+      console.log('⏸️ pollWaitingRoomStatus: no roomId, skipping');
+      return;
+    }
+    
+    console.log('🔄 pollWaitingRoomStatus running for room:', roomId);
     
     try {
       const response = await fetch(`${API_URL}/api/room/${roomId}`);
       const data = await response.json();
+      
+      console.log('📡 Poll response:', data.success ? `${data.room?.users?.length} users` : 'failed');
       
       // Handle room not found (deleted or user kicked)
       if (!data.success) {

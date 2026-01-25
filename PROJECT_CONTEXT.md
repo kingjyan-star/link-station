@@ -2,7 +2,7 @@
 
 **Live URL**: https://link-station-pro.vercel.app  
 **Last Updated**: January 2026  
-**Status**: ✅ Active Development - Unified Marker System & Admin UI Modernization Complete
+**Status**: ✅ Active Development - Session 18: Polling Fix, Session Recovery & Admin Improvements Complete
 
 ---
 
@@ -764,6 +764,53 @@ link-station/
 - ✅ Admin cannot interfere with normal gameplay (admin-only UI)
 
 **Status**: ✅ COMPLETED - Admin dashboard fully functional and ready for deployment
+
+### Session 18: Polling Fix, Session Recovery & Admin Improvements (January 2026 - COMPLETED)
+**Focus**: Fix real-time polling, add F5 refresh recovery, improve admin experience
+
+**Problems Addressed**:
+1. Members couldn't see other members who joined after them
+2. Game state didn't propagate to non-masters after "게임 시작"
+3. Admin kick wasn't immediate (delayed by polling interval)
+4. Page refresh (F5) caused users to lose state and create duplicate users
+5. No password visibility toggle
+6. Admin counts didn't update after kick/delete
+
+**Solutions Implemented**:
+
+#### **1. Polling Closure Fix** (`client/src/App.js`)
+- **Root Cause**: Refs updated in `useEffect` (runs after render) caused stale closures
+- **Fix**: Update refs synchronously during render:
+  ```javascript
+  // OLD (broken): useEffect(() => { ref.current = callback }, [callback])
+  // NEW (fixed): ref.current = callback; // Direct assignment during render
+  ```
+- Added `roomId` to polling useEffect dependencies
+- Added debug logging for polling start
+
+#### **2. Session Persistence** (`client/src/App.js`)
+- **New Helpers**: `saveSession()`, `loadSession()`, `clearSession()` using `sessionStorage`
+- **Auto-Recovery**: useEffect on mount checks for stored session and reconnects
+- **Session Saved**: On create-room, join-room, check-password, join-room-qr
+- **Session Cleared**: On leave-room, kick, exit
+- **Duplicate Handling**: If username duplicate but session exists, attempt reconnect
+
+#### **3. Admin Improvements** (`client/src/App.js`)
+- `refreshAdminStatusData()` helper called after kick/delete/cleanup
+- Real-time count updates in admin dashboard
+
+#### **4. Password Visibility Toggle** (`client/src/App.js`, `client/src/App.css`)
+- Eye icon for all password fields (room, admin login, password change)
+- Toggle between dots and visible text
+
+**Files Modified**:
+- `client/src/App.js` - Polling fix, session persistence, password toggle, admin refresh
+- `client/src/App.css` - Password toggle styles
+- `NEW_CHAT_PROMPT.md` - Updated documentation
+
+**Status**: COMPLETED - Pending deployment
+
+---
 
 ### Session 17: Unified Marker System & Admin UI Modernization (January 2026 - COMPLETED)
 **Focus**: Fix multiple alert issues, proper state transitions, race conditions, and modernize admin UI
