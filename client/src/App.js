@@ -182,18 +182,19 @@ function App() {
       const { username: u, roomId: r, userId: i } = unloadRef.current;
       if (!u) return;
       const payload = JSON.stringify({ username: u, roomId: r || undefined, userId: i || undefined });
-      if (navigator.sendBeacon) {
-        const blob = new Blob([payload], { type: 'application/json' });
-        const success = navigator.sendBeacon(`${API_URL}/api/remove-user`, blob);
-        if (success) console.log(`🔓 Tab close: queued removal for "${u}"`);
-      } else {
-        try {
-          const xhr = new XMLHttpRequest();
-          xhr.open('POST', `${API_URL}/api/remove-user`, false);
-          xhr.setRequestHeader('Content-Type', 'application/json');
-          xhr.send(payload);
-        } catch (e) {
-          console.error('Tab close beacon error:', e);
+      const url = `${API_URL}/api/remove-user`;
+      try {
+        // fetch with keepalive outlives page unload (often more reliable than sendBeacon)
+        fetch(url, {
+          method: 'POST',
+          body: payload,
+          headers: { 'Content-Type': 'application/json' },
+          keepalive: true
+        }).catch(() => {});
+      } catch (e) {
+        if (navigator.sendBeacon) {
+          const blob = new Blob([payload], { type: 'application/json' });
+          navigator.sendBeacon(url, blob);
         }
       }
     };

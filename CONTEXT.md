@@ -59,6 +59,16 @@ Vercel auto-deploys on push to main.
 - **API not working:** Check `vercel.json` rewrites, `api/game.js` exports
 - **Build fails:** Check Node version, dependencies, Vercel logs
 
+### Local API + Tab-close reclaim test
+
+```powershell
+# Terminal 1: API
+node dev-server.js
+
+# Terminal 2: Run API-level test
+node scripts/test-tab-close-reclaim.js
+```
+
 ---
 
 ## 📋 Project Overview

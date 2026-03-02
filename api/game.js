@@ -194,6 +194,12 @@ app.post('/api/check-username', async (req, res) => {
   }
   const userData = await storage.getActiveUser(trimmedUsername);
   if (!userData) return res.json({ duplicate: false, available: true });
+  // If user has pending tab-close removal, execute immediately so they can reclaim
+  const hadPending = await executeSinglePendingRemoval(trimmedUsername);
+  if (hadPending) {
+    console.log(`   🔓 Reclaimed username "${trimmedUsername}" (pending tab-close)`);
+    return res.json({ duplicate: false, available: true });
+  }
   const inactiveMs = Date.now() - (userData.lastActivity || 0);
   const room = userData.roomId ? await storage.getRoomById(userData.roomId) : null;
   const isAloneInRoom = room && room.users.size === 1 && room.users.has(userData.userId);
@@ -220,6 +226,7 @@ app.post('/api/check-username', async (req, res) => {
 
 // Check room name duplication
 app.post('/api/check-roomname', async (req, res) => {
+  await processPendingRemovals();
   const { roomName } = req.body;
   
   if (!roomName || roomName.trim() === '') {
@@ -293,15 +300,36 @@ app.post('/api/create-room', async (req, res) => {
       await storage.deleteRoom(existingRoom.id);
       console.log(`   🧹 Reclaimed stale room name "${roomName}" (${isZombie ? 'zombie' : allUsersStale ? 'all-users-inactive' : 'empty'})`);
     } else {
-      console.log(`❌ Duplicate room name detected: "${roomName}" already exists`);
-      return res.status(400).json({ success: false, message: '이미 존재하는 방 이름입니다. 다른 이름을 사용해주세요.' });
+      // Check if all users have pending tab-close removal (closed tabs recently)
+      let allHavePending = true;
+      for (const u of existingRoom.users.values()) {
+        const p = await storage.getPendingRemoval(u.username);
+        if (!p) { allHavePending = false; break; }
+      }
+      if (allHavePending) {
+        for (const u of existingRoom.users.values()) {
+          await executeSinglePendingRemoval(u.username);
+        }
+        await storage.deleteRoom(existingRoom.id);
+        console.log(`   🔓 Reclaimed room "${roomName}" (all users had pending tab-close)`);
+      } else {
+        console.log(`❌ Duplicate room name detected: "${roomName}" already exists`);
+        return res.status(400).json({ success: false, message: '이미 존재하는 방 이름입니다. 다른 이름을 사용해주세요.' });
+      }
     }
   }
   
   console.log(`✓ Room name "${roomName}" is available`);
   
-  // Check username duplication (allow reclaim if stale)
-  const existingUser = await storage.getActiveUser(trimmedUsername);
+  // Check username duplication (allow reclaim if stale or pending tab-close)
+  let existingUser = await storage.getActiveUser(trimmedUsername);
+  if (existingUser) {
+    const hadPending = await executeSinglePendingRemoval(trimmedUsername);
+    if (hadPending) {
+      console.log(`   🔓 Reclaimed username "${trimmedUsername}" in create-room (pending tab-close)`);
+      existingUser = null; // cleared, proceed
+    }
+  }
   if (existingUser) {
     const inactiveMs = Date.now() - (existingUser.lastActivity || 0);
     const room = existingUser.roomId ? await storage.getRoomById(existingUser.roomId) : null;
@@ -1011,6 +1039,32 @@ app.post('/api/keep-alive-room', async (req, res) => {
 });
 
 const TAB_CLOSE_GRACE_MS = 10 * 1000; // 10 sec: refresh cancels, real close executes
+
+/** Execute a single user's pending removal (used when duplicate detected - no grace wait) */
+async function executeSinglePendingRemoval(username) {
+  const pending = await storage.getPendingRemoval(username);
+  if (!pending) return false;
+  const { roomId, userId } = pending;
+  await storage.deletePendingRemoval(username);
+  if (roomId && userId) {
+    const room = await storage.getRoomById(roomId);
+    if (room) {
+      room.users.delete(userId);
+      room.selections.delete(userId);
+      if (room.masterId === userId && room.users.size > 0) {
+        const newMaster = Array.from(room.users.values())[0];
+        room.masterId = newMaster.id;
+        newMaster.isMaster = true;
+        room.users.set(newMaster.id, newMaster);
+      }
+      if (room.users.size === 0) await storage.deleteRoom(roomId);
+      else await storage.saveRoom(room);
+    }
+  }
+  await storage.deleteActiveUser(username);
+  await storage.clearUserKickMarker(username);
+  return true;
+}
 
 async function processPendingRemovals() {
   const pending = await storage.listPendingRemovals();
