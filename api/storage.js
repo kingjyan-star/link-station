@@ -468,16 +468,6 @@ async function getRoomDeleteMarker(roomId) {
   return JSON.parse(result);
 }
 
-async function wasUserKickedByAdmin(username) {
-  const marker = await getUserKickMarker(username);
-  return marker ? marker.reason === KICK_REASONS.ADMIN : false;
-}
-
-async function wasRoomDeletedByAdmin(roomId) {
-  const marker = await getRoomDeleteMarker(roomId);
-  return marker ? marker.reason === ROOM_DELETE_REASONS.ADMIN : false;
-}
-
 // Pending removal (tab-close grace period: refresh cancels, real close executes after 10 sec)
 async function setPendingRemoval(username, roomId = null, userId = null) {
   if (!username) return;
@@ -556,8 +546,6 @@ module.exports = {
   clearUserKickMarker,
   setRoomDeleteMarker,
   getRoomDeleteMarker,
-  wasUserKickedByAdmin,
-  wasRoomDeletedByAdmin,
   setPendingRemoval,
   getPendingRemoval,
   deletePendingRemoval,

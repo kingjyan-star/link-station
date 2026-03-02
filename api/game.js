@@ -1222,10 +1222,12 @@ app.get('/api/room/:roomId', async (req, res) => {
   const room = await storage.getRoomById(roomId);
   
   if (!room) {
-    // Check if room was deleted by admin
-    const wasDeletedByAdmin = await storage.wasRoomDeletedByAdmin(roomId);
-    // Also check if the requesting user was kicked by admin
-    const wasKickedByAdmin = username ? await storage.wasUserKickedByAdmin(username) : false;
+    // Check if room was deleted by admin (use marker directly)
+    const roomDeleteMarker = await storage.getRoomDeleteMarker(roomId);
+    const wasDeletedByAdmin = roomDeleteMarker?.reason === storage.ROOM_DELETE_REASONS.ADMIN;
+    // Also check if the requesting user was kicked by admin (use marker directly)
+    const kickMarker = username ? await storage.getUserKickMarker(username) : null;
+    const wasKickedByAdmin = kickMarker?.reason === storage.KICK_REASONS.ADMIN;
     return res.json({ 
       success: false, 
       message: '방을 찾을 수 없습니다.',
@@ -1254,17 +1256,17 @@ app.get('/api/room/:roomId', async (req, res) => {
   console.log(`   Has match result: ${!!room.matchResult}`);
   console.log(`   Users voted: ${Array.from(room.users.values()).filter(u => room.selections.has(u.id)).length}/${room.users.size}`);
   
-  // Check if requesting user was kicked by admin (user not in room but was kicked)
+  // Check if requesting user was kicked by admin (use marker directly)
   const kickedUsers = [];
-  if (username && await storage.wasUserKickedByAdmin(username)) {
-    kickedUsers.push(username);
+  if (username) {
+    const m = await storage.getUserKickMarker(username);
+    if (m?.reason === storage.KICK_REASONS.ADMIN) kickedUsers.push(username);
   }
   // Also check users still in room (edge case)
   for (const user of usersWithVotingStatus) {
-    if (await storage.wasUserKickedByAdmin(user.username)) {
-      if (!kickedUsers.includes(user.username)) {
-        kickedUsers.push(user.username);
-      }
+    const m = await storage.getUserKickMarker(user.username);
+    if (m?.reason === storage.KICK_REASONS.ADMIN && !kickedUsers.includes(user.username)) {
+      kickedUsers.push(user.username);
     }
   }
   
