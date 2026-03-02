@@ -455,6 +455,16 @@ async function getRoomDeleteMarker(roomId) {
   return JSON.parse(result);
 }
 
+async function wasRoomDeletedByAdmin(roomId) {
+  const marker = await getRoomDeleteMarker(roomId);
+  return marker !== null && marker.reason === ROOM_DELETE_REASONS.ADMIN;
+}
+
+async function wasUserKickedByAdmin(username) {
+  const marker = await getUserKickMarker(username);
+  return marker !== null && marker.reason === KICK_REASONS.ADMIN;
+}
+
 module.exports = {
   REDIS_ENABLED,
   getRoomById,
@@ -484,6 +494,8 @@ module.exports = {
   setUserKickMarker,
   getUserKickMarker,
   setRoomDeleteMarker,
-  getRoomDeleteMarker
+  getRoomDeleteMarker,
+  wasRoomDeletedByAdmin,
+  wasUserKickedByAdmin
 };
 
