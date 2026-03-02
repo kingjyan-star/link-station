@@ -731,7 +731,7 @@ function App() {
       if (pollWaitingRoomStatusRef.current) {
         pollWaitingRoomStatusRef.current();
       }
-    }, 2000);
+    }, 1000); // 1s - faster sync when new users join
   }, [roomId]); // Include roomId to restart polling when room changes
 
   const stopPolling = () => {
@@ -752,12 +752,17 @@ function App() {
     return () => stopHeartbeat();
   }, [currentState, username, userId, startHeartbeat]);
 
-  // Send heartbeat when tab becomes visible (handles Chrome tab switching)
+  // Send heartbeat + immediate poll when tab becomes visible (syncs user list after tab switch)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden && (currentState === 'waitingroom' || currentState === 'linking' || currentState === 'linkresult')) {
-        console.log('Tab became visible, sending heartbeat...');
+        console.log('Tab became visible, heartbeat + poll...');
         sendHeartbeat();
+        if (currentState === 'waitingroom' && pollWaitingRoomStatusRef.current) {
+          pollWaitingRoomStatusRef.current();
+        } else if ((currentState === 'linking' || currentState === 'linkresult') && pollRoomStatusRef.current) {
+          pollRoomStatusRef.current();
+        }
       }
     };
 

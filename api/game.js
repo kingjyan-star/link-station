@@ -1214,6 +1214,8 @@ app.get('/api/room/:roomId', async (req, res) => {
     }
   }
   
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
   res.json({
     success: true,
     room: {

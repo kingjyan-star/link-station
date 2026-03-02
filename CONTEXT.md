@@ -178,7 +178,7 @@ Full details in `api/API_ROUTES.md`.
 
 ### v2.0.3 (March 2026) - Tab close, room poll, button timeout
 - **Tab close:** Beacon queues removal; 10s grace cancels on refresh, executes on real close.
-- **Room poll:** cache: 'no-store' + timestamp param – users see each other (was cached GET).
+- **Room poll:** Server Cache-Control no-store; client cache bust + 1s poll; poll on tab visible.
 - **Buttons:** 15s fetch timeout for start-game/change-role – prevents stuck "게임 시작 중..".
 
 ### Session 18 (January 2026) - Polling, Session, beforeunload
