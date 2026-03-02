@@ -1217,74 +1217,89 @@ app.post('/api/return-to-waiting', async (req, res) => {
 
 // Get room status
 app.get('/api/room/:roomId', async (req, res) => {
-  const { roomId } = req.params;
-  const { username } = req.query; // Get requesting user's username for admin kick check
-  const room = await storage.getRoomById(roomId);
-  
-  if (!room) {
-    // Check if room was deleted by admin (use marker directly)
-    const roomDeleteMarker = await storage.getRoomDeleteMarker(roomId);
-    const wasDeletedByAdmin = roomDeleteMarker?.reason === storage.ROOM_DELETE_REASONS.ADMIN;
-    // Also check if the requesting user was kicked by admin (use marker directly)
-    const kickMarker = username ? await storage.getUserKickMarker(username) : null;
-    const wasKickedByAdmin = kickMarker?.reason === storage.KICK_REASONS.ADMIN;
-    return res.json({ 
-      success: false, 
-      message: '방을 찾을 수 없습니다.',
-      roomDeletedByAdmin: wasDeletedByAdmin,
-      kickedByAdmin: wasKickedByAdmin ? [username] : undefined
-    });
-  }
-  
-  // Initialize returnedToWaiting Set if it doesn't exist (for rooms created before this update)
-  if (!room.returnedToWaiting) {
-    room.returnedToWaiting = new Set();
-  }
-  
-  // Add voting status, master status, role, and returned status to users
-  const usersWithVotingStatus = Array.from(room.users.values()).map(user => ({
-    ...user,
-    hasVoted: room.selections.has(user.id),
-    isMaster: user.id === room.masterId,
-    role: user.role || 'attender', // Default to attender if no role set
-    hasReturnedToWaiting: room.returnedToWaiting.has(user.id) // Track if user returned from results
-  }));
-  
-  console.log(`📊 Room status request for ${room.roomName}:`);
-  console.log(`   Game state: ${room.gameState}`);
-  console.log(`   Users: ${room.users.size}, Selections: ${room.selections.size}`);
-  console.log(`   Has match result: ${!!room.matchResult}`);
-  console.log(`   Users voted: ${Array.from(room.users.values()).filter(u => room.selections.has(u.id)).length}/${room.users.size}`);
-  
-  // Check if requesting user was kicked by admin (use marker directly)
-  const kickedUsers = [];
-  if (username) {
-    const m = await storage.getUserKickMarker(username);
-    if (m?.reason === storage.KICK_REASONS.ADMIN) kickedUsers.push(username);
-  }
-  // Also check users still in room (edge case)
-  for (const user of usersWithVotingStatus) {
-    const m = await storage.getUserKickMarker(user.username);
-    if (m?.reason === storage.KICK_REASONS.ADMIN && !kickedUsers.includes(user.username)) {
-      kickedUsers.push(user.username);
+  try {
+    const { roomId } = req.params;
+    const { username } = req.query; // Get requesting user's username for admin kick check
+    const room = await storage.getRoomById(roomId);
+    
+    if (!room) {
+      // Check if room was deleted by admin (use marker directly)
+      let wasDeletedByAdmin = false;
+      let wasKickedByAdmin = false;
+      try {
+        const roomDeleteMarker = await storage.getRoomDeleteMarker(roomId);
+        wasDeletedByAdmin = roomDeleteMarker?.reason === storage.ROOM_DELETE_REASONS.ADMIN;
+        if (username) {
+          const kickMarker = await storage.getUserKickMarker(username);
+          wasKickedByAdmin = kickMarker?.reason === storage.KICK_REASONS.ADMIN;
+        }
+      } catch (e) {
+        console.warn('Marker check error (room not found):', e.message);
+      }
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      return res.json({ 
+        success: false, 
+        message: '방을 찾을 수 없습니다.',
+        roomDeletedByAdmin: wasDeletedByAdmin,
+        kickedByAdmin: wasKickedByAdmin ? [username] : undefined
+      });
     }
+    
+    // Initialize returnedToWaiting Set if it doesn't exist (for rooms created before this update)
+    if (!room.returnedToWaiting) {
+      room.returnedToWaiting = new Set();
+    }
+    
+    // Add voting status, master status, role, and returned status to users
+    const usersWithVotingStatus = Array.from(room.users.values()).map(user => ({
+      ...user,
+      hasVoted: room.selections.has(user.id),
+      isMaster: user.id === room.masterId,
+      role: user.role || 'attender', // Default to attender if no role set
+      hasReturnedToWaiting: room.returnedToWaiting.has(user.id) // Track if user returned from results
+    }));
+    
+    console.log(`📊 Room status request for ${room.roomName}:`);
+    console.log(`   Game state: ${room.gameState}`);
+    console.log(`   Users: ${room.users.size}, Selections: ${room.selections.size}`);
+    
+    // Check if requesting user was kicked by admin (use marker directly) - defensive to avoid 500
+    const kickedUsers = [];
+    try {
+      if (username) {
+        const m = await storage.getUserKickMarker(username);
+        if (m?.reason === storage.KICK_REASONS.ADMIN) kickedUsers.push(username);
+      }
+      for (const user of usersWithVotingStatus) {
+        const m = await storage.getUserKickMarker(user.username);
+        if (m?.reason === storage.KICK_REASONS.ADMIN && !kickedUsers.includes(user.username)) {
+          kickedUsers.push(user.username);
+        }
+      }
+    } catch (e) {
+      console.warn('Kicked-users check error:', e.message);
+    }
+    
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    return res.json({
+      success: true,
+      room: {
+        id: roomId,
+        users: usersWithVotingStatus,
+        selections: Object.fromEntries(room.selections),
+        gameState: room.gameState,
+        masterId: room.masterId
+      },
+      matchResult: room.matchResult,
+      kickedByAdmin: kickedUsers.length > 0 ? kickedUsers : undefined,
+      roomDeletedByAdmin: false // Room still exists, so not deleted
+    });
+  } catch (err) {
+    console.error('Room status error:', err);
+    res.set('Cache-Control', 'no-store');
+    return res.status(500).json({ success: false, message: '방 정보를 불러오는 중 오류가 발생했습니다.' });
   }
-  
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.set('Pragma', 'no-cache');
-  res.json({
-    success: true,
-    room: {
-      id: roomId,
-      users: usersWithVotingStatus,
-      selections: Object.fromEntries(room.selections),
-      gameState: room.gameState,
-      masterId: room.masterId
-    },
-    matchResult: room.matchResult,
-    kickedByAdmin: kickedUsers.length > 0 ? kickedUsers : undefined,
-    roomDeletedByAdmin: false // Room still exists, so not deleted
-  });
 });
 
 // Kick user (master only)
