@@ -507,7 +507,9 @@ function App() {
     console.log('🔄 Polling room status...', { roomId, currentState, userId, hasVoted });
     
     try {
-      const response = await fetch(`${API_URL}/api/room/${roomId}`);
+      const response = await fetch(`${API_URL}/api/room/${roomId}?username=${encodeURIComponent(username || '')}&t=${Date.now()}`, {
+        cache: 'no-store'
+      });
       const data = await response.json();
       
       // Handle room not found (deleted or user kicked)
@@ -637,7 +639,9 @@ function App() {
     console.log('🔄 pollWaitingRoomStatus running for room:', roomId);
     
     try {
-      const response = await fetch(`${API_URL}/api/room/${roomId}`);
+      const response = await fetch(`${API_URL}/api/room/${roomId}?username=${encodeURIComponent(username || '')}&t=${Date.now()}`, {
+        cache: 'no-store'
+      });
       const data = await response.json();
       
       console.log('📡 Poll response:', data.success ? `${data.room?.users?.length} users` : 'failed');
@@ -1098,24 +1102,31 @@ function App() {
     
     setIsLoading(true);
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
       const response = await fetch(`${API_URL}/api/start-game`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId, userId })
+        body: JSON.stringify({ roomId, userId }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       const data = await response.json();
       
       if (data.success) {
         setCurrentState('linking');
-        // Start polling immediately when game starts
         console.log('🎮 Game started, starting polling...');
         startPolling();
-    } else {
+      } else {
         setError(data.message || '게임 시작에 실패했습니다.');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        setError('요청 시간이 초과되었습니다. 다시 시도해주세요.');
+      } else {
+        setError('게임 시작 중 오류가 발생했습니다.');
+      }
       console.error('Error starting game:', error);
-      setError('게임 시작 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -1271,23 +1282,30 @@ function App() {
     if (newRole === userRole) return;
     
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
       const response = await fetch(`${API_URL}/api/change-role`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId, userId, role: newRole })
+        body: JSON.stringify({ roomId, userId, role: newRole }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       const data = await response.json();
       
       if (data.success) {
         setUserRole(newRole);
-        // Update users list to reflect role change
-      setUsers(data.users);
+        setUsers(data.users);
       } else {
         setError(data.message || '역할 변경에 실패했습니다.');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        setError('요청 시간이 초과되었습니다. 다시 시도해주세요.');
+      } else {
+        setError('역할 변경 중 오류가 발생했습니다.');
+      }
       console.error('Error changing role:', error);
-      setError('역할 변경 중 오류가 발생했습니다.');
     }
   };
 

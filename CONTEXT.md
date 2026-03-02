@@ -176,8 +176,10 @@ Full details in `api/API_ROUTES.md`.
 
 ## 🐛 Recent Sessions (Condensed)
 
-### v2.0.3 (March 2026) - Tab close frees nickname
-- **Fix:** Beacon on tab close queues removal; 10s grace cancels on refresh (ping), executes on real close. Nickname freed ~10s after close.
+### v2.0.3 (March 2026) - Tab close, room poll, button timeout
+- **Tab close:** Beacon queues removal; 10s grace cancels on refresh, executes on real close.
+- **Room poll:** cache: 'no-store' + timestamp param – users see each other (was cached GET).
+- **Buttons:** 15s fetch timeout for start-game/change-role – prevents stuck "게임 시작 중..".
 
 ### Session 18 (January 2026) - Polling, Session, beforeunload
 - **Fixes:** Polling closure (refs sync), beforeunload skip on refresh, session persistence, password toggle
