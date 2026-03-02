@@ -237,7 +237,7 @@ app.post('/api/create-room', async (req, res) => {
     return res.status(400).json({ success: false, message: '관리자 전용 이름입니다. 다른 이름을 사용해주세요.' });
   }
 
-  // Check room name duplication (allow reclaim if stale: empty or inactive > 2 hr)
+  // Check room name duplication (allow reclaim if stale: empty, zombie, or all users inactive)
   console.log(`Creating room: "${roomName}"`);
   
   let existingRoom = await storage.getRoomByName(roomNameLower);
@@ -247,16 +247,30 @@ app.post('/api/create-room', async (req, res) => {
     const isEmpty = existingRoom.users.size === 0;
     const isZombie = timeSinceActivity > ZOMBIE_ROOM_TIMEOUT;
 
-    if (isEmpty || isZombie) {
-      await storage.setRoomDeleteMarker(existingRoom.id, isZombie ? storage.ROOM_DELETE_REASONS.INACTIVITY : storage.ROOM_DELETE_REASONS.EMPTY);
-      if (isZombie) {
-        for (const u of existingRoom.users.values()) {
-          await storage.setUserKickMarker(u.username, storage.KICK_REASONS.ROOM_DELETED, storage.ROOM_DELETE_REASONS.INACTIVITY);
-          await storage.deleteActiveUser(u.username);
+    // All users stale? (e.g. closed tab without leave - cleanup never ran on serverless)
+    let allUsersStale = false;
+    if (!isEmpty && !isZombie) {
+      let allStale = true;
+      for (const u of existingRoom.users.values()) {
+        const active = await storage.getActiveUser(u.username);
+        const inactiveMs = active ? Date.now() - (active.lastActivity || 0) : USER_TIMEOUT_MS + 1;
+        if (inactiveMs <= USER_TIMEOUT_MS) {
+          allStale = false;
+          break;
         }
       }
+      allUsersStale = allStale;
+    }
+
+    if (isEmpty || isZombie || allUsersStale) {
+      const reason = isZombie || allUsersStale ? storage.ROOM_DELETE_REASONS.INACTIVITY : storage.ROOM_DELETE_REASONS.EMPTY;
+      await storage.setRoomDeleteMarker(existingRoom.id, reason);
+      for (const u of existingRoom.users.values()) {
+        await storage.setUserKickMarker(u.username, storage.KICK_REASONS.ROOM_DELETED, reason);
+        await storage.deleteActiveUser(u.username);
+      }
       await storage.deleteRoom(existingRoom.id);
-      console.log(`   🧹 Reclaimed stale room name "${roomName}" (${isZombie ? 'zombie' : 'empty'})`);
+      console.log(`   🧹 Reclaimed stale room name "${roomName}" (${isZombie ? 'zombie' : allUsersStale ? 'all-users-inactive' : 'empty'})`);
     } else {
       console.log(`❌ Duplicate room name detected: "${roomName}" already exists`);
       return res.status(400).json({ success: false, message: '이미 존재하는 방 이름입니다. 다른 이름을 사용해주세요.' });
