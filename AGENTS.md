@@ -36,6 +36,8 @@ cd client && CI=true npx react-scripts test --watchAll=false
 ```
 Note: the default CRA test (`App.test.js`) has a pre-existing failure — it looks for "learn react" text which doesn't exist in the customized app.
 
+### Multiplayer testing
+To test multiplayer, open multiple browser tabs to `http://localhost:3000`. Each tab is a separate session (uses `sessionStorage`). Create a room in Tab 1, then join it by room name from other tabs. The game requires at least 2 participants to start.
+
 ### Known issues
-- `api/game.js` calls `storage.wasRoomDeletedByAdmin()` and `storage.wasUserKickedByAdmin()` which are not exported from `api/storage.js`. This causes the `GET /api/room/:roomId` endpoint to hang. Core game flow (register, create/join room, start game) still works.
 - `server.js` requires `socket.io` which is not listed in `package.json` dependencies. Install it separately: `npm install socket.io`.
