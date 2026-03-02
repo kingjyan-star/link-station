@@ -1199,6 +1199,7 @@ app.post('/api/return-to-waiting', async (req, res) => {
     room.gameState = 'waiting';
     room.selections.clear();
     room.matchResult = null;
+    room.returnedToWaiting.clear(); // Reset for next round; avoid stale IDs
     console.log(`🔄 Room ${room.roomName} - All users returned to waiting state`);
   } else {
     console.log(`🔄 Room ${room.roomName} - User returned, waiting for others (${room.returnedToWaiting.size}/${attenders.length})`);

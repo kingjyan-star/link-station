@@ -127,7 +127,7 @@ function App() {
 
       try {
         // Check if the room still exists and user is still in it
-        const response = await fetch(`${API_URL}/api/room/${session.roomId}`);
+        const response = await fetch(`${API_URL}/api/room/${session.roomId}?username=${encodeURIComponent(session.username || '')}`);
         const data = await response.json();
         console.log('📡 Room API response:', data.success, 'users:', data.room?.users?.length);
 
@@ -149,15 +149,17 @@ function App() {
             setGameState(data.room.gameState || 'waiting');
 
             // Navigate to appropriate state based on game state
+            const hasReturned = userInRoom?.hasReturnedToWaiting || false;
             if (data.room.gameState === 'linking') {
               console.log('🎮 Restoring to linking state');
               setCurrentState('linking');
-            } else if (data.room.gameState === 'completed' && data.matchResult) {
-              console.log('🎉 Restoring to linkresult state');
+            } else if (data.room.gameState === 'completed' && data.matchResult && !hasReturned) {
+              console.log('🎉 Restoring to linkresult state (user has not returned)');
               setMatches(data.matchResult.matches || []);
               setUnmatched(data.matchResult.unmatched || []);
               setCurrentState('linkresult');
             } else {
+              // waiting, or completed but user already returned, or all returned (matchResult cleared)
               console.log('⏳ Restoring to waitingroom state');
               setCurrentState('waitingroom');
             }
@@ -605,8 +607,11 @@ function App() {
           setMatches(data.matchResult.matches || []);
           setUnmatched(data.matchResult.unmatched || []);
           setCurrentState('linkresult');
-        } else if (hasCurrentUserReturned) {
-          console.log('👤 User has returned to waiting room, staying in waitingroom state');
+        } else if (hasCurrentUserReturned || (!data.matchResult && data.room.gameState === 'waiting')) {
+          // User returned or everyone returned (gameState waiting, no matchResult) -> show waiting room
+          console.log('👤 User has returned (or all returned), switching to waitingroom');
+          setCurrentState('waitingroom');
+          // useEffect will switch from game poll to waiting room poll
         }
       } else {
         console.log('❌ Polling failed:', data);
@@ -1280,6 +1285,8 @@ function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ roomId, userId })
         });
+        // Optimistic: mark current user as returned so badges render correctly before next poll
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, hasReturnedToWaiting: true } : u));
       }
     } catch (error) {
       console.error('Error returning to waiting room:', error);

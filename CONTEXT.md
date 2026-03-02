@@ -2,7 +2,7 @@
 
 **Live URL:** https://link-station-pro.vercel.app  
 **Last Updated:** March 2026  
-**Status:** ✅ v2.0.4 – Tab close frees nickname (unloadRef sync fix).
+**Status:** ✅ v2.0.5 – Return-to-waiting tag fix. Tab close, sync, Room API handling.
 
 ---
 
@@ -136,9 +136,9 @@ node scripts/test-tab-close-reclaim.js
 
 ### 7. **WaitingRoom State**
 - **Purpose**: Pre-game lobby
-- **Display**: User list, master badge, QR code
+- **Display**: User list, master badge, QR code, user tags (대기중 / 결과 확인 중 after results)
 - **Master Controls**: Kick users, start game
-- **Polling**: 5-second intervals
+- **Polling**: 500ms (waiting), 2s (linking/result)
 
 ### 8. **Linking State**
 - **Purpose**: Active matching phase
@@ -185,6 +185,16 @@ Full details in `api/API_ROUTES.md`.
 ---
 
 ## 🐛 Recent Sessions (Condensed)
+
+### v2.0.5 (March 2026) - Return-to-waiting tag fix
+- **Tags:** Master returning first saw both "결과 확인 중"; tags swapped after other returned; refresh showed result instead of waiting room.
+- **Fixes:** (1) pollRoomStatus: when hasCurrentUserReturned or gameState waiting + no matchResult → setCurrentState('waitingroom'); (2) session recovery: only restore to linkresult if user has NOT returned (check hasReturnedToWaiting); (3) optimistic setUsers: mark current user hasReturnedToWaiting on return; (4) API: clear returnedToWaiting when allReturned to avoid stale IDs; (5) session recovery fetch includes username query.
+
+### Post-v2.0.4 (March 2026) - Sync fix, Room API hardening
+- **Sync:** Added missing marker usage (wasUserKickedByAdmin/wasRoomDeletedByAdmin → use getMarker directly). Room API was crashing, breaking all polls.
+- **Option B:** Removed helper functions; room endpoint uses getUserKickMarker/getRoomDeleteMarker inline.
+- **Room API:** Wrap in try/catch; always return JSON (no HTML error pages). Defensive marker checks.
+- **Poll:** Waiting room 1s → 500ms for faster user-list sync.
 
 ### v2.0.4 (March 2026) - Tab close unloadRef fix
 - Fix: Sync unloadRef with username/roomId/userId so tab-close beacon actually sends data.
@@ -266,8 +276,7 @@ Full details in `api/API_ROUTES.md`.
 
 ## 🎯 For Next Session
 
-- **v2.0.4** deployed—verify: close tab → same nickname works immediately.
-- **Next steps:** Extract more VSA slices (room-hub, waiting-room, etc.) if desired; or focus on new features.
+- **v2.0.5** ready—return-to-waiting tag fix. Test: 2 users, results → master returns → other returns → verify badges; refresh master → should show waiting room.
 - **Doc update trigger:** When context >85% or at session end, say: *"Read UPDATE_DOCS.md and update all documentation"*
 
 ---
