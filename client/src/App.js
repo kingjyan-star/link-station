@@ -9,7 +9,7 @@ import { RegisterName } from './features/auth';
 
 function App() {
   // VERSION: Session 18 - 2026-01-25 (check console to verify deployment)
-  console.log('🔗 Link Station v2.0.2 loaded');
+  console.log('🔗 Link Station v2.0.3 loaded');
   
   // State management
   const [currentState, setCurrentState] = useState('registerName'); // registerName, makeOrJoinRoom, makeroom, joinroom, checkpassword, joinroomwithqr, waitingroom, linking, linkresult, adminPassword, adminDashboard, adminStatus, adminCleanup, adminShutdown, adminChangePassword
@@ -81,6 +81,7 @@ function App() {
   // Refs to hold the latest polling callbacks (fixes stale closure issue)
   const pollWaitingRoomStatusRef = useRef(null);
   const pollRoomStatusRef = useRef(null);
+  const unloadRef = useRef({ username: '', roomId: '', userId: '' });
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -175,73 +176,38 @@ function App() {
     recoverSession();
   }, []); // Only run on mount
 
-  // Free username when tab closes (but NOT on refresh - we want session recovery)
+  // Free username when tab closes (server 10s grace: refresh cancels via ping, real close executes)
   useEffect(() => {
-    if (!username) return; // No username = nothing to clean up
-    
     const freeUsername = () => {
-      // IMPORTANT: Don't free username if we have a stored session
-      // sessionStorage persists across refresh but clears on tab close
-      // If session exists, this is likely a refresh, not a tab close
-      const session = loadSession();
-      if (session && session.username === username) {
-        console.log('📄 Session exists, skipping username cleanup (likely refresh)');
-        return;
-      }
-      
-      // Use sendBeacon for reliable delivery during page unload
+      const { username: u, roomId: r, userId: i } = unloadRef.current;
+      if (!u) return;
+      const payload = JSON.stringify({ username: u, roomId: r || undefined, userId: i || undefined });
       if (navigator.sendBeacon) {
-        try {
-          const blob = new Blob([JSON.stringify({ username })], {
-            type: 'application/json'
-          });
-          const success = navigator.sendBeacon(
-            `${API_URL}/api/remove-user`,
-            blob
-          );
-          if (success) {
-            console.log(`🔓 Username "${username}" freed on tab close`);
-          } else {
-            console.warn('Failed to send beacon - username may remain locked until timeout');
-          }
-        } catch (error) {
-          console.error('Error freeing username on tab close:', error);
-        }
+        const blob = new Blob([payload], { type: 'application/json' });
+        const success = navigator.sendBeacon(`${API_URL}/api/remove-user`, blob);
+        if (success) console.log(`🔓 Tab close: queued removal for "${u}"`);
       } else {
-        // Fallback for browsers that don't support sendBeacon
         try {
           const xhr = new XMLHttpRequest();
           xhr.open('POST', `${API_URL}/api/remove-user`, false);
           xhr.setRequestHeader('Content-Type', 'application/json');
-          xhr.send(JSON.stringify({ username }));
-        } catch (error) {
-          console.error('Error freeing username (fallback):', error);
+          xhr.send(payload);
+        } catch (e) {
+          console.error('Tab close beacon error:', e);
         }
       }
     };
-    
-    const handleBeforeUnload = () => {
-      freeUsername();
+    const handleBeforeUnload = () => freeUsername();
+    const handlePageHide = (e) => {
+      if (!e.persisted) freeUsername();
     };
-    
-    const handlePageHide = (event) => {
-      if (event.persisted) {
-        console.log('📄 Page cached (back/forward navigation), keeping username');
-        return;
-      }
-      freeUsername();
-    };
-    
-    // Add event listeners
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('pagehide', handlePageHide);
-    
     return () => {
-      // Cleanup event listeners
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('pagehide', handlePageHide);
     };
-  }, [username]);
+  }, []);
 
   // Check URL parameters for QR code access
   useEffect(() => {
@@ -1043,11 +1009,11 @@ function App() {
   const handleExitFromMakeOrJoin = () => {
     // Remove user from active users when they exit
     if (username) {
-      // Call API to remove user from active users
+      // Call API to remove user from active users (immediate - not tab-close beacon)
       fetch(`${API_URL}/api/remove-user`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username })
+        body: JSON.stringify({ username, roomId, userId, immediate: true })
       }).catch(error => console.error('Error removing user:', error));
     }
     // Clear session

@@ -2,7 +2,7 @@
 
 **Live URL:** https://link-station-pro.vercel.app  
 **Last Updated:** March 2026  
-**Status:** ✅ v2.0.2 – Reclaim room when all users inactive (closed tab).
+**Status:** ✅ v2.0.3 – Tab close frees nickname (10s grace for refresh).
 
 ---
 
@@ -39,7 +39,7 @@ Vercel auto-deploys on push to main.
 
 ### Verify After Deploy
 
-1. Browser console → `🔗 Link Station v2.0.2 loaded`
+1. Browser console → `🔗 Link Station v2.0.3 loaded`
 2. Join room, press F5 → should stay in room
 3. 2+ users → all see each other immediately
 
@@ -176,9 +176,8 @@ Full details in `api/API_ROUTES.md`.
 
 ## 🐛 Recent Sessions (Condensed)
 
-### v2.0.2 (March 2026) - Reclaim room when all users inactive
-- **Fix:** Room reclaim when all users inactive 30+ min (e.g. closed tab; cleanup never ran on serverless)
-- **v2.0.1:** Username/room reclaim (empty/zombie), clear kick marker on create/join
+### v2.0.3 (March 2026) - Tab close frees nickname
+- **Fix:** Beacon on tab close queues removal; 10s grace cancels on refresh (ping), executes on real close. Nickname freed ~10s after close.
 
 ### Session 18 (January 2026) - Polling, Session, beforeunload
 - **Fixes:** Polling closure (refs sync), beforeunload skip on refresh, session persistence, password toggle
@@ -224,6 +223,7 @@ Full details in `api/API_ROUTES.md`.
 - **Session 18:** Polling fix, session recovery, beforeunload fix, password toggle
 - **v2.0.1:** Stale username/room reclaim, kick marker clear on room entry
 - **v2.0.2:** Reclaim room when all users inactive (closed-tab case)
+- **v2.0.3:** Tab close beacon + 10s grace (nickname freed on close)
 
 ---
 
@@ -249,7 +249,7 @@ Full details in `api/API_ROUTES.md`.
 
 ## 🎯 For Next Session
 
-- **v2.0.2** deployed—verify room reclaim after closed-tab on live.
+- **v2.0.3** deployed—verify: close tab → wait 10s → same nickname works.
 - **Next steps:** Extract more VSA slices (room-hub, waiting-room, etc.) if desired; or focus on new features.
 - **Doc update trigger:** When context >85% or at session end, say: *"Read UPDATE_DOCS.md and update all documentation"*
 

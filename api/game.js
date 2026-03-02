@@ -28,6 +28,9 @@ const USER_WARNING_MS = 29 * 60 * 1000; // 29 minutes = 1,740,000 ms
 // Warning appears when user has been inactive for this duration.
 // Warning shows: "You'll be logged out in X seconds" (1 minute before timeout).
 
+const USER_RECLAIM_MS = 5 * 60 * 1000; // 5 minutes - reclaim if alone in room (closed tab case)
+// Shorter than USER_TIMEOUT_MS; heartbeat every 5 min, so 1 missed = likely gone.
+
 // ───────────────────────────────────────────────────────────────────────────
 // ROOM TIMEOUT SETTINGS
 // ───────────────────────────────────────────────────────────────────────────
@@ -80,7 +83,7 @@ const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes = 300,000 ms
 async function cleanupInactiveUsersAndRooms() {
   const now = Date.now();
   console.log('🧹 Running cleanup...');
-
+  await processPendingRemovals();
   const activeUserEntries = await storage.listActiveUsers();
   const processedRooms = new Map();
 
@@ -181,21 +184,38 @@ cleanupInactiveUsersAndRooms().catch((error) => {
   console.error('Cleanup error:', error);
 });
 
-// Check username duplication
+// Check username duplication (reclaim stale: alone+5min or 30min)
 app.post('/api/check-username', async (req, res) => {
-  const { username } = req.body;
-  
-  if (!username || username.trim() === '') {
-    return res.json({ duplicate: false });
-  }
-
-  if (username.trim().toLowerCase() === ADMIN_USERNAME) {
+  await processPendingRemovals();
+  const trimmedUsername = (req.body.username || '').trim();
+  if (!trimmedUsername) return res.json({ duplicate: false });
+  if (trimmedUsername.toLowerCase() === ADMIN_USERNAME) {
     return res.json({ duplicate: false, available: true, reserved: true });
   }
-  
-  const userData = await storage.getActiveUser(username.trim());
-  const isDuplicate = !!userData;
-  res.json({ duplicate: isDuplicate, available: !isDuplicate });
+  const userData = await storage.getActiveUser(trimmedUsername);
+  if (!userData) return res.json({ duplicate: false, available: true });
+  const inactiveMs = Date.now() - (userData.lastActivity || 0);
+  const room = userData.roomId ? await storage.getRoomById(userData.roomId) : null;
+  const isAloneInRoom = room && room.users.size === 1 && room.users.has(userData.userId);
+  const reclaimThreshold = isAloneInRoom ? USER_RECLAIM_MS : USER_TIMEOUT_MS;
+  if (inactiveMs > reclaimThreshold) {
+    if (room) {
+      room.users.delete(userData.userId);
+      room.selections.delete(userData.userId);
+      if (room.masterId === userData.userId && room.users.size > 0) {
+        const newMaster = Array.from(room.users.values())[0];
+        room.masterId = newMaster.id;
+        newMaster.isMaster = true;
+        room.users.set(newMaster.id, newMaster);
+      }
+      if (room.users.size === 0) await storage.deleteRoom(room.id);
+      else await storage.saveRoom(room);
+    }
+    await storage.deleteActiveUser(trimmedUsername);
+    await storage.clearUserKickMarker(trimmedUsername);
+    return res.json({ duplicate: false, available: true });
+  }
+  res.json({ duplicate: true, available: false });
 });
 
 // Check room name duplication
@@ -212,6 +232,7 @@ app.post('/api/check-roomname', async (req, res) => {
 
 // Create room
 app.post('/api/create-room', async (req, res) => {
+  await processPendingRemovals();
   const { roomName, roomPassword, memberLimit, username } = req.body;
   
   // Check if app is shutdown (block all users including admin from creating rooms)
@@ -279,13 +300,15 @@ app.post('/api/create-room', async (req, res) => {
   
   console.log(`✓ Room name "${roomName}" is available`);
   
-  // Check username duplication (allow reclaim if stale: inactive > 30 min)
+  // Check username duplication (allow reclaim if stale)
   const existingUser = await storage.getActiveUser(trimmedUsername);
   if (existingUser) {
     const inactiveMs = Date.now() - (existingUser.lastActivity || 0);
-    if (inactiveMs > USER_TIMEOUT_MS) {
-      // Stale record - remove so user can reclaim username (e.g. after long idle / serverless cold start)
-      const room = existingUser.roomId ? await storage.getRoomById(existingUser.roomId) : null;
+    const room = existingUser.roomId ? await storage.getRoomById(existingUser.roomId) : null;
+    const isAloneInRoom = room && room.users.size === 1 && room.users.has(existingUser.userId);
+    const reclaimThreshold = isAloneInRoom ? USER_RECLAIM_MS : USER_TIMEOUT_MS; // 5 min if alone, else 30 min
+    if (inactiveMs > reclaimThreshold) {
+      // Stale record - remove so user can reclaim username (closed tab, long idle, or serverless cold)
       if (room) {
         room.users.delete(existingUser.userId);
         room.selections.delete(existingUser.userId);
@@ -365,6 +388,7 @@ app.post('/api/create-room', async (req, res) => {
 
 // Join room
 app.post('/api/join-room', async (req, res) => {
+  await processPendingRemovals();
   const { roomName, username } = req.body;
   
   console.log(`Join room attempt: "${roomName}" by "${username}"`);
@@ -407,8 +431,10 @@ app.post('/api/join-room', async (req, res) => {
   let existingUser = await storage.getActiveUser(trimmedUsername);
   if (existingUser) {
     const inactiveMs = Date.now() - (existingUser.lastActivity || 0);
-    if (inactiveMs > USER_TIMEOUT_MS) {
-      const room = existingUser.roomId ? await storage.getRoomById(existingUser.roomId) : null;
+    const room = existingUser.roomId ? await storage.getRoomById(existingUser.roomId) : null;
+    const isAloneInRoom = room && room.users.size === 1 && room.users.has(existingUser.userId);
+    const reclaimThreshold = isAloneInRoom ? USER_RECLAIM_MS : USER_TIMEOUT_MS;
+    if (inactiveMs > reclaimThreshold) {
       if (room) {
         room.users.delete(existingUser.userId);
         room.selections.delete(existingUser.userId);
@@ -476,6 +502,7 @@ app.post('/api/join-room', async (req, res) => {
 
 // Check password
 app.post('/api/check-password', async (req, res) => {
+  await processPendingRemovals();
   const { roomName, password, username } = req.body;
   
   console.log(`Check password attempt: "${roomName}" by "${username}"`);
@@ -513,8 +540,10 @@ app.post('/api/check-password', async (req, res) => {
   let existingUser = await storage.getActiveUser(trimmedUsername);
   if (existingUser) {
     const inactiveMs = Date.now() - (existingUser.lastActivity || 0);
-    if (inactiveMs > USER_TIMEOUT_MS) {
-      const room = existingUser.roomId ? await storage.getRoomById(existingUser.roomId) : null;
+    const room = existingUser.roomId ? await storage.getRoomById(existingUser.roomId) : null;
+    const isAloneInRoom = room && room.users.size === 1 && room.users.has(existingUser.userId);
+    const reclaimThreshold = isAloneInRoom ? USER_RECLAIM_MS : USER_TIMEOUT_MS;
+    if (inactiveMs > reclaimThreshold) {
       if (room) {
         room.users.delete(existingUser.userId);
         room.selections.delete(existingUser.userId);
@@ -573,6 +602,7 @@ app.post('/api/check-password', async (req, res) => {
 
 // Join room with QR
 app.post('/api/join-room-qr', async (req, res) => {
+  await processPendingRemovals();
   const { roomId, username } = req.body;
   
   // Check if app is shutdown (block all users including admin from joining rooms)
@@ -604,8 +634,10 @@ app.post('/api/join-room-qr', async (req, res) => {
   let existingUser = await storage.getActiveUser(trimmedUsername);
   if (existingUser) {
     const inactiveMs = Date.now() - (existingUser.lastActivity || 0);
-    if (inactiveMs > USER_TIMEOUT_MS) {
-      const r = existingUser.roomId ? await storage.getRoomById(existingUser.roomId) : null;
+    const r = existingUser.roomId ? await storage.getRoomById(existingUser.roomId) : null;
+    const isAloneInRoom = r && r.users.size === 1 && r.users.has(existingUser.userId);
+    const reclaimThreshold = isAloneInRoom ? USER_RECLAIM_MS : USER_TIMEOUT_MS;
+    if (inactiveMs > reclaimThreshold) {
       if (r) {
         r.users.delete(existingUser.userId);
         r.selections.delete(existingUser.userId);
@@ -851,9 +883,11 @@ app.post('/api/select', async (req, res) => {
 
 // Heartbeat/Ping endpoint to keep user connection alive
 app.post('/api/ping', async (req, res) => {
+  await processPendingRemovals(); // Execute any stale tab-close removals
   const { username, userId } = req.body;
   
   if (username) {
+    await storage.deletePendingRemoval(username); // Cancel own pending (refresh, not close)
     const userData = await storage.getActiveUser(username);
     if (userData && userData.userId === userId) {
       await storage.saveActiveUser(username, {
@@ -976,15 +1010,62 @@ app.post('/api/keep-alive-room', async (req, res) => {
   }
 });
 
-// Remove user from active users when they exit
-app.post('/api/remove-user', async (req, res) => {
-  const { username } = req.body;
-  
-  if (username) {
+const TAB_CLOSE_GRACE_MS = 10 * 1000; // 10 sec: refresh cancels, real close executes
+
+async function processPendingRemovals() {
+  const pending = await storage.listPendingRemovals();
+  const now = Date.now();
+  for (const { username, roomId, userId, timestamp } of pending) {
+    if (now - timestamp < TAB_CLOSE_GRACE_MS) continue;
+    await storage.deletePendingRemoval(username);
+    if (roomId && userId) {
+      const room = await storage.getRoomById(roomId);
+      if (room) {
+        room.users.delete(userId);
+        room.selections.delete(userId);
+        if (room.masterId === userId && room.users.size > 0) {
+          const newMaster = Array.from(room.users.values())[0];
+          room.masterId = newMaster.id;
+          newMaster.isMaster = true;
+          room.users.set(newMaster.id, newMaster);
+        }
+        if (room.users.size === 0) await storage.deleteRoom(roomId);
+        else await storage.saveRoom(room);
+      }
+    }
     await storage.deleteActiveUser(username);
-    console.log(`👋 User ${username} removed from active users`);
+    console.log(`   🔓 Executed pending removal: ${username} (tab closed)`);
   }
-  
+}
+
+// Remove user from active users (immediate for button click, pending for tab-close beacon)
+app.post('/api/remove-user', async (req, res) => {
+  const { username, roomId, userId, immediate } = req.body;
+  const trimmedUsername = (username || '').trim();
+  if (!trimmedUsername) return res.json({ success: true });
+  if (immediate) {
+    if (roomId && userId) {
+      const room = await storage.getRoomById(roomId);
+      if (room) {
+        room.users.delete(userId);
+        room.selections.delete(userId);
+        if (room.masterId === userId && room.users.size > 0) {
+          const newMaster = Array.from(room.users.values())[0];
+          room.masterId = newMaster.id;
+          newMaster.isMaster = true;
+          room.users.set(newMaster.id, newMaster);
+        }
+        if (room.users.size === 0) await storage.deleteRoom(roomId);
+        else await storage.saveRoom(room);
+      }
+    }
+    await storage.deleteActiveUser(trimmedUsername);
+    await storage.clearUserKickMarker(trimmedUsername);
+    console.log(`👋 User ${trimmedUsername} removed (immediate)`);
+  } else {
+    await storage.setPendingRemoval(trimmedUsername, roomId || null, userId || null);
+    console.log(`📋 Pending removal for ${trimmedUsername} (grace ${TAB_CLOSE_GRACE_MS / 1000}s)`);
+  }
   res.json({ success: true });
 });
 

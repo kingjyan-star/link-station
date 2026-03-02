@@ -41,6 +41,9 @@ const ROOM_DELETE_PRIORITY = ['EMPTY', 'INACTIVITY', 'ADMIN'];
 const USER_KICK_MARKER_KEY = (username) => `marker:user:kick:${username}`;
 const ROOM_DELETE_MARKER_KEY = (roomId) => `marker:room:delete:${roomId}`;
 const MARKER_TTL_SECONDS = 60;
+const PENDING_REMOVAL_KEY = (username) => `pending:remove:${username}`;
+const PENDING_REMOVALS_SET_KEY = 'pending:removals:set';
+const PENDING_REMOVAL_TTL_SECONDS = 60;
 
 // In-memory fallback (for local development with no Redis credentials)
 const memoryStore = {
@@ -52,7 +55,8 @@ const memoryStore = {
   adminPassword: null,
   adminTokens: new Map(),
   userKickMarkers: new Map(),
-  roomDeleteMarkers: new Map()
+  roomDeleteMarkers: new Map(),
+  pendingRemovals: new Map() // { username: { roomId?, userId?, timestamp } }
 };
 
 const toSerializableRoom = (room) => ({
@@ -464,6 +468,53 @@ async function getRoomDeleteMarker(roomId) {
   return JSON.parse(result);
 }
 
+// Pending removal (tab-close grace period: refresh cancels, real close executes after 10 sec)
+async function setPendingRemoval(username, roomId = null, userId = null) {
+  if (!username) return;
+  const data = { roomId, userId, timestamp: Date.now() };
+  if (!REDIS_ENABLED) {
+    memoryStore.pendingRemovals.set(username, data);
+    return;
+  }
+  await redisRequest('setex', [PENDING_REMOVAL_KEY(username), PENDING_REMOVAL_TTL_SECONDS, JSON.stringify(data)], { method: 'POST' });
+  await redisRequest('sadd', [PENDING_REMOVALS_SET_KEY, username], { method: 'POST' });
+}
+
+async function getPendingRemoval(username) {
+  if (!username) return null;
+  if (!REDIS_ENABLED) {
+    return memoryStore.pendingRemovals.get(username) || null;
+  }
+  const result = await redisRequest('get', [PENDING_REMOVAL_KEY(username)]);
+  if (!result) return null;
+  return JSON.parse(result);
+}
+
+async function deletePendingRemoval(username) {
+  if (!username) return;
+  if (!REDIS_ENABLED) {
+    memoryStore.pendingRemovals.delete(username);
+    return;
+  }
+  await redisRequest('del', [PENDING_REMOVAL_KEY(username)], { method: 'POST' });
+  await redisRequest('srem', [PENDING_REMOVALS_SET_KEY, username], { method: 'POST' });
+}
+
+async function listPendingRemovals() {
+  if (!REDIS_ENABLED) {
+    return Array.from(memoryStore.pendingRemovals.entries()).map(([username, data]) => ({ username, ...data }));
+  }
+  const usernames = await redisRequest('smembers', [PENDING_REMOVALS_SET_KEY]);
+  if (!usernames) return [];
+  const list = [];
+  const normalized = Array.isArray(usernames) ? usernames : [usernames];
+  for (const u of normalized) {
+    const data = await getPendingRemoval(u);
+    if (data) list.push({ username: u, ...data });
+  }
+  return list;
+}
+
 module.exports = {
   REDIS_ENABLED,
   getRoomById,
@@ -494,6 +545,10 @@ module.exports = {
   getUserKickMarker,
   clearUserKickMarker,
   setRoomDeleteMarker,
-  getRoomDeleteMarker
+  getRoomDeleteMarker,
+  setPendingRemoval,
+  getPendingRemoval,
+  deletePendingRemoval,
+  listPendingRemovals
 };
 
