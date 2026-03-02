@@ -83,6 +83,11 @@ function App() {
   const pollRoomStatusRef = useRef(null);
   const unloadRef = useRef({ username: '', roomId: '', userId: '' });
 
+  // Keep unloadRef in sync so tab-close beacon sends current session
+  useEffect(() => {
+    unloadRef.current = { username: username || '', roomId: roomId || '', userId: userId || '' };
+  }, [username, roomId, userId]);
+
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {
