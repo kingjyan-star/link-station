@@ -1,39 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import './App.css';
-
-const API_URL = process.env.NODE_ENV === 'production' 
-  ? window.location.origin 
-  : 'http://localhost:3000';
-
-// Session persistence helpers
-const SESSION_KEY = 'linkstation_session';
-
-const saveSession = (data) => {
-  try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(data));
-  } catch (e) {
-    console.error('Failed to save session:', e);
-  }
-};
-
-const loadSession = () => {
-  try {
-    const data = sessionStorage.getItem(SESSION_KEY);
-    return data ? JSON.parse(data) : null;
-  } catch (e) {
-    console.error('Failed to load session:', e);
-    return null;
-  }
-};
-
-const clearSession = () => {
-  try {
-    sessionStorage.removeItem(SESSION_KEY);
-  } catch (e) {
-    console.error('Failed to clear session:', e);
-  }
-};
+import { API_URL } from './shared/api/client.js';
+import { saveSession, loadSession, clearSession } from './shared/session/index.js';
+import { checkUsernameDuplication } from './shared/api/checkUsername.js';
+import { validateUsername } from './shared/utils/validateUsername.js';
+import { RegisterName } from './features/auth';
 
 function App() {
   // VERSION: Session 18 - 2026-01-25 (check console to verify deployment)
@@ -873,16 +845,6 @@ function App() {
   }, [currentState]);
 
   // Validation functions
-  const validateUsername = (name) => {
-    if (!name || name.trim() === '') {
-      return { valid: false, message: '사용자 이름을 입력해주세요.' };
-    }
-    if (name.length > 32) {
-      return { valid: false, message: '사용자 이름은 32자 이하여야 합니다.' };
-    }
-    return { valid: true };
-  };
-
   const validateRoomName = (name) => {
     if (!name || name.trim() === '') {
       return { valid: false, message: '방 이름을 입력해주세요.' };
@@ -911,26 +873,6 @@ function App() {
   };
 
   // API functions
-  const checkUsernameDuplication = async (name) => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-    try {
-      const response = await fetch(`${API_URL}/api/check-username`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: name }),
-        signal: controller.signal
-      });
-      const data = await response.json();
-      return data.duplicate;
-    } catch (error) {
-      console.error('Error checking username:', error);
-      return false;
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  };
-
   const createRoom = async () => {
     try {
       const response = await fetch(`${API_URL}/api/create-room`, {
@@ -1088,82 +1030,6 @@ function App() {
   };
 
   // Event handlers
-  const handleRegisterName = async () => {
-    // Check if app is shutdown (except for admin)
-    try {
-      const shutdownResponse = await fetch(`${API_URL}/api/admin-shutdown-status`);
-      const shutdownData = await shutdownResponse.json();
-      if (shutdownData.success && shutdownData.isShutdown && username !== 'link-station-admin') {
-        setError('앱이 종료되어 게임을 할 수 없습니다.');
-        return;
-      }
-    } catch (error) {
-      console.error('Error checking shutdown status:', error);
-    }
-
-    const validation = validateUsername(username);
-    if (!validation.valid) {
-      setError(validation.message);
-      return;
-    }
-
-    // Check if admin username
-    if (username.trim().toLowerCase() === 'link-station-admin') {
-      setCurrentState('adminPassword');
-      setError('');
-      return;
-    }
-
-    const isDuplicate = await checkUsernameDuplication(username);
-    if (isDuplicate) {
-      // Check if we have a session for this username - maybe user refreshed
-      const session = loadSession();
-      if (session && session.username === username.trim()) {
-        console.log('🔄 Username is duplicate but we have a session, attempting recovery...');
-        try {
-          const response = await fetch(`${API_URL}/api/room/${session.roomId}`);
-          const data = await response.json();
-          
-          if (data.success && data.room) {
-            const userInRoom = data.room.users.find(u => u.id === session.userId);
-            if (userInRoom) {
-              console.log('✅ Session recovered via handleRegisterName');
-              setUsername(session.username);
-              setRoomId(session.roomId);
-              setUserId(session.userId);
-              setUsers(data.room.users);
-              setIsMaster(data.room.masterId === session.userId);
-              setRoomData(session.roomData);
-              setUserRole(userInRoom.role || 'attender');
-              setGameState(data.room.gameState || 'waiting');
-              
-              if (data.room.gameState === 'linking') {
-                setCurrentState('linking');
-              } else if (data.room.gameState === 'completed' && data.matchResult) {
-                setMatches(data.matchResult.matches || []);
-                setUnmatched(data.matchResult.unmatched || []);
-                setCurrentState('linkresult');
-              } else {
-                setCurrentState('waitingroom');
-              }
-              return;
-            }
-          }
-        } catch (error) {
-          console.error('Session recovery in handleRegisterName failed:', error);
-        }
-        // Session recovery failed, clear it
-        clearSession();
-      }
-      
-      setError('이미 사용 중인 사용자 이름입니다. 다른 이름을 사용하거나 잠시 후 다시 시도해주세요.');
-      return;
-    }
-
-    setCurrentState('makeOrJoinRoom');
-    setError('');
-  };
-
   const handleMakeRoom = () => {
     setCurrentState('makeroom');
     setError('');
@@ -1872,39 +1738,6 @@ function App() {
 
 
   // Render functions
-  const renderRegisterName = () => (
-    <div className="register-name-container">
-      <div className="register-name-header">
-        <h1>🔗 링크 스테이션</h1>
-        <p>사용자 이름을 입력하세요</p>
-      </div>
-      
-      <div className="register-name-form">
-          <div className="input-group">
-          <label htmlFor="username">사용자 이름 (최대 32자)</label>
-            <input
-            id="username"
-              type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="사용자 이름을 입력하세요"
-            maxLength={32}
-            />
-          </div>
-          
-        <div className="button-group">
-          <button 
-            className="register-button"
-            onClick={handleRegisterName}
-            disabled={!username.trim()}
-          >
-            계속하기
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
   const renderMakeOrJoinRoom = () => (
     <div className="make-or-join-container">
       <div className="make-or-join-header">
@@ -3040,7 +2873,24 @@ function App() {
       {error && <div className="error-message">{error}</div>}
       {success && <div className="success-message">{success}</div>}
       
-      {currentState === 'registerName' && renderRegisterName()}
+      {currentState === 'registerName' && (
+        <RegisterName
+          username={username}
+          setUsername={setUsername}
+          setCurrentState={setCurrentState}
+          setError={setError}
+          setSuccess={setSuccess}
+          setRoomId={setRoomId}
+          setUserId={setUserId}
+          setUsers={setUsers}
+          setIsMaster={setIsMaster}
+          setRoomData={setRoomData}
+          setUserRole={setUserRole}
+          setGameState={setGameState}
+          setMatches={setMatches}
+          setUnmatched={setUnmatched}
+        />
+      )}
       {currentState === 'makeOrJoinRoom' && renderMakeOrJoinRoom()}
       {currentState === 'makeroom' && renderMakeRoom()}
       {currentState === 'joinroom' && renderJoinRoom()}

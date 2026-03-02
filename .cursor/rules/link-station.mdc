@@ -1,0 +1,24 @@
+---
+description: Link Station VSA routing - read features.md before editing feature folders
+globs:
+  - "client/src/**/*"
+  - "api/**/*"
+  - "ARCHITECTURE.md"
+  - "CONTEXT.md"
+  - "project_config.md"
+  - "UPDATE_DOCS.md"
+---
+
+# Link Station - Feature Context Rule
+
+**Before any work in this project:** Read and follow `project_config.md`, `ARCHITECTURE.md`, and `CONTEXT.md`.
+
+When modifying any file under `client/src/features/<feature_name>/`:
+
+1. **FIRST** read `client/src/features/<feature_name>/features.md` for that feature.
+2. Understand the feature's role, local data flow, API endpoints, and boundaries.
+3. Modify ONLY files within that feature folder (or shared, if explicitly needed).
+4. Do NOT import from other feature folders.
+5. For shared kernel changes: follow Cross-Module Protocol in `client/src/shared/README.md`.
+
+For root-level work: read `project_config.md` and `ARCHITECTURE.md`.

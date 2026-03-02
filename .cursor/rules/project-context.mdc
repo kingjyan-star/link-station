@@ -1,0 +1,36 @@
+---
+description: |
+  APPLY when the user's task involves any of:
+  - Implementing, modifying, or adding features
+  - Fixing bugs (any bug, especially multi-file or architecture-related)
+  - Refactoring, restructuring, or migrating code
+  - Deployment, build process, or environment setup
+  - Updating documentation (CONTEXT.md, ARCHITECTURE.md, etc.)
+  - Architecture decisions, VSA, or feature boundaries
+  - Understanding project structure, state flow, or API
+  - Any task requiring knowledge of how Link Station works
+  DO NOT APPLY when the task is solely:
+  - Fixing a single typo or spelling error
+  - Changing one word or one line with no logic impact
+  - Explaining what a specific line or function does (quick explanation)
+  - Purely cosmetic formatting (whitespace, indentation only)
+  - Asking a very simple question answerable without project context
+  When uncertain whether the task needs project context, APPLY this rule (better to include than miss).
+alwaysApply: false
+globs:
+  - "client/src/**/*"
+  - "api/**/*"
+  - "ARCHITECTURE.md"
+  - "CONTEXT.md"
+  - "project_config.md"
+  - "UPDATE_DOCS.md"
+---
+
+# Link Station - Project Context
+
+**Before any work:** Read and follow these files:
+1. `project_config.md` - Global VSA and coding rules
+2. `ARCHITECTURE.md` - VSA structure, feature map, routing
+3. `CONTEXT.md` - Project overview, deployment, state flow, history
+
+**When asked to update docs:** Read `UPDATE_DOCS.md` and update `CONTEXT.md`.
