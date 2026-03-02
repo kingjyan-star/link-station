@@ -15,6 +15,8 @@ Architecture Guide: Read `ARCHITECTURE.md` for the full VSA structure, feature m
 
 Context Guide: Read `CONTEXT.md` for project overview, deployment, state flow, and development history.
 
+Cursor Rules: `.cursor/rules/project-context.mdc` (Apply Intelligently) loads these docs when relevant. You can rely on it instead of pasting a manual prompt.
+
 Sub-folder Guides (features.md): When assigned a task within a specific feature directory (e.g., client/src/features/auth), you MUST first locate and read the features.md file located inside that specific directory.   
 
 Execution Execution: Rely strictly on the local features.md to understand the specific role, local data flow, and isolated boundaries of that folder before modifying any code. Do not guess or assume context.

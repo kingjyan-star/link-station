@@ -71,7 +71,8 @@ link-station/
 │
 └── .cursor/
     └── rules/
-        └── link-station.mdc    # Cursor-specific: route to features.md
+        ├── project-context.mdc  # Apply Intelligently + globs: read project_config, ARCHITECTURE, CONTEXT
+        └── link-station.mdc     # Feature-specific: read features.md first
 ```
 
 ---

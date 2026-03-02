@@ -1,6 +1,6 @@
 # 📝 Documentation Update Guide
 
-Update **CONTEXT.md** when making significant changes. This file describes when and how.
+Update docs when making significant changes. **There is no automatic update**—you or the AI must run this when context is high (>85%) or at session end.
 
 ---
 
@@ -10,6 +10,17 @@ Update **CONTEXT.md** when making significant changes. This file describes when 
 - Critical bugs fixed
 - Before Cursor updates or when context is high (>85%)
 - End of major development sessions
+
+---
+
+## 📄 Which File to Update
+
+| File | Update when |
+|------|-------------|
+| **CONTEXT.md** | Always—status, sessions, deployment, overview |
+| **ARCHITECTURE.md** | When VSA structure, features, or routing change |
+| **project_config.md** | When global coding rules or directives change |
+| **.cursor/rules/*.mdc** | When rule globs or instructions change |
 
 ---
 
@@ -39,7 +50,9 @@ Update **CONTEXT.md** when making significant changes. This file describes when 
 
 ## 🔄 Quick Command for AI
 
-*"Read UPDATE_DOCS.md and update CONTEXT.md"*
+*"Read UPDATE_DOCS.md and update all documentation"*
+
+Or: *"Read UPDATE_DOCS.md and update CONTEXT.md"* (CONTEXT only)
 
 ---
 
@@ -52,3 +65,5 @@ Update **CONTEXT.md** when making significant changes. This file describes when 
 ---
 
 **Emergency:** Update CONTEXT.md first (single source of truth).
+
+**Note:** Docs do not auto-update. When context grows (>85%) or at session end, run: *"Read UPDATE_DOCS.md and update all documentation"*

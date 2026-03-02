@@ -409,6 +409,15 @@ async function getUserKickMarker(username) {
   return JSON.parse(result);
 }
 
+async function clearUserKickMarker(username) {
+  if (!username) return;
+  if (!REDIS_ENABLED) {
+    memoryStore.userKickMarkers.delete(username);
+    return;
+  }
+  await redisRequest('del', [USER_KICK_MARKER_KEY(username)], { method: 'POST' });
+}
+
 async function setRoomDeleteMarker(roomId, reason) {
   if (!roomId || !reason) return;
   
@@ -483,6 +492,7 @@ module.exports = {
   ROOM_DELETE_REASONS,
   setUserKickMarker,
   getUserKickMarker,
+  clearUserKickMarker,
   setRoomDeleteMarker,
   getRoomDeleteMarker
 };

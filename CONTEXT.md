@@ -1,25 +1,22 @@
 # 🔗 Link Station - Complete Context
 
 **Live URL:** https://link-station-pro.vercel.app  
-**Last Updated:** January 2026  
-**Status:** ✅ Active - Session 18 fixes + VSA auth extraction complete
+**Last Updated:** March 2026  
+**Status:** ✅ v2.0.1 – Stale reclaim (username, room name), kick marker clear on room entry.
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (New Chat)
 
-**New chat?** Copy this: *"Read CONTEXT.md, project_config.md, and ARCHITECTURE.md. [Your task]"*
+**Rules load automatically** via `.cursor/rules/project-context.mdc` (Apply Intelligently + globs). No need to paste a prompt.
 
-**Deploy:** See [Deployment](#-deployment) section below.
+**Deploy:** See [Deployment](#-deployment) below.
 
 ---
 
-## 📦 New Chat Prompt (Copy-Paste)
+## 📦 Manual Prompt (if rules don't load)
 
-```
-Read CONTEXT.md, project_config.md, and ARCHITECTURE.md.
-Follow their rules. Then: [describe your task]
-```
+*"Read CONTEXT.md, project_config.md, and ARCHITECTURE.md. [Your task]"*
 
 ---
 
@@ -42,7 +39,7 @@ Vercel auto-deploys on push to main.
 
 ### Verify After Deploy
 
-1. Browser console → `🔗 Link Station v18 loaded`
+1. Browser console → `🔗 Link Station v2.0.1 loaded`
 2. Join room, press F5 → should stay in room
 3. 2+ users → all see each other immediately
 
@@ -179,6 +176,10 @@ Full details in `api/API_ROUTES.md`.
 
 ## 🐛 Recent Sessions (Condensed)
 
+### v2.0.1 (March 2026) - Stale reclaim, kick marker clear
+- **Fixes:** Username reclaim after 30min idle, room-name reclaim (empty/zombie), clear kick marker on create/join room
+- **Root cause:** Serverless cold start leaves stale Redis data; old kick marker shown after successful room create
+
 ### Session 18 (January 2026) - Polling, Session, beforeunload
 - **Fixes:** Polling closure (refs sync), beforeunload skip on refresh, session persistence, password toggle
 - **Status:** Implemented, pending deploy
@@ -189,6 +190,19 @@ Full details in `api/API_ROUTES.md`.
 ### VSA Auth Extraction (January 2026)
 - **Extracted:** `features/auth/RegisterName.jsx`, `shared/api`, `shared/session`, `shared/utils/validateUsername`
 - **App.js:** Imports auth component, shared modules
+
+### Doc Restructuring (January 2026)
+- **Merged:** PROJECT_CONTEXT + NEW_CHAT_PROMPT + DEPLOYMENT → CONTEXT.md
+- **Created:** UPDATE_DOCS.md (replaced UPDATE_DOCS_GUIDE)
+- **Deleted:** 4 explanation files (CODE_EXPLANATION, GLOBALTHIS, SERVER_INSTANCE, USER_ROOM_MANAGEMENT)
+- **README:** Korean, merge conflict fixed
+
+### Cursor Rules (January 2026)
+- **project-context.mdc:** Apply Intelligently + globs. Instructs to read project_config, ARCHITECTURE, CONTEXT. Loads when task needs it or when editing project files.
+- **link-station.mdc:** Feature-specific rules. Read features.md before editing a feature folder.
+
+### Other (January 2026)
+- **client/.npmrc:** `audit=false` to suppress CRA dev-dep vulnerability warnings during install.
 
 ---
 
@@ -208,6 +222,7 @@ Full details in `api/API_ROUTES.md`.
 - **Session 16:** Admin dashboard (status, cleanup, shutdown, password)
 - **Session 17:** Unified marker system, admin UI modernization
 - **Session 18:** Polling fix, session recovery, beforeunload fix, password toggle
+- **v2.0.1:** Stale username/room reclaim, kick marker clear on room entry
 
 ---
 
@@ -221,10 +236,22 @@ Full details in `api/API_ROUTES.md`.
 
 ## 📞 Related Files
 
-- **ARCHITECTURE.md** - VSA structure, feature map
-- **project_config.md** - Global coding rules
-- **UPDATE_DOCS.md** - How to update this file
+| File | Purpose |
+|------|---------|
+| **ARCHITECTURE.md** | VSA structure, feature map, routing |
+| **project_config.md** | Global coding rules (4 Pillars, VSA) |
+| **UPDATE_DOCS.md** | When/how to update docs |
+| **.cursor/rules/project-context.mdc** | Auto-loads project context (intelligent + globs) |
+| **.cursor/rules/link-station.mdc** | Feature-specific: read features.md first |
 
 ---
 
-*This document is the single source of context for Link Station. Update it after major changes.*
+## 🎯 For Next Session
+
+- **v2.0.1** deployed—verify stale reclaim and kick-marker clear on live.
+- **Next steps:** Extract more VSA slices (room-hub, waiting-room, etc.) if desired; or focus on new features.
+- **Doc update trigger:** When context >85% or at session end, say: *"Read UPDATE_DOCS.md and update all documentation"*
+
+---
+
+*Single source of context for Link Station. Update after major changes.*

@@ -237,21 +237,62 @@ app.post('/api/create-room', async (req, res) => {
     return res.status(400).json({ success: false, message: '관리자 전용 이름입니다. 다른 이름을 사용해주세요.' });
   }
 
-  // Check room name duplication
+  // Check room name duplication (allow reclaim if stale: empty or inactive > 2 hr)
   console.log(`Creating room: "${roomName}"`);
   
-  const existingRoom = await storage.getRoomByName(roomNameLower);
+  let existingRoom = await storage.getRoomByName(roomNameLower);
   if (existingRoom) {
-    console.log(`❌ Duplicate room name detected: "${roomName}" already exists as "${existingRoom.roomName}"`);
-    return res.status(400).json({ success: false, message: '이미 존재하는 방 이름입니다. 다른 이름을 사용해주세요.' });
+    const lastActivity = existingRoom.lastActivity || (existingRoom.createdAt ? Date.parse(existingRoom.createdAt) : 0);
+    const timeSinceActivity = Date.now() - lastActivity;
+    const isEmpty = existingRoom.users.size === 0;
+    const isZombie = timeSinceActivity > ZOMBIE_ROOM_TIMEOUT;
+
+    if (isEmpty || isZombie) {
+      await storage.setRoomDeleteMarker(existingRoom.id, isZombie ? storage.ROOM_DELETE_REASONS.INACTIVITY : storage.ROOM_DELETE_REASONS.EMPTY);
+      if (isZombie) {
+        for (const u of existingRoom.users.values()) {
+          await storage.setUserKickMarker(u.username, storage.KICK_REASONS.ROOM_DELETED, storage.ROOM_DELETE_REASONS.INACTIVITY);
+          await storage.deleteActiveUser(u.username);
+        }
+      }
+      await storage.deleteRoom(existingRoom.id);
+      console.log(`   🧹 Reclaimed stale room name "${roomName}" (${isZombie ? 'zombie' : 'empty'})`);
+    } else {
+      console.log(`❌ Duplicate room name detected: "${roomName}" already exists`);
+      return res.status(400).json({ success: false, message: '이미 존재하는 방 이름입니다. 다른 이름을 사용해주세요.' });
+    }
   }
   
   console.log(`✓ Room name "${roomName}" is available`);
   
-  // Check username duplication
+  // Check username duplication (allow reclaim if stale: inactive > 30 min)
   const existingUser = await storage.getActiveUser(trimmedUsername);
   if (existingUser) {
-    return res.status(400).json({ success: false, message: '이미 사용 중인 사용자 이름입니다.' });
+    const inactiveMs = Date.now() - (existingUser.lastActivity || 0);
+    if (inactiveMs > USER_TIMEOUT_MS) {
+      // Stale record - remove so user can reclaim username (e.g. after long idle / serverless cold start)
+      const room = existingUser.roomId ? await storage.getRoomById(existingUser.roomId) : null;
+      if (room) {
+        room.users.delete(existingUser.userId);
+        room.selections.delete(existingUser.userId);
+        if (room.masterId === existingUser.userId && room.users.size > 0) {
+          const newMaster = Array.from(room.users.values())[0];
+          room.masterId = newMaster.id;
+          newMaster.isMaster = true;
+          room.users.set(newMaster.id, newMaster);
+        }
+        if (room.users.size === 0) {
+          await storage.deleteRoom(room.id);
+        } else {
+          await storage.saveRoom(room);
+        }
+      }
+      await storage.deleteActiveUser(trimmedUsername);
+      await storage.clearUserKickMarker(trimmedUsername);
+      console.log(`   🧹 Reclaimed stale username "${trimmedUsername}" (inactive ${Math.floor(inactiveMs / 60000)} min)`);
+    } else {
+      return res.status(400).json({ success: false, message: '이미 사용 중인 사용자 이름입니다.' });
+    }
   }
   
   // Generate room ID
@@ -291,7 +332,7 @@ app.post('/api/create-room', async (req, res) => {
     userId,
     lastActivity: Date.now()
   });
-  
+  await storage.clearUserKickMarker(trimmedUsername); // Clear stale kick marker from previous room
   console.log(`✅ Room created: "${roomName}" (ID: ${roomId}) by "${username}"`);
   
   res.json({
@@ -348,10 +389,29 @@ app.post('/api/join-room', async (req, res) => {
     return res.status(400).json({ success: false, message: '게임이 진행 중입니다.' });
   }
   
-  // Check username duplication
-  const existingUser = await storage.getActiveUser(trimmedUsername);
+  // Check username duplication (allow reclaim if stale: inactive > 30 min)
+  let existingUser = await storage.getActiveUser(trimmedUsername);
   if (existingUser) {
-    return res.status(400).json({ success: false, message: '이미 사용 중인 사용자 이름입니다.' });
+    const inactiveMs = Date.now() - (existingUser.lastActivity || 0);
+    if (inactiveMs > USER_TIMEOUT_MS) {
+      const room = existingUser.roomId ? await storage.getRoomById(existingUser.roomId) : null;
+      if (room) {
+        room.users.delete(existingUser.userId);
+        room.selections.delete(existingUser.userId);
+        if (room.masterId === existingUser.userId && room.users.size > 0) {
+          const newMaster = Array.from(room.users.values())[0];
+          room.masterId = newMaster.id;
+          newMaster.isMaster = true;
+          room.users.set(newMaster.id, newMaster);
+        }
+        if (room.users.size === 0) await storage.deleteRoom(room.id);
+        else await storage.saveRoom(room);
+      }
+      await storage.deleteActiveUser(trimmedUsername);
+      await storage.clearUserKickMarker(trimmedUsername);
+    } else {
+      return res.status(400).json({ success: false, message: '이미 사용 중인 사용자 이름입니다.' });
+    }
   }
   
   // Check if room requires password
@@ -382,7 +442,7 @@ app.post('/api/join-room', async (req, res) => {
     userId,
     lastActivity: Date.now()
   });
-  
+  await storage.clearUserKickMarker(trimmedUsername);
   console.log(`User joined room: ${username} in ${roomName}`);
   
   res.json({
@@ -436,9 +496,28 @@ app.post('/api/check-password', async (req, res) => {
   if (trimmedUsername.toLowerCase() === ADMIN_USERNAME) {
     return res.status(400).json({ success: false, message: '관리자 전용 이름입니다. 다른 이름을 사용해주세요.' });
   }
-  const existingUser = await storage.getActiveUser(trimmedUsername);
+  let existingUser = await storage.getActiveUser(trimmedUsername);
   if (existingUser) {
-    return res.status(400).json({ success: false, message: '이미 사용 중인 사용자 이름입니다.' });
+    const inactiveMs = Date.now() - (existingUser.lastActivity || 0);
+    if (inactiveMs > USER_TIMEOUT_MS) {
+      const room = existingUser.roomId ? await storage.getRoomById(existingUser.roomId) : null;
+      if (room) {
+        room.users.delete(existingUser.userId);
+        room.selections.delete(existingUser.userId);
+        if (room.masterId === existingUser.userId && room.users.size > 0) {
+          const newMaster = Array.from(room.users.values())[0];
+          room.masterId = newMaster.id;
+          newMaster.isMaster = true;
+          room.users.set(newMaster.id, newMaster);
+        }
+        if (room.users.size === 0) await storage.deleteRoom(room.id);
+        else await storage.saveRoom(room);
+      }
+      await storage.deleteActiveUser(trimmedUsername);
+      await storage.clearUserKickMarker(trimmedUsername);
+    } else {
+      return res.status(400).json({ success: false, message: '이미 사용 중인 사용자 이름입니다.' });
+    }
   }
   
   // Join room
@@ -460,7 +539,7 @@ app.post('/api/check-password', async (req, res) => {
     userId,
     lastActivity: Date.now()
   });
-  
+  await storage.clearUserKickMarker(trimmedUsername);
   console.log(`User joined room with password: ${username} in ${roomName}`);
   
   res.json({
@@ -508,9 +587,28 @@ app.post('/api/join-room-qr', async (req, res) => {
   if (trimmedUsername.toLowerCase() === ADMIN_USERNAME) {
     return res.status(400).json({ success: false, message: '관리자 전용 이름입니다. 다른 이름을 사용해주세요.' });
   }
-  const existingUser = await storage.getActiveUser(trimmedUsername);
+  let existingUser = await storage.getActiveUser(trimmedUsername);
   if (existingUser) {
-    return res.status(400).json({ success: false, message: '이미 사용 중인 사용자 이름입니다.' });
+    const inactiveMs = Date.now() - (existingUser.lastActivity || 0);
+    if (inactiveMs > USER_TIMEOUT_MS) {
+      const r = existingUser.roomId ? await storage.getRoomById(existingUser.roomId) : null;
+      if (r) {
+        r.users.delete(existingUser.userId);
+        r.selections.delete(existingUser.userId);
+        if (r.masterId === existingUser.userId && r.users.size > 0) {
+          const newMaster = Array.from(r.users.values())[0];
+          r.masterId = newMaster.id;
+          newMaster.isMaster = true;
+          r.users.set(newMaster.id, newMaster);
+        }
+        if (r.users.size === 0) await storage.deleteRoom(r.id);
+        else await storage.saveRoom(r);
+      }
+      await storage.deleteActiveUser(trimmedUsername);
+      await storage.clearUserKickMarker(trimmedUsername);
+    } else {
+      return res.status(400).json({ success: false, message: '이미 사용 중인 사용자 이름입니다.' });
+    }
   }
   
   // Join room
@@ -531,7 +629,7 @@ app.post('/api/join-room-qr', async (req, res) => {
     userId,
     lastActivity: Date.now()
   });
-  
+  await storage.clearUserKickMarker(trimmedUsername);
   console.log(`User joined room with QR: ${username} in ${room.roomName}`);
   
   res.json({
