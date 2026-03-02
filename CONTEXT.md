@@ -2,7 +2,7 @@
 
 **Live URL:** https://link-station-pro.vercel.app  
 **Last Updated:** March 2026  
-**Status:** ✅ v2.0.3 – Tab close frees nickname (10s grace for refresh).
+**Status:** ✅ v2.0.4 – Tab close frees nickname (unloadRef sync fix).
 
 ---
 
@@ -39,7 +39,7 @@ Vercel auto-deploys on push to main.
 
 ### Verify After Deploy
 
-1. Browser console → `🔗 Link Station v2.0.3 loaded`
+1. Browser console → `🔗 Link Station v2.0.4 loaded`
 2. Join room, press F5 → should stay in room
 3. 2+ users → all see each other immediately
 
@@ -186,6 +186,10 @@ Full details in `api/API_ROUTES.md`.
 
 ## 🐛 Recent Sessions (Condensed)
 
+### v2.0.4 (March 2026) - Tab close unloadRef fix
+- Fix: Sync unloadRef with username/roomId/userId so tab-close beacon actually sends data.
+- Previously unloadRef was never updated, so beacon always exited early with empty payload.
+
 ### v2.0.3 (March 2026) - Tab close, room poll, button timeout
 - **Tab close:** Beacon queues removal; 10s grace cancels on refresh, executes on real close.
 - **Room poll:** Server Cache-Control no-store; client cache bust + 1s poll; poll on tab visible.
@@ -235,6 +239,7 @@ Full details in `api/API_ROUTES.md`.
 - **Session 18:** Polling fix, session recovery, beforeunload fix, password toggle
 - **v2.0.1:** Stale username/room reclaim, kick marker clear on room entry
 - **v2.0.2:** Reclaim room when all users inactive (closed-tab case)
+- **v2.0.4:** unloadRef sync fix (beacon now sends username on tab close)
 - **v2.0.3:** Tab close beacon + 10s grace (nickname freed on close)
 
 ---
@@ -261,7 +266,7 @@ Full details in `api/API_ROUTES.md`.
 
 ## 🎯 For Next Session
 
-- **v2.0.3** deployed—verify: close tab → wait 10s → same nickname works.
+- **v2.0.4** deployed—verify: close tab → same nickname works immediately.
 - **Next steps:** Extract more VSA slices (room-hub, waiting-room, etc.) if desired; or focus on new features.
 - **Doc update trigger:** When context >85% or at session end, say: *"Read UPDATE_DOCS.md and update all documentation"*
 
