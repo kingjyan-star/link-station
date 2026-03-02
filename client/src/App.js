@@ -737,7 +737,7 @@ function App() {
       if (pollWaitingRoomStatusRef.current) {
         pollWaitingRoomStatusRef.current();
       }
-    }, 1000); // 1s - faster sync when new users join
+    }, 500); // 500ms - faster sync when new users join (fixes 4+ user visibility)
   }, [roomId]); // Include roomId to restart polling when room changes
 
   const stopPolling = () => {
