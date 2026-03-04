@@ -88,8 +88,8 @@ link-station/
 | checkpassword    | room-join      | Password verification for protected rooms  |
 | joinroomwithqr   | room-join-qr   | Join via QR code URL                       |
 | waitingroom      | waiting-room   | Lobby, user list, master controls, polling |
-| linking          | game-linking   | Voting phase, selections, polling          |
-| linkresult       | game-results   | Match results, next round, leave            |
+| telepathy        | game-linking   | Telepathy game voting phase, selections, polling |
+| telepathyResult  | game-results   | Telepathy match results, next round, leave |
 | adminPassword    | admin          | Admin login                                |
 | adminDashboard   | admin          | Admin menu                                 |
 | adminStatus      | admin          | Room/user counts, lists                    |
@@ -103,7 +103,7 @@ link-station/
 ## 5. Data Flow (Minimal)
 
 ```
-Auth → Room Hub → (Create | Join | Join QR) → Waiting Room → Linking → Results
+Auth → Room Hub → (Create | Join | Join QR) → Waiting Room → [Telepathy | Liar] → Results
                                               ↓
                                          (back to Waiting Room)
 ```

@@ -44,13 +44,23 @@ All routes are served by `api/game.js`. This file maps each endpoint to its owni
 |--------|-------|---------|
 | GET | `/api/room/:roomId` | Get room status (polling) |
 | POST | `/api/kick-user` | Master kicks user |
+| POST | `/api/set-game-type` | Master sets game type (telepathy \| liar) |
+| POST | `/api/set-liar-settings` | Master sets liar game 주제, 방식, 커스텀주제 |
+| POST | `/api/liar-submit-word` | Submit word (word input state, custom) |
+| POST | `/api/liar-extend-time` | Extend/shorten main timer (+1/-1 min, once per user) |
+| POST | `/api/liar-difficult-word` | "이 단어는 선 넘었지" (normal players) |
+| POST | `/api/liar-start-vote` | Master starts vote (or timer 0) |
+| POST | `/api/liar-vote` | Vote for liar |
+| POST | `/api/liar-forgive-execute` | Forgive or execute (voters of condemned) |
+| POST | `/api/liar-guess` | Liar guesses word (identify state) |
+| POST | `/api/liar-identify-vote` | Normal players vote 인정/노인정 |
 | POST | `/api/start-game` | Master starts game |
 | POST | `/api/change-role` | Switch attender/observer |
 | POST | `/api/leave-room` | Leave room voluntarily |
 
 ---
 
-## Game Linking (`features/game-linking`)
+## Game Linking (`features/game-linking`) – Telepathy Game
 
 | Method | Route | Purpose |
 |--------|-------|---------|

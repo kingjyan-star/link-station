@@ -17,8 +17,13 @@ export function RegisterName({
   setRoomData,
   setUserRole,
   setGameState,
+  setGameType,
   setMatches,
-  setUnmatched
+  setUnmatched,
+  setLiarSubject,
+  setLiarMethod,
+  setLiarCustomSubject,
+  setLiarMyWord
 }) {
   const handleRegisterName = async () => {
     try {
@@ -65,13 +70,21 @@ export function RegisterName({
               setRoomData(session.roomData);
               setUserRole(userInRoom.role || 'attender');
               setGameState(data.room.gameState || 'waiting');
+              if (setGameType) setGameType(data.room.gameType || 'telepathy');
 
               if (data.room.gameState === 'linking') {
-                setCurrentState('linking');
+                setCurrentState('telepathy');
               } else if (data.room.gameState === 'completed' && data.matchResult) {
                 setMatches(data.matchResult.matches || []);
                 setUnmatched(data.matchResult.unmatched || []);
-                setCurrentState('linkresult');
+                setCurrentState('telepathyResult');
+              } else if (['liarWordInput', 'liarPlay', 'liarVote', 'liarArgument', 'liarIdentify', 'liarResult'].includes(data.room.gameState)) {
+                setRoomData(data.room);
+                if (setLiarSubject) setLiarSubject(data.room.liarSubject || '물건');
+                if (setLiarMethod) setLiarMethod(data.room.liarMethod || '커스텀');
+                if (setLiarCustomSubject) setLiarCustomSubject(data.room.liarCustomSubject || '');
+                if (setLiarMyWord && data.liarMyWord != null) setLiarMyWord(data.liarMyWord);
+                setCurrentState('liar');
               } else {
                 setCurrentState('waitingroom');
               }

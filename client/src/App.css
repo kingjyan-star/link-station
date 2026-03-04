@@ -33,8 +33,8 @@ body {
 .checkpassword-container,
 .enterroomwithqr-container,
 .waitingroom-container,
-.linking-container,
-.linkresult-container {
+.telepathy-container,
+.telepathy-result-container {
   background: white;
   border-radius: 20px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
@@ -51,8 +51,8 @@ body {
 .checkpassword-header h2,
 .enterroomwithqr-header h2,
 .waitingroom-header h2,
-.linking-header h2,
-.linkresult-header h2 {
+.telepathy-header h2,
+.telepathy-result-header h2 {
   color: #4a5568;
   margin-bottom: 10px;
   font-size: 2rem;
@@ -65,8 +65,8 @@ body {
 .checkpassword-header p,
 .enterroomwithqr-header p,
 .waitingroom-header p,
-.linking-header p,
-.linkresult-header p {
+.telepathy-header p,
+.telepathy-result-header p {
   color: #718096;
   margin-bottom: 30px;
   font-size: 1.1rem;
@@ -432,6 +432,317 @@ body {
   border: 2px solid #e2e8f0;
 }
 
+.game-select-row {
+  margin-bottom: 15px;
+}
+
+.game-select-button {
+  background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+  color: #4a5568;
+  border: 2px solid #e2e8f0;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+}
+
+.game-select-button:hover {
+  opacity: 0.9;
+}
+
+.game-select-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.game-select-modal {
+  background: white;
+  border-radius: 15px;
+  padding: 24px;
+  min-width: 280px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.game-select-modal h3 {
+  margin-bottom: 16px;
+  color: #4a5568;
+}
+
+.game-option {
+  display: block;
+  width: 100%;
+  padding: 14px 20px;
+  margin-bottom: 10px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f7fafc;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.game-option:hover,
+.game-option.active {
+  background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+  border-color: #667eea;
+}
+
+.game-select-cancel {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  margin-top: 12px;
+  border: none;
+  background: #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.current-game-badge {
+  font-size: 0.95rem;
+  color: #718096;
+  margin-top: 6px;
+}
+
+/* Liar game settings */
+.liar-settings {
+  margin: 15px 0;
+  padding: 15px;
+  background: #edf2f7;
+  border-radius: 12px;
+  text-align: left;
+}
+
+.liar-settings h4 {
+  margin-bottom: 12px;
+  color: #4a5568;
+  font-size: 1rem;
+}
+
+.liar-setting-row {
+  margin-bottom: 10px;
+}
+
+.liar-setting-row label {
+  display: block;
+  font-size: 0.9rem;
+  color: #718096;
+  margin-bottom: 4px;
+}
+
+.liar-setting-row select,
+.liar-setting-row input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.liar-setting-note {
+  font-size: 0.8rem;
+  color: #a0aec0;
+  margin-top: 4px;
+}
+
+.liar-settings-display {
+  font-size: 0.9rem;
+  color: #718096;
+  margin-top: 8px;
+}
+
+/* Liar game play UI */
+.liar-container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.liar-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.liar-header h2 {
+  margin-bottom: 8px;
+}
+
+.liar-subject {
+  font-size: 1rem;
+  color: #718096;
+}
+
+.liar-word-input {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  margin-top: 24px;
+}
+
+.liar-word-input input {
+  width: 100%;
+  max-width: 280px;
+  padding: 12px 16px;
+  font-size: 1.1rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.liar-word-input button {
+  padding: 12px 24px;
+  font-size: 1rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.liar-play {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  margin-top: 24px;
+}
+
+.liar-timer {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #4a5568;
+}
+
+.liar-card {
+  width: 160px;
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 12px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  transition: transform 0.2s;
+}
+
+.liar-card:active {
+  transform: scale(0.98);
+}
+
+.liar-role-hint {
+  color: #718096;
+  font-size: 0.95rem;
+}
+
+.liar-difficult-btn {
+  padding: 10px 20px;
+  background: #ed8936;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.liar-time-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.liar-time-buttons button {
+  padding: 8px 16px;
+  font-size: 0.95rem;
+  background: #e2e8f0;
+  border: 2px solid #cbd5e0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.liar-start-vote-btn {
+  padding: 12px 24px;
+  font-size: 1rem;
+  font-weight: 600;
+  background: #4299e1;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.liar-vote {
+  margin-top: 24px;
+  text-align: center;
+}
+
+.liar-vote-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.liar-vote-list button {
+  padding: 12px 20px;
+  font-size: 1rem;
+  background: #f7fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.liar-vote-list button.selected {
+  background: #4299e1;
+  color: white;
+  border-color: #3182ce;
+}
+
+.liar-argument,
+.liar-guess,
+.liar-identify-vote,
+.liar-result {
+  margin-top: 24px;
+  text-align: center;
+}
+
+.liar-guess input,
+.liar-identify-vote input {
+  width: 100%;
+  max-width: 220px;
+  padding: 10px 14px;
+  margin: 0 8px 12px;
+  font-size: 1rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.liar-result h3 {
+  margin-bottom: 16px;
+}
+
+.liar-result .result-actions {
+  margin-top: 24px;
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
 .start-game-button {
   background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
   color: white;
@@ -488,7 +799,7 @@ body {
   box-shadow: 0 10px 20px rgba(229, 62, 62, 0.3);
 }
 
-/* Linking state */
+/* Telepathy game state */
 .voted-message {
   background: #f0fff4;
   border: 2px solid #9ae6b4;
@@ -499,8 +810,8 @@ body {
   font-weight: 600;
 }
 
-/* Link result styles */
-.linkresult-container {
+/* Telepathy result styles */
+.telepathy-result-container {
   max-width: 800px;
 }
 
@@ -619,8 +930,8 @@ body {
   .checkpassword-container,
   .enterroomwithqr-container,
   .waitingroom-container,
-  .linking-container,
-  .linkresult-container {
+  .telepathy-container,
+  .telepathy-result-container {
     padding: 20px;
   }
   
@@ -667,8 +978,8 @@ button:disabled {
 .checkpassword-container,
 .enterroomwithqr-container,
 .waitingroom-container,
-.linking-container,
-.linkresult-container {
+.telepathy-container,
+.telepathy-result-container {
   animation: fadeIn 0.5s ease-out;
 }
 
@@ -820,7 +1131,7 @@ button:disabled {
   transform: translateY(-2px);
 }
 
-/* Role Indicator in Linking */
+/* Role Indicator in Telepathy */
 .role-indicator {
   font-size: 14px;
   color: #6c757d;

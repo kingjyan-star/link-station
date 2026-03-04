@@ -2,7 +2,7 @@
 
 **Live URL:** https://link-station-pro.vercel.app  
 **Last Updated:** March 2026  
-**Status:** ✅ v2.0.5 – Return-to-waiting tag fix. Tab close, sync, Room API handling.
+**Status:** ✅ v3.0.0 – Offline Party Mini-Game Platform. Telepathy + Liar Game.
 
 ---
 
@@ -39,7 +39,7 @@ Vercel auto-deploys on push to main.
 
 ### Verify After Deploy
 
-1. Browser console → `🔗 Link Station v2.0.4 loaded`
+1. Browser console → `🔗 Link Station v3.0.0 loaded`
 2. Join room, press F5 → should stay in room
 3. 2+ users → all see each other immediately
 
@@ -73,7 +73,12 @@ node scripts/test-tab-close-reclaim.js
 
 ## 📋 Project Overview
 
-**Link Station** is a real-time matching game web application where users join rooms and select each other to form pairs. Players can create rooms, share via QR codes, and participate in matching games with proper game flow management.
+**Link Station** has evolved from a single matching game into an **Offline Party Mini-Game Platform** (오프라인 술자리 미니게임 플랫폼). It is focused on in-person, multi-device party and drinking games where friends gather in the same room and play together using their phones.
+
+### Platform Vision
+- **Offline-first:** Designed for parties, meetups, and 술자리 (drinking gatherings).
+- **Multi-game:** Supports multiple mini-games (Telepathy Game, Liar Game, more to come).
+- **Room-based:** Create/join rooms, share via QR, manage players as master.
 
 ### Key Capabilities
 - Multi-device synchronized gameplay
@@ -81,6 +86,23 @@ node scripts/test-tab-close-reclaim.js
 - Password-protected rooms
 - Real-time voting status
 - Master controls for room management
+- Game selection in waiting room
+
+---
+
+## 🎮 Liar Game (라이어 게임 / 단어 마피아) – Rules & Fun
+
+A **social deduction** game where all players except one (the **Liar**) receive a **Secret Word** (비밀 단어).
+
+### Core Mechanics
+- **Normal players:** Receive the Secret Word. Must say one sentence to prove they know it *without* revealing the exact word.
+- **Liar:** Does not know the word. Must bluff to blend in while secretly trying to figure it out.
+- **Voting:** Players vote who they think is the Liar. The most-voted becomes the "사형수" (condemned).
+- **Final chance:** If the 사형수 is the Liar, they get one chance to guess the Secret Word. Correct guess → Liar wins.
+
+### Fun Factor
+- Normal players walk a tightrope: hint enough to prove they know, but not so much the Liar learns it.
+- The Liar must listen carefully and bluff convincingly.
 
 ---
 
@@ -136,16 +158,16 @@ node scripts/test-tab-close-reclaim.js
 
 ### 7. **WaitingRoom State**
 - **Purpose**: Pre-game lobby
-- **Display**: User list, master badge, QR code, user tags (대기중 / 결과 확인 중 after results)
-- **Master Controls**: Kick users, start game
+- **Display**: User list, master badge, QR code, user tags (대기중 / 결과 확인 중 after results), current game type
+- **Master Controls**: 게임 선택 (Select Game: 텔레파시 / 라이어), kick users (with confirmation), start game
 - **Polling**: 500ms (waiting), 2s (linking/result)
 
-### 8. **Linking State**
+### 8. **Telepathy State** (텔레파시 게임)
 - **Purpose**: Active matching phase
 - **Polling**: 2-second intervals
-- **Auto-transition**: When all vote → LinkResult
+- **Auto-transition**: When all vote → TelepathyResult
 
-### 9. **LinkResult State**
+### 9. **TelepathyResult State**
 - **Purpose**: Show matching results
 - **Actions**: "다음 라운드" or "방 나가기" → both return to WaitingRoom
 
@@ -185,6 +207,13 @@ Full details in `api/API_ROUTES.md`.
 ---
 
 ## 🐛 Recent Sessions (Condensed)
+
+### v3.0.0 (March 2026) - Offline Party Mini-Game Platform
+- **Vision:** Evolved from single matching game to multi-game platform (오프라인 술자리 미니게임 플랫폼).
+- **Liar Game:** New social deduction game (라이어 게임 / 단어 마피아) – rules and fun elements documented.
+- **Version:** Bumped to v3.0.0 across package.json, CONTEXT.md, README.md, console log.
+- **Step 2:** Renamed Linking→Telepathy, LinkResult→TelepathyResult. Added 게임 선택 (텔레파시/라이어) in waiting room. Kick confirmation modal. gameType in room; POST /api/set-game-type.
+- **Step 3:** Liar game pre-game settings. 주제 (12 + 커스텀주제), 방식 (랜덤/커스텀). CSV `api/data/liar_words.csv`. api/liarWords.js utility. POST /api/set-liar-settings. 3-player min for Liar.
 
 ### v2.0.5 (March 2026) - Return-to-waiting tag fix
 - **Tags:** Master returning first saw both "결과 확인 중"; tags swapped after other returned; refresh showed result instead of waiting room.
@@ -276,7 +305,7 @@ Full details in `api/API_ROUTES.md`.
 
 ## 🎯 For Next Session
 
-- **v2.0.5** ready—return-to-waiting tag fix. Test: 2 users, results → master returns → other returns → verify badges; refresh master → should show waiting room.
+- **v3.0.0** Steps 1–3 done. Next: Step 4 (Liar Game – 6 State Flow).
 - **Doc update trigger:** When context >85% or at session end, say: *"Read UPDATE_DOCS.md and update all documentation"*
 
 ---

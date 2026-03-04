@@ -6,13 +6,23 @@ import { saveSession, loadSession, clearSession } from './shared/session/index.j
 import { checkUsernameDuplication } from './shared/api/checkUsername.js';
 import { validateUsername } from './shared/utils/validateUsername.js';
 import { RegisterName } from './features/auth';
+import { TelepathyPlay, TelepathyResult } from './features/telepathy/TelepathyComponents.jsx';
+import {
+  LiarWordInput,
+  LiarPlay,
+  LiarVote,
+  LiarArgument,
+  LiarIdentify,
+  LiarResult
+} from './features/liar/LiarComponents.jsx';
+import { playStateChange, playPhaseAdvance, playResult } from './shared/sound/playSound.js';
 
 function App() {
   // VERSION: Session 18 - 2026-01-25 (check console to verify deployment)
-  console.log('🔗 Link Station v2.0.4 loaded');
+  console.log('🔗 Link Station v3.0.0 loaded');
   
   // State management
-  const [currentState, setCurrentState] = useState('registerName'); // registerName, makeOrJoinRoom, makeroom, joinroom, checkpassword, joinroomwithqr, waitingroom, linking, linkresult, adminPassword, adminDashboard, adminStatus, adminCleanup, adminShutdown, adminChangePassword
+  const [currentState, setCurrentState] = useState('registerName'); // registerName, makeOrJoinRoom, makeroom, joinroom, checkpassword, joinroomwithqr, waitingroom, telepathy, telepathyResult, adminPassword, adminDashboard, adminStatus, adminCleanup, adminShutdown, adminChangePassword
   const [username, setUsername] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [adminToken, setAdminToken] = useState('');
@@ -62,6 +72,16 @@ function App() {
   const [showAdminNewPassword, setShowAdminNewPassword] = useState(false);
   const [showAdminNewPasswordConfirm, setShowAdminNewPasswordConfirm] = useState(false);
   
+  // Game selection (telepathy | liar)
+  const [gameType, setGameType] = useState('telepathy');
+  const [showGameSelect, setShowGameSelect] = useState(false);
+  const [kickTargetUser, setKickTargetUser] = useState(null); // For kick confirmation modal
+  // Liar game settings (when gameType is liar)
+  const [liarSubject, setLiarSubject] = useState('물건');
+  const [liarMethod, setLiarMethod] = useState('커스텀');
+  const [liarCustomSubject, setLiarCustomSubject] = useState('');
+  const [liarMyWord, setLiarMyWord] = useState(null); // Secret word for non-liar (from API)
+  
   // Warning state
   const [showUserWarning, setShowUserWarning] = useState(false);
   const [showRoomWarning, setShowRoomWarning] = useState(false);
@@ -81,6 +101,7 @@ function App() {
   // Refs to hold the latest polling callbacks (fixes stale closure issue)
   const pollWaitingRoomStatusRef = useRef(null);
   const pollRoomStatusRef = useRef(null);
+  const prevLiarGameStateRef = useRef(null); // For sound on liar state change
   const unloadRef = useRef({ username: '', roomId: '', userId: '' });
 
   // Keep unloadRef in sync so tab-close beacon sends current session
@@ -147,17 +168,21 @@ function App() {
             setRoomData(session.roomData);
             setUserRole(userInRoom.role || 'attender');
             setGameState(data.room.gameState || 'waiting');
+            setGameType(data.room.gameType || 'telepathy');
+            setLiarSubject(data.room.liarSubject || '물건');
+            setLiarMethod(data.room.liarMethod || '커스텀');
+            setLiarCustomSubject(data.room.liarCustomSubject || '');
 
             // Navigate to appropriate state based on game state
             const hasReturned = userInRoom?.hasReturnedToWaiting || false;
             if (data.room.gameState === 'linking') {
-              console.log('🎮 Restoring to linking state');
-              setCurrentState('linking');
+              console.log('🎮 Restoring to telepathy state');
+              setCurrentState('telepathy');
             } else if (data.room.gameState === 'completed' && data.matchResult && !hasReturned) {
-              console.log('🎉 Restoring to linkresult state (user has not returned)');
+              console.log('🎉 Restoring to telepathyResult state (user has not returned)');
               setMatches(data.matchResult.matches || []);
               setUnmatched(data.matchResult.unmatched || []);
-              setCurrentState('linkresult');
+              setCurrentState('telepathyResult');
             } else {
               // waiting, or completed but user already returned, or all returned (matchResult cleared)
               console.log('⏳ Restoring to waitingroom state');
@@ -596,22 +621,44 @@ function App() {
         console.log('🔄 Setting users state with voting status...');
         setUsers(data.room.users);
         setGameState(data.room.gameState || 'waiting');
+        setGameType(data.room.gameType || 'telepathy');
+        setLiarSubject(data.room.liarSubject || '물건');
+        setLiarMethod(data.room.liarMethod || '커스텀');
+        setLiarCustomSubject(data.room.liarCustomSubject || '');
+        setRoomData(data.room);
+        if (data.liarMyWord !== undefined) setLiarMyWord(data.liarMyWord);
         
         // Check if current user has returned to waiting room
         const currentUserData = data.room.users.find(u => u.id === userId);
         const hasCurrentUserReturned = currentUserData?.hasReturnedToWaiting || false;
         
-        // Show results ONLY if matchResult exists AND user has NOT returned to waiting room
+        // Liar game flow
+        if (data.room.gameType === 'liar') {
+          const newLiarState = data.room.gameState;
+          if (prevLiarGameStateRef.current !== newLiarState) {
+            if (newLiarState === 'liarResult') playResult();
+            else if (['liarVote', 'liarArgument', 'liarIdentify'].includes(newLiarState)) playPhaseAdvance();
+            else playStateChange();
+            prevLiarGameStateRef.current = newLiarState;
+          }
+          if (newLiarState === 'waiting') {
+            console.log('👤 Liar: back to waitingroom');
+            prevLiarGameStateRef.current = null;
+            setCurrentState('waitingroom');
+          }
+          return;
+        }
+        
+        // Telepathy flow
         if (data.matchResult && !hasCurrentUserReturned) {
           console.log('✅ Match results found, showing results to user');
           setMatches(data.matchResult.matches || []);
           setUnmatched(data.matchResult.unmatched || []);
-          setCurrentState('linkresult');
+          playResult();
+          setCurrentState('telepathyResult');
         } else if (hasCurrentUserReturned || (!data.matchResult && data.room.gameState === 'waiting')) {
-          // User returned or everyone returned (gameState waiting, no matchResult) -> show waiting room
           console.log('👤 User has returned (or all returned), switching to waitingroom');
           setCurrentState('waitingroom');
-          // useEffect will switch from game poll to waiting room poll
         }
       } else {
         console.log('❌ Polling failed:', data);
@@ -712,11 +759,22 @@ function App() {
         setUsers(data.room.users);
         setIsMaster(data.room.masterId === userId);
         setGameState(data.room.gameState || 'waiting');
-        
+        setGameType(data.room.gameType || 'telepathy');
+        setLiarSubject(data.room.liarSubject || '물건');
+        setLiarMethod(data.room.liarMethod || '커스텀');
+        setLiarCustomSubject(data.room.liarCustomSubject || '');
+
         // Check if game started
         if (data.room.gameState === 'linking') {
-          console.log('🎮 Game state changed to linking, switching to game polling...');
-          setCurrentState('linking');
+          console.log('🎮 Game state changed to telepathy, switching to game polling...');
+          playStateChange();
+          setCurrentState('telepathy');
+          startPolling();
+        } else if (['liarWordInput', 'liarPlay', 'liarVote', 'liarArgument', 'liarIdentify', 'liarResult'].includes(data.room.gameState)) {
+          console.log('🎮 Liar game started, switching to liar polling...');
+          playStateChange();
+          prevLiarGameStateRef.current = data.room.gameState;
+          setCurrentState('liar');
           startPolling();
         }
       }
@@ -754,7 +812,7 @@ function App() {
 
   // Start/stop heartbeat based on state
   useEffect(() => {
-    if (currentState === 'waitingroom' || currentState === 'linking' || currentState === 'linkresult') {
+    if (currentState === 'waitingroom' || currentState === 'telepathy' || currentState === 'telepathyResult' || currentState === 'liar') {
       startHeartbeat();
     } else {
       stopHeartbeat();
@@ -766,12 +824,12 @@ function App() {
   // Send heartbeat + immediate poll when tab becomes visible (syncs user list after tab switch)
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (!document.hidden && (currentState === 'waitingroom' || currentState === 'linking' || currentState === 'linkresult')) {
+      if (!document.hidden && (currentState === 'waitingroom' || currentState === 'telepathy' || currentState === 'telepathyResult' || currentState === 'liar')) {
         console.log('Tab became visible, heartbeat + poll...');
         sendHeartbeat();
         if (currentState === 'waitingroom' && pollWaitingRoomStatusRef.current) {
           pollWaitingRoomStatusRef.current();
-        } else if ((currentState === 'linking' || currentState === 'linkresult') && pollRoomStatusRef.current) {
+        } else if ((currentState === 'telepathy' || currentState === 'telepathyResult' || currentState === 'liar') && pollRoomStatusRef.current) {
           pollRoomStatusRef.current();
         }
       }
@@ -783,7 +841,7 @@ function App() {
 
   // Start/stop warning check based on state
   useEffect(() => {
-    if (currentState === 'waitingroom' || currentState === 'linking' || currentState === 'linkresult') {
+    if (currentState === 'waitingroom' || currentState === 'telepathy' || currentState === 'telepathyResult' || currentState === 'liar') {
       startWarningCheck();
     } else {
       stopWarningCheck();
@@ -798,9 +856,9 @@ function App() {
     if (currentState === 'waitingroom') {
       console.log('🔄 Starting waiting room polling for room:', roomId);
       startWaitingRoomPolling();
-    } else if (currentState === 'linking' || currentState === 'linkresult') {
+    } else if (currentState === 'telepathy' || currentState === 'telepathyResult' || currentState === 'liar') {
       console.log('🔄 Starting game polling for room:', roomId);
-      startPolling(); // Start polling for linking and result states
+      startPolling(); // Start polling for linking, result, and liar states
     } else {
       stopPolling(); // Stop polling for other states
     }
@@ -1115,7 +1173,7 @@ function App() {
 
   const handleStartGame = async () => {
     if (!isMaster) return;
-    
+
     setIsLoading(true);
     try {
       const controller = new AbortController();
@@ -1130,7 +1188,7 @@ function App() {
       const data = await response.json();
       
       if (data.success) {
-        setCurrentState('linking');
+        setCurrentState(gameType === 'liar' ? 'liar' : 'telepathy');
         console.log('🎮 Game started, starting polling...');
         startPolling();
       } else {
@@ -1196,8 +1254,51 @@ function App() {
 
   // Next round system removed - no rounds, only one game per session
 
-  const handleKickUser = async (targetUserId) => {
+  const handleSetGameType = async (newGameType) => {
+    if (!isMaster || !roomId || !userId) return;
+    setGameType(newGameType); // Optimistic update
+    try {
+      await fetch(`${API_URL}/api/set-game-type`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, userId, gameType: newGameType })
+      });
+    } catch (err) {
+      console.error('Error setting game type:', err);
+    }
+  };
+
+  const handleSetLiarSettings = async (subject, method, customSubject) => {
+    if (!isMaster || !roomId || !userId || gameType !== 'liar') return;
+    setLiarSubject(subject);
+    setLiarMethod(method);
+    setLiarCustomSubject(customSubject || '');
+    try {
+      await fetch(`${API_URL}/api/set-liar-settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId,
+          userId,
+          liarSubject: subject,
+          liarMethod: subject === '커스텀주제' ? '커스텀' : method,
+          liarCustomSubject: subject === '커스텀주제' ? (customSubject || '').trim().slice(0, 16) : null
+        })
+      });
+    } catch (err) {
+      console.error('Error setting liar settings:', err);
+    }
+  };
+
+  const handleKickUserClick = (user) => {
     if (!isMaster) return;
+    setKickTargetUser(user);
+  };
+
+  const handleKickUserConfirm = async () => {
+    if (!isMaster || !kickTargetUser) return;
+    const targetUserId = kickTargetUser.id;
+    setKickTargetUser(null);
     
     try {
       const response = await fetch(`${API_URL}/api/kick-user`, {
@@ -1220,6 +1321,133 @@ function App() {
     } catch (error) {
       console.error('Error kicking user:', error);
       setError('사용자 추방 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleKickUserCancel = () => {
+    setKickTargetUser(null);
+  };
+
+  // Liar game API handlers
+  const handleLiarSubmitWord = async (word) => {
+    if (!roomId || !userId) return;
+    try {
+      const res = await fetch(`${API_URL}/api/liar-submit-word`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, userId, word: (word || '').trim().slice(0, 16) })
+      });
+      const data = await res.json();
+      if (data.success) return true;
+      setError(data.message || '제출 실패');
+    } catch (e) {
+      setError('네트워크 오류');
+    }
+    return false;
+  };
+
+  const handleLiarExtendTime = async (action) => {
+    if (!roomId || !userId) return;
+    try {
+      const res = await fetch(`${API_URL}/api/liar-extend-time`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, userId, action })
+      });
+      const data = await res.json();
+      if (!data.success) setError(data.message || '시간 조절 실패');
+    } catch (e) {
+      setError('네트워크 오류');
+    }
+  };
+
+  const handleLiarDifficultWord = async () => {
+    if (!roomId || !userId) return;
+    try {
+      const res = await fetch(`${API_URL}/api/liar-difficult-word`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, userId })
+      });
+      const data = await res.json();
+      if (!data.success) setError(data.message || '실패');
+    } catch (e) {
+      setError('네트워크 오류');
+    }
+  };
+
+  const handleLiarStartVote = async () => {
+    if (!roomId || !userId) return;
+    try {
+      const res = await fetch(`${API_URL}/api/liar-start-vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, userId })
+      });
+      const data = await res.json();
+      if (!data.success) setError(data.message || '투표 시작 실패');
+    } catch (e) {
+      setError('네트워크 오류');
+    }
+  };
+
+  const handleLiarVote = async (targetUserId) => {
+    if (!roomId || !userId) return;
+    try {
+      const res = await fetch(`${API_URL}/api/liar-vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, userId, targetUserId })
+      });
+      const data = await res.json();
+      if (!data.success) setError(data.message || '투표 실패');
+    } catch (e) {
+      setError('네트워크 오류');
+    }
+  };
+
+  const handleLiarForgiveExecute = async (choice) => {
+    if (!roomId || !userId) return;
+    try {
+      const res = await fetch(`${API_URL}/api/liar-forgive-execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, userId, choice })
+      });
+      const data = await res.json();
+      if (!data.success) setError(data.message || '선택 실패');
+    } catch (e) {
+      setError('네트워크 오류');
+    }
+  };
+
+  const handleLiarGuess = async (guessedWord) => {
+    if (!roomId || !userId) return;
+    try {
+      const res = await fetch(`${API_URL}/api/liar-guess`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, userId, guessedWord: (guessedWord || '').trim() })
+      });
+      const data = await res.json();
+      if (!data.success) setError(data.message || '제출 실패');
+    } catch (e) {
+      setError('네트워크 오류');
+    }
+  };
+
+  const handleLiarIdentifyVote = async (choice) => {
+    if (!roomId || !userId) return;
+    try {
+      const res = await fetch(`${API_URL}/api/liar-identify-vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, userId, choice })
+      });
+      const data = await res.json();
+      if (!data.success) setError(data.message || '투표 실패');
+    } catch (e) {
+      setError('네트워크 오류');
     }
   };
 
@@ -1257,6 +1485,7 @@ function App() {
     setUnmatched([]);
     setSelectedUser(null);
     setHasVoted(false);
+    setLiarMyWord(null);
     
     // Go back to makeOrJoinRoom state (user keeps their username)
     setCurrentState('makeOrJoinRoom');
@@ -1264,7 +1493,6 @@ function App() {
 
   const handleReturnToWaitingRoom = async () => {
     // IMPORTANT: Stop polling FIRST to prevent race condition
-    // Without this, an in-flight poll could redirect user back to linkresult
     stopPolling();
     
     // Reset local state
@@ -1273,6 +1501,7 @@ function App() {
     setSelectedUser(null);
     setHasVoted(false);
     setGameState('waiting');
+    setLiarMyWord(null);
     
     // Change state to waitingroom BEFORE API call
     setCurrentState('waitingroom');
@@ -2006,6 +2235,7 @@ function App() {
       <div className="waitingroom-header">
         <h2>🔗 링크 스테이션</h2>
         <p>방: {roomData?.roomName} | 참여자: {users.length}/{roomData?.memberLimit}명</p>
+        <p className="current-game-badge">현재 게임: {gameType === 'telepathy' ? '텔레파시 게임' : '라이어 게임'}</p>
         {isMaster && <span className="master-badge">방장</span>}
       </div>
         
@@ -2066,7 +2296,7 @@ function App() {
               {isMaster && user.id !== userId && (
                 <button
                   className="kick-button"
-                  onClick={() => handleKickUser(user.id)}
+                  onClick={() => handleKickUserClick(user)}
                   title="사용자 추방"
                 >
                   ✕
@@ -2091,7 +2321,7 @@ function App() {
               {isMaster && user.id !== userId && (
                 <button
                   className="kick-button"
-                  onClick={() => handleKickUser(user.id)}
+                  onClick={() => handleKickUserClick(user)}
                   title="사용자 추방"
                 >
                   ✕
@@ -2104,18 +2334,111 @@ function App() {
       
       {isMaster && (
         <div className="master-controls">
+          <div className="game-select-row">
+            <button 
+              className="game-select-button"
+              onClick={() => setShowGameSelect(true)}
+              title="게임 선택"
+            >
+              게임 선택: {gameType === 'telepathy' ? '텔레파시 게임' : '라이어 게임'}
+            </button>
+          </div>
+          {showGameSelect && (
+            <div className="game-select-modal-overlay" onClick={() => setShowGameSelect(false)}>
+              <div className="game-select-modal" onClick={e => e.stopPropagation()}>
+                <h3>게임 선택</h3>
+                <button 
+                  className={`game-option ${gameType === 'telepathy' ? 'active' : ''}`}
+                  onClick={() => { setShowGameSelect(false); handleSetGameType('telepathy'); }}
+                >
+                  텔레파시 게임
+                </button>
+                <button 
+                  className={`game-option ${gameType === 'liar' ? 'active' : ''}`}
+                  onClick={() => { setShowGameSelect(false); handleSetGameType('liar'); }}
+                >
+                  라이어 게임
+                </button>
+                <button className="game-select-cancel" onClick={() => setShowGameSelect(false)}>취소</button>
+              </div>
+            </div>
+          )}
+          {gameType === 'liar' && (
+            <div className="liar-settings">
+              <h4>라이어 게임 설정</h4>
+              <div className="liar-setting-row">
+                <label>주제</label>
+                <select
+                  value={liarSubject}
+                  onChange={(e) => {
+                    const newSubj = e.target.value;
+                    handleSetLiarSettings(newSubj, newSubj === '커스텀주제' ? '커스텀' : liarMethod, newSubj === '커스텀주제' ? liarCustomSubject : null);
+                  }}
+                >
+                  <option value="물건">물건</option>
+                  <option value="동물">동물</option>
+                  <option value="스포츠">스포츠</option>
+                  <option value="요리">요리</option>
+                  <option value="장소">장소</option>
+                  <option value="직업">직업</option>
+                  <option value="국가">국가</option>
+                  <option value="인물">인물</option>
+                  <option value="영화">영화</option>
+                  <option value="드라마">드라마</option>
+                  <option value="과일">과일</option>
+                  <option value="채소">채소</option>
+                  <option value="커스텀주제">커스텀주제</option>
+                </select>
+              </div>
+              {liarSubject === '커스텀주제' ? (
+                <div className="liar-setting-row">
+                  <label>커스텀 주제 (최대 16자)</label>
+                  <input
+                    type="text"
+                    value={liarCustomSubject}
+                    onChange={(e) => setLiarCustomSubject(e.target.value.slice(0, 16))}
+                    onBlur={(e) => handleSetLiarSettings('커스텀주제', '커스텀', e.target.value.trim().slice(0, 16))}
+                    placeholder="주제를 입력하세요"
+                    maxLength={16}
+                  />
+                  <p className="liar-setting-note">방식은 커스텀으로 고정됩니다</p>
+                </div>
+              ) : (
+                <div className="liar-setting-row">
+                  <label>방식</label>
+                  <select
+                    value={liarMethod}
+                    onChange={(e) => handleSetLiarSettings(liarSubject, e.target.value, null)}
+                  >
+                    <option value="랜덤">랜덤</option>
+                    <option value="커스텀">커스텀</option>
+                  </select>
+                </div>
+              )}
+              {!isMaster && (
+                <p className="liar-settings-display">주제: {liarSubject === '커스텀주제' ? (liarCustomSubject || '(입력 대기)') : liarSubject} | 방식: {liarSubject === '커스텀주제' ? '커스텀' : liarMethod}</p>
+              )}
+            </div>
+          )}
           <button 
             className="start-game-button"
             onClick={handleStartGame}
-            disabled={gameState !== 'waiting' || users.filter(user => user.role === 'attender').length < 2 || isLoading}
+            disabled={
+              gameState !== 'waiting' || isLoading ||
+              (gameType === 'telepathy' && users.filter(u => u.role === 'attender').length < 2) ||
+              (gameType === 'liar' && users.filter(u => u.role === 'attender').length < 3)
+            }
           >
-            {isLoading ? '게임 시작 중...' : `게임 시작 (참가자 ${users.filter(user => user.role === 'attender').length}명)`}
+            {isLoading ? '게임 시작 중...' : `게임 시작 (참가자 ${users.filter(u => u.role === 'attender').length}명)`}
           </button>
           {gameState !== 'waiting' && (
             <p className="waiting-message">모든 사용자가 대기실로 돌아올 때까지 기다려주세요.</p>
           )}
-          {gameState === 'waiting' && users.filter(user => user.role === 'attender').length < 2 && (
+          {gameState === 'waiting' && gameType === 'telepathy' && users.filter(u => u.role === 'attender').length < 2 && (
             <p className="waiting-message">참가자는 최소 2명 이상 필요합니다.</p>
+          )}
+          {gameState === 'waiting' && gameType === 'liar' && users.filter(u => u.role === 'attender').length < 3 && (
+            <p className="waiting-message">라이어 게임은 참가자 3명 이상 필요합니다.</p>
           )}
         </div>
       )}
@@ -2128,117 +2451,130 @@ function App() {
     </div>
   );
 
-  const renderLinking = () => (
-    <div className="linking-container">
-      <div className="linking-header">
-        <h2>🔗 링크하기</h2>
-        <p>{userRole === 'observer' ? '투표 상황을 관전하세요' : '연결하고 싶은 사람을 선택하세요'}</p>
-        <p className="role-indicator">현재 역할: {userRole === 'attender' ? '참가자' : '관전자'}</p>
-      </div>
-      
-      <div className="users-list">
-        <h3>참가자 목록</h3>
-        <div className="users-grid">
-          {users.filter(user => user.role === 'attender').map(user => (
-            <div key={user.id} className="user-card">
-              <div className="user-info">
-                <span className="user-nickname">{user.displayName || user.nickname}</span>
-                {user.id === userId && <span className="you-badge">나</span>}
-              </div>
-              
-              <div className="user-indicators">
-                {/* 1. Master badge */}
-                {user.isMaster && (
-                  <div className="master-indicator">
-                    <span>👑 방장</span>
-                  </div>
-                )}
-                
-                {/* 2. Your selection indicator */}
-                {hasVoted && selectedUser === user.id && (
-                  <div className="selected-indicator">
-                    <span>🎯 당신의 선택</span>
-                  </div>
-                )}
-                
-                {/* 3. Voting status indicator */}
-                {user.hasVoted ? (
-                  <div className="completed-indicator">
-                    <span>✅ 투표완료</span>
-                  </div>
-                ) : (
-                  <div className="waiting-indicator">
-                    <span>⏳ 투표 중</span>
-                  </div>
-                )}
-              </div>
-              {!hasVoted && user.id !== userId && userRole === 'attender' && (
-          <button 
-                  className="select-button"
-                  onClick={() => handleSelectUser(user.id)}
-                  disabled={isLoading}
-          >
-                  선택
-          </button>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-      
-      {hasVoted && (
-        <div className="voted-message">
-          <p>투표가 완료되었습니다. 다른 참여자들의 선택을 기다리는 중...</p>
-            </div>
-          )}
-        </div>
+  const renderTelepathy = () => (
+    <TelepathyPlay
+      users={users}
+      userId={userId}
+      hasVoted={hasVoted}
+      selectedUser={selectedUser}
+      userRole={userRole}
+      onSelectUser={handleSelectUser}
+      isLoading={isLoading}
+    />
   );
 
-  const renderLinkResult = () => (
-    <div className="linkresult-container">
-      <div className="linkresult-header">
-        <h2>🎉 링크 결과</h2>
-        <p>이번 라운드의 결과입니다</p>
-      </div>
-      
-      {matches.length > 0 && (
-        <div className="matches-section">
-          <h3>✅ 매칭 성공!</h3>
-          {matches.map((match, index) => (
-            <div key={index} className="match-card success">
-              <div className="match-pair">
-                <span className="user-name">{match.user1.displayName || match.user1.nickname}</span>
-                <span className="match-arrow">↔️</span>
-                <span className="user-name">{match.user2.displayName || match.user2.nickname}</span>
-              </div>
-              <p className="match-message">축하합니다! 파트너가 되셨습니다! 🎊</p>
-            </div>
-          ))}
-        </div>
-      )}
-      
-      {unmatched.length > 0 && (
-        <div className="unmatched-section">
-          <h3>😔 매칭 실패</h3>
-          {unmatched.map((user, index) => (
-            <div key={index} className="match-card fail">
-              <span className="user-name">{user.displayName || user.nickname}</span>
-              <p className="match-message">아쉽네요. 다음 라운드에 도전하세요!</p>
-            </div>
-          ))}
-        </div>
-      )}
-      
-      <div className="result-actions">
-        <button className="return-to-waiting-button" onClick={handleReturnToWaitingRoom}>
-          대기실로 돌아가기
-        </button>
-        <button className="leave-room-button" onClick={handleLeaveRoom}>
-          방 나가기
-      </button>
-      </div>
-    </div>
+  const renderTelepathyResult = () => (
+    <TelepathyResult
+      matches={matches}
+      unmatched={unmatched}
+      onReturnToWaiting={handleReturnToWaitingRoom}
+      onLeave={handleLeaveRoom}
+    />
   );
+
+  const renderLiar = () => {
+    const rd = roomData || {};
+    const gs = rd.gameState || gameState || 'liarWordInput';
+    const ls = rd.liarState || rd.gameState;
+    const attenders = users.filter(u => (u.role || 'attender') === 'attender');
+    const amILiar = rd.liarLiarUserId === userId;
+    const subjectDisplay = rd.liarSubject === '커스텀주제' ? (rd.liarCustomSubject || '(입력 대기)') : (rd.liarSubject || '물건');
+    const submittedCount = (gs === 'liarWordInput' || rd.liarState === 'wordInput')
+      ? (rd.liarSubmittedCount ?? 0)
+      : (rd.liarUserWords ? Object.keys(rd.liarUserWords).length : 0);
+    const votersOfCondemned = rd.liarCondemnedUserId && rd.liarVotes
+      ? Object.entries(rd.liarVotes).filter(([, tid]) => tid === rd.liarCondemnedUserId).map(([uid]) => uid)
+      : [];
+    const iVotedCondemned = votersOfCondemned.includes(userId);
+    const canGuess = amILiar && rd.liarCondemnedUserId === rd.liarLiarUserId;
+    const condemnedIsLiar = rd.liarCondemnedUserId === rd.liarLiarUserId;
+
+    return (
+      <div className="liar-container">
+        <div className="liar-header">
+          <h2>🎭 라이어 게임</h2>
+          <p className="liar-subject">주제: {subjectDisplay}</p>
+        </div>
+
+        {gs === 'liarWordInput' && (
+          <LiarWordInput
+            attenders={attenders}
+            submittedCount={submittedCount}
+            userRole={userRole}
+            onSubmit={handleLiarSubmitWord}
+            setError={setError}
+            isLoading={isLoading}
+            setIsLoading={setIsLoading}
+          />
+        )}
+
+        {(gs === 'liarPlay' || ls === 'play') && (
+          <LiarPlay
+            attenders={attenders}
+            amILiar={amILiar}
+            liarMyWord={liarMyWord}
+            mainTimerEndsAt={rd.liarMainTimerEndsAt}
+            extendedBy={rd.liarMainTimerExtendedBy || []}
+            onExtendTime={handleLiarExtendTime}
+            onDifficultWord={handleLiarDifficultWord}
+            onStartVote={handleLiarStartVote}
+            isMaster={isMaster}
+            userId={userId}
+            setError={setError}
+          />
+        )}
+
+        {(gs === 'liarVote' || ls === 'vote') && (
+          <LiarVote
+            attenders={attenders}
+            votes={rd.liarVotes || {}}
+            tieTargets={rd.liarVoteTieTargets}
+            onVote={handleLiarVote}
+            userId={userId}
+            setError={setError}
+          />
+        )}
+
+        {(gs === 'liarArgument' || ls === 'argument') && (
+          <LiarArgument
+            attenders={attenders}
+            condemnedUserId={rd.liarCondemnedUserId}
+            choices={rd.liarArgumentChoices || {}}
+            iVotedCondemned={iVotedCondemned}
+            argumentEndsAt={rd.liarArgumentEndsAt}
+            onForgiveExecute={handleLiarForgiveExecute}
+            userId={userId}
+          />
+        )}
+
+        {(gs === 'liarIdentify' || ls === 'identify') && (
+          <LiarIdentify
+            attenders={attenders}
+            amILiar={amILiar}
+            condemnedIsLiar={condemnedIsLiar}
+            canGuess={canGuess}
+            guessedWord={rd.liarGuessedWord}
+            identifyVotes={rd.liarIdentifyVotes || {}}
+            guessEndsAt={rd.liarGuessEndsAt}
+            identifyEndsAt={rd.liarIdentifyEndsAt}
+            onGuess={handleLiarGuess}
+            onIdentifyVote={handleLiarIdentifyVote}
+            userId={userId}
+            setError={setError}
+          />
+        )}
+
+        {(gs === 'liarResult' || ls === 'result') && (
+          <LiarResult
+            scenario={rd.liarResultScenario}
+            data={rd.liarResultData || {}}
+            onReturnToWaiting={handleReturnToWaitingRoom}
+            onLeave={handleLeaveRoom}
+          />
+        )}
+      </div>
+    );
+  };
 
   // Admin render functions
   const renderAdminPassword = () => (
@@ -2889,8 +3225,13 @@ function App() {
           setRoomData={setRoomData}
           setUserRole={setUserRole}
           setGameState={setGameState}
+          setGameType={setGameType}
           setMatches={setMatches}
           setUnmatched={setUnmatched}
+          setLiarSubject={setLiarSubject}
+          setLiarMethod={setLiarMethod}
+          setLiarCustomSubject={setLiarCustomSubject}
+          setLiarMyWord={setLiarMyWord}
         />
       )}
       {currentState === 'makeOrJoinRoom' && renderMakeOrJoinRoom()}
@@ -2899,8 +3240,9 @@ function App() {
       {currentState === 'checkpassword' && renderCheckPassword()}
       {currentState === 'joinroomwithqr' && renderJoinRoomWithQR()}
       {currentState === 'waitingroom' && renderWaitingRoom()}
-      {currentState === 'linking' && renderLinking()}
-      {currentState === 'linkresult' && renderLinkResult()}
+      {currentState === 'telepathy' && renderTelepathy()}
+      {currentState === 'telepathyResult' && renderTelepathyResult()}
+      {currentState === 'liar' && renderLiar()}
       {currentState === 'adminPassword' && renderAdminPassword()}
       {currentState === 'adminDashboard' && renderAdminDashboard()}
       {currentState === 'adminStatus' && renderAdminStatus()}
@@ -2908,6 +3250,20 @@ function App() {
       {currentState === 'adminShutdown' && renderAdminShutdown()}
       {currentState === 'adminChangePassword' && renderAdminChangePassword()}
       
+      {/* Kick Confirmation Modal */}
+      {kickTargetUser && (
+        <div className="warning-modal-overlay">
+          <div className="warning-modal">
+            <h2>강퇴 확인</h2>
+            <p>{(kickTargetUser.displayName || kickTargetUser.nickname)}을(를) 진짜 강퇴하겠습니까?</p>
+            <div className="warning-buttons">
+              <button className="keep-alive-button" onClick={handleKickUserConfirm}>예</button>
+              <button className="immediate-exit-button" onClick={handleKickUserCancel}>아니오</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* User Inactivity Warning Modal */}
       {showUserWarning && (
         <div className="warning-modal-overlay">

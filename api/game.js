@@ -5,6 +5,7 @@ const app = express();
 app.use(express.json());
 
 const storage = require('./storage');
+const { getRandomWord } = require('./liarWords');
 
 const ADMIN_USERNAME = 'link-station-admin';
 
@@ -373,6 +374,10 @@ app.post('/api/create-room', async (req, res) => {
     users: new Map(),
     selections: new Map(),
     gameState: 'waiting', // waiting, linking, completed
+    gameType: 'telepathy', // telepathy | liar
+    liarSubject: '물건', // 주제
+    liarMethod: '커스텀', // 랜덤 | 커스텀
+    liarCustomSubject: null, // when 주제 is 커스텀주제 (<=16 chars)
     matchResult: null,
     returnedToWaiting: new Set(), // Track which users have returned to waiting room after results
     masterId: userId,
@@ -745,23 +750,51 @@ app.post('/api/start-game', async (req, res) => {
   
   // Check minimum attenders
   const attenders = Array.from(room.users.values()).filter(user => (user.role || 'attender') === 'attender');
-  if (attenders.length < 2) {
-    return res.status(400).json({ success: false, message: '참가자는 최소 2명 이상 필요합니다.' });
+  if (room.gameType === 'liar') {
+    if (attenders.length < 3) {
+      return res.status(400).json({ success: false, message: '라이어 게임은 참가자 3명 이상 필요합니다.' });
+    }
+  } else {
+    if (attenders.length < 2) {
+      return res.status(400).json({ success: false, message: '참가자는 최소 2명 이상 필요합니다.' });
+    }
   }
   
   // Start game
-  room.gameState = 'linking';
-  room.selections.clear();
-  room.matchResult = null;
-  // Clear returnedToWaiting tracking for new game
-  if (room.returnedToWaiting) {
-    room.returnedToWaiting.clear();
+  if (room.gameType === 'liar') {
+    room.gameState = room.liarMethod === '커스텀' ? 'liarWordInput' : 'liarPlay';
+    room.selections.clear();
+    room.matchResult = null;
+    if (room.returnedToWaiting) room.returnedToWaiting.clear();
+    else room.returnedToWaiting = new Set();
+    room.liarUserWords = new Map();
+    room.liarVotes = new Map();
+    room.liarArgumentChoices = new Map();
+    room.liarIdentifyVotes = new Map();
+    room.liarMainTimerExtendedBy = new Set();
+    room.liarDifficultClicks = new Set();
+    if (room.liarMethod === '랜덤') {
+      const category = room.liarSubject === '커스텀주제' ? '물건' : room.liarSubject;
+      const word = getRandomWord(category);
+      room.liarSecretWord = word || '비밀';
+      room.liarLiarUserId = attenders[Math.floor(Math.random() * attenders.length)].id;
+      room.liarState = 'play';
+      const minutes = attenders.length * 2;
+      room.liarMainTimerEndsAt = Date.now() + minutes * 60 * 1000;
+    } else {
+      room.liarState = 'wordInput';
+    }
+    room.lastActivity = Date.now();
+    console.log(`Liar game started in room: ${room.roomName}, state: ${room.liarState}`);
   } else {
-    room.returnedToWaiting = new Set();
+    room.gameState = 'linking';
+    room.selections.clear();
+    room.matchResult = null;
+    if (room.returnedToWaiting) room.returnedToWaiting.clear();
+    else room.returnedToWaiting = new Set();
+    room.lastActivity = Date.now();
   }
-  room.lastActivity = Date.now(); // Prevent room deletion during game
   
-  console.log(`Game started in room: ${room.roomName}`);
   await storage.saveRoom(room);
   
   res.json({
@@ -1200,6 +1233,28 @@ app.post('/api/return-to-waiting', async (req, res) => {
     room.selections.clear();
     room.matchResult = null;
     room.returnedToWaiting.clear(); // Reset for next round; avoid stale IDs
+    if (room.gameType === 'liar') {
+      room.liarState = null;
+      room.liarLiarUserId = null;
+      room.liarSecretWord = null;
+      room.liarUserWords = null;
+      room.liarChosenWordAuthor = null;
+      room.liarVotes = null;
+      room.liarCondemnedUserId = null;
+      room.liarVoteTieTargets = null;
+      room.liarArgumentChoices = null;
+      room.liarArgumentEndsAt = null;
+      room.liarIdentifyVotes = null;
+      room.liarGuessedWord = null;
+      room.liarGuessEndsAt = null;
+      room.liarIdentifyEndsAt = null;
+      room.liarMainTimerEndsAt = null;
+      room.liarMainTimerExtendedBy = null;
+      room.liarDifficultClicks = null;
+      room.liarAbortedByDifficult = null;
+      room.liarResultScenario = null;
+      room.liarResultData = null;
+    }
     console.log(`🔄 Room ${room.roomName} - All users returned to waiting state`);
   } else {
     console.log(`🔄 Room ${room.roomName} - User returned, waiting for others (${room.returnedToWaiting.size}/${attenders.length})`);
@@ -1251,6 +1306,40 @@ app.get('/api/room/:roomId', async (req, res) => {
       room.returnedToWaiting = new Set();
     }
     
+    // Liar: apply timer-based transitions when polling
+    if (room.gameType === 'liar') {
+      const now = Date.now();
+      if (room.liarState === 'play' && room.liarMainTimerEndsAt && now >= room.liarMainTimerEndsAt) {
+        room.liarState = 'vote';
+        room.gameState = 'liarVote';
+        room.liarVotes = room.liarVotes || new Map();
+        room.liarVotes.clear();
+        await storage.saveRoom(room);
+      } else if (room.liarState === 'argument' && room.liarArgumentEndsAt && now >= room.liarArgumentEndsAt) {
+        const voters = Array.from(room.liarVotes?.entries() || []).filter(([, tid]) => tid === room.liarCondemnedUserId).map(([uid]) => uid);
+        const forgives = Array.from(room.liarArgumentChoices?.values() || []).filter(c => c === 'forgive').length;
+        if (voters.length > 0 && forgives < Math.ceil(voters.length / 2)) {
+          room.liarState = 'identify';
+          room.gameState = 'liarIdentify';
+          room.liarIdentifyVotes = new Map();
+          if (room.liarCondemnedUserId === room.liarLiarUserId) {
+            room.liarGuessEndsAt = now + 30 * 1000;
+          } else {
+            room.liarIdentifyEndsAt = now + 10 * 1000;
+          }
+          await storage.saveRoom(room);
+        }
+      } else if (room.liarState === 'identify' && room.liarCondemnedUserId !== room.liarLiarUserId && room.liarIdentifyEndsAt && now >= room.liarIdentifyEndsAt) {
+        const liarUser = room.users.get(room.liarLiarUserId);
+        const condemnedUser = room.users.get(room.liarCondemnedUserId);
+        room.liarState = 'result';
+        room.gameState = 'liarResult';
+        room.liarResultScenario = 'C';
+        room.liarResultData = { liarNickname: liarUser?.displayName || liarUser?.nickname, condemnedNickname: condemnedUser?.displayName || condemnedUser?.nickname, secretWord: room.liarSecretWord };
+        await storage.saveRoom(room);
+      }
+    }
+    
     // Add voting status, master status, role, and returned status to users
     const usersWithVotingStatus = Array.from(room.users.values()).map(user => ({
       ...user,
@@ -1283,15 +1372,54 @@ app.get('/api/room/:roomId', async (req, res) => {
     
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.set('Pragma', 'no-cache');
+    const roomPayload = {
+      id: roomId,
+      users: usersWithVotingStatus,
+      selections: Object.fromEntries(room.selections),
+      gameState: room.gameState,
+      gameType: room.gameType || 'telepathy',
+      liarSubject: room.liarSubject || '물건',
+      liarMethod: room.liarMethod || '커스텀',
+      liarCustomSubject: room.liarCustomSubject || null,
+      masterId: room.masterId
+    };
+    if (room.gameType === 'liar' && room.liarState) {
+      roomPayload.liarState = room.liarState;
+      roomPayload.liarLiarUserId = room.liarLiarUserId || null;
+      roomPayload.liarSecretWord = null; // Never send to client (only reveal per-user in play/result)
+      if (room.liarState === 'wordInput') {
+        roomPayload.liarSubmittedCount = room.liarUserWords ? room.liarUserWords.size : 0;
+      } else {
+        roomPayload.liarUserWords = room.liarUserWords ? Object.fromEntries(room.liarUserWords) : {};
+      }
+      roomPayload.liarChosenWordAuthor = room.liarChosenWordAuthor || null;
+      roomPayload.liarVotes = room.liarVotes ? Object.fromEntries(room.liarVotes) : {};
+      roomPayload.liarCondemnedUserId = room.liarCondemnedUserId || null;
+      roomPayload.liarArgumentChoices = room.liarArgumentChoices ? Object.fromEntries(room.liarArgumentChoices) : {};
+      roomPayload.liarIdentifyVotes = room.liarIdentifyVotes ? Object.fromEntries(room.liarIdentifyVotes) : {};
+      roomPayload.liarGuessedWord = room.liarGuessedWord || null;
+      roomPayload.liarMainTimerEndsAt = room.liarMainTimerEndsAt || null;
+      roomPayload.liarMainTimerExtendedBy = room.liarMainTimerExtendedBy ? Array.from(room.liarMainTimerExtendedBy) : [];
+      roomPayload.liarDifficultClicks = room.liarDifficultClicks ? Array.from(room.liarDifficultClicks) : [];
+      roomPayload.liarAbortedByDifficult = room.liarAbortedByDifficult || false;
+      roomPayload.liarResultScenario = room.liarResultScenario || null;
+      roomPayload.liarResultData = room.liarResultData || null;
+      roomPayload.liarVoteTieTargets = room.liarVoteTieTargets || null;
+      roomPayload.liarArgumentEndsAt = room.liarArgumentEndsAt || null;
+      roomPayload.liarGuessEndsAt = room.liarGuessEndsAt || null;
+      roomPayload.liarIdentifyEndsAt = room.liarIdentifyEndsAt || null;
+    }
+    let liarMyWord = null;
+    if (room.gameType === 'liar' && room.liarSecretWord && username) {
+      const reqUser = usersWithVotingStatus.find(u => u.username === username);
+      if (reqUser && reqUser.id !== room.liarLiarUserId && (room.liarState === 'play' || room.liarState === 'result' || room.liarAbortedByDifficult)) {
+        liarMyWord = room.liarSecretWord;
+      }
+    }
     return res.json({
       success: true,
-      room: {
-        id: roomId,
-        users: usersWithVotingStatus,
-        selections: Object.fromEntries(room.selections),
-        gameState: room.gameState,
-        masterId: room.masterId
-      },
+      room: roomPayload,
+      liarMyWord,
       matchResult: room.matchResult,
       kickedByAdmin: kickedUsers.length > 0 ? kickedUsers : undefined,
       roomDeletedByAdmin: false // Room still exists, so not deleted
@@ -1350,6 +1478,299 @@ app.post('/api/kick-user', async (req, res) => {
     message: '사용자가 추방되었습니다.',
     users: Array.from(room.users.values())
   });
+});
+
+// Set game type (master only)
+app.post('/api/set-game-type', async (req, res) => {
+  const { roomId, userId, gameType } = req.body;
+  if (!['telepathy', 'liar'].includes(gameType)) {
+    return res.status(400).json({ success: false, message: '잘못된 게임 종류입니다.' });
+  }
+  const room = await storage.getRoomById(roomId);
+  if (!room) {
+    return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
+  }
+  if (room.masterId !== userId) {
+    return res.status(403).json({ success: false, message: '방장만 게임을 선택할 수 있습니다.' });
+  }
+  room.gameType = gameType;
+  room.lastActivity = Date.now();
+  await storage.saveRoom(room);
+  res.json({ success: true, gameType });
+});
+
+// Set Liar game settings (master only, when gameType is liar)
+app.post('/api/set-liar-settings', async (req, res) => {
+  const { roomId, userId, liarSubject, liarMethod, liarCustomSubject } = req.body;
+  const room = await storage.getRoomById(roomId);
+  if (!room) {
+    return res.status(404).json({ success: false, message: '방을 찾을 수 없습니다.' });
+  }
+  if (room.masterId !== userId) {
+    return res.status(403).json({ success: false, message: '방장만 설정할 수 있습니다.' });
+  }
+  const subjects = ['물건', '동물', '스포츠', '요리', '장소', '직업', '국가', '인물', '영화', '드라마', '과일', '채소', '커스텀주제'];
+  if (!subjects.includes(liarSubject)) {
+    return res.status(400).json({ success: false, message: '잘못된 주제입니다.' });
+  }
+  if (!['랜덤', '커스텀'].includes(liarMethod)) {
+    return res.status(400).json({ success: false, message: '잘못된 방식입니다.' });
+  }
+  if (liarSubject === '커스텀주제') {
+    room.liarMethod = '커스텀';
+    room.liarCustomSubject = (liarCustomSubject || '').trim().slice(0, 16) || null;
+  } else {
+    room.liarMethod = liarMethod;
+    room.liarCustomSubject = null;
+  }
+  room.liarSubject = liarSubject;
+  room.lastActivity = Date.now();
+  await storage.saveRoom(room);
+  res.json({ success: true, liarSubject: room.liarSubject, liarMethod: room.liarMethod, liarCustomSubject: room.liarCustomSubject });
+});
+
+// Liar: Submit word (word input state, custom mode only)
+app.post('/api/liar-submit-word', async (req, res) => {
+  const { roomId, userId, word } = req.body;
+  const room = await storage.getRoomById(roomId);
+  if (!room || room.gameType !== 'liar' || room.gameState !== 'liarWordInput') {
+    return res.status(400).json({ success: false, message: '잘못된 요청입니다.' });
+  }
+  const user = room.users.get(userId);
+  if (!user || (user.role || 'attender') !== 'attender') {
+    return res.status(400).json({ success: false, message: '참가자만 단어를 제출할 수 있습니다.' });
+  }
+  const trimmed = (word || '').trim().slice(0, 16);
+  if (!trimmed) return res.status(400).json({ success: false, message: '단어를 입력하세요.' });
+  room.liarUserWords.set(userId, trimmed);
+  room.lastActivity = Date.now();
+  const attenders = Array.from(room.users.values()).filter(u => (u.role || 'attender') === 'attender');
+  if (room.liarUserWords.size === attenders.length) {
+    const liarIdx = Math.floor(Math.random() * attenders.length);
+    room.liarLiarUserId = attenders[liarIdx].id;
+    const words = Array.from(room.liarUserWords.values());
+    const liarWord = room.liarUserWords.get(room.liarLiarUserId);
+    const pool = words.filter(w => w !== liarWord);
+    room.liarSecretWord = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : words[0];
+    const authorEntry = Array.from(room.liarUserWords.entries()).find(([, w]) => w === room.liarSecretWord);
+    room.liarChosenWordAuthor = authorEntry ? authorEntry[0] : null;
+    room.liarUserWords.clear();
+    if (room.liarChosenWordAuthor) {
+      room.liarUserWords.set(room.liarChosenWordAuthor, room.liarSecretWord);
+    }
+    room.liarState = 'play';
+    room.gameState = 'liarPlay';
+    const minutes = attenders.length * 2;
+    room.liarMainTimerEndsAt = Date.now() + minutes * 60 * 1000;
+    room.liarMainTimerExtendedBy = room.liarMainTimerExtendedBy || new Set();
+    room.liarDifficultClicks = room.liarDifficultClicks || new Set();
+  }
+  await storage.saveRoom(room);
+  res.json({ success: true });
+});
+
+// Liar: Extend/shorten time (once per user)
+app.post('/api/liar-extend-time', async (req, res) => {
+  const { roomId, userId, action } = req.body; // action: 'extend' | 'shorten'
+  const room = await storage.getRoomById(roomId);
+  if (!room || room.gameType !== 'liar' || room.liarState !== 'play') {
+    return res.status(400).json({ success: false, message: '잘못된 요청입니다.' });
+  }
+  if (room.liarMainTimerExtendedBy.has(userId)) {
+    return res.status(400).json({ success: false, message: '이미 시간을 조절했습니다.' });
+  }
+  room.liarMainTimerExtendedBy.add(userId);
+  const delta = action === 'extend' ? 60 * 1000 : -60 * 1000;
+  room.liarMainTimerEndsAt = Math.max(Date.now() + 5000, (room.liarMainTimerEndsAt || Date.now()) + delta);
+  room.lastActivity = Date.now();
+  await storage.saveRoom(room);
+  res.json({ success: true });
+});
+
+// Liar: Difficult word button (normal players, 30s window)
+app.post('/api/liar-difficult-word', async (req, res) => {
+  const { roomId, userId } = req.body;
+  const room = await storage.getRoomById(roomId);
+  if (!room || room.gameType !== 'liar' || room.liarState !== 'play') {
+    return res.status(400).json({ success: false, message: '잘못된 요청입니다.' });
+  }
+  if (userId === room.liarLiarUserId) return res.status(400).json({ success: false, message: '라이어는 누를 수 없습니다.' });
+  room.liarDifficultClicks = room.liarDifficultClicks || new Set();
+  room.liarDifficultClicks.add(userId);
+  const attenders = Array.from(room.users.values()).filter(u => (u.role || 'attender') === 'attender');
+  const normalCount = attenders.filter(u => u.id !== room.liarLiarUserId).length;
+  if (room.liarDifficultClicks.size >= Math.ceil(normalCount / 2)) {
+    room.liarAbortedByDifficult = true;
+    room.liarState = 'result';
+    room.gameState = 'liarResult';
+    const liarUser = room.users.get(room.liarLiarUserId);
+    const authorUser = room.liarChosenWordAuthor ? room.users.get(room.liarChosenWordAuthor) : null;
+    room.liarResultScenario = 'D';
+    room.liarResultData = {
+      liarNickname: liarUser?.displayName || liarUser?.nickname,
+      secretWord: room.liarSecretWord,
+      wordAuthorNickname: authorUser?.displayName || authorUser?.nickname
+    };
+  }
+  room.lastActivity = Date.now();
+  await storage.saveRoom(room);
+  res.json({ success: true });
+});
+
+// Liar: Master starts vote or timer hit 0
+app.post('/api/liar-start-vote', async (req, res) => {
+  const { roomId, userId } = req.body;
+  const room = await storage.getRoomById(roomId);
+  if (!room || room.gameType !== 'liar' || room.liarState !== 'play') {
+    return res.status(400).json({ success: false, message: '잘못된 요청입니다.' });
+  }
+  if (room.masterId !== userId) {
+    return res.status(403).json({ success: false, message: '방장만 투표를 시작할 수 있습니다.' });
+  }
+  room.liarState = 'vote';
+  room.gameState = 'liarVote';
+  room.liarVotes = room.liarVotes || new Map();
+  room.liarVotes.clear();
+  room.lastActivity = Date.now();
+  await storage.saveRoom(room);
+  res.json({ success: true });
+});
+
+// Liar: Vote for who is the liar
+app.post('/api/liar-vote', async (req, res) => {
+  const { roomId, userId, targetUserId } = req.body;
+  const room = await storage.getRoomById(roomId);
+  if (!room || room.gameType !== 'liar' || room.liarState !== 'vote') {
+    return res.status(400).json({ success: false, message: '잘못된 요청입니다.' });
+  }
+  const attenders = Array.from(room.users.values()).filter(u => (u.role || 'attender') === 'attender');
+  const validTargets = room.liarVoteTieTargets && room.liarVoteTieTargets.length > 0
+    ? room.liarVoteTieTargets
+    : attenders.map(u => u.id);
+  if (!attenders.find(u => u.id === userId) || !validTargets.includes(targetUserId)) {
+    return res.status(400).json({ success: false, message: '잘못된 투표입니다.' });
+  }
+  room.liarVotes.set(userId, targetUserId);
+  room.lastActivity = Date.now();
+  const voted = room.liarVotes.size;
+  if (voted === attenders.length) {
+    const counts = {};
+    for (const [, tid] of room.liarVotes) {
+      if (!validTargets.includes(tid)) continue;
+      counts[tid] = (counts[tid] || 0) + 1;
+    }
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    const top = sorted.filter(([, c]) => c === sorted[0][1]);
+    if (top.length === 1) {
+      room.liarCondemnedUserId = top[0][0];
+      room.liarVoteTieTargets = null;
+      room.liarState = 'argument';
+      room.gameState = 'liarArgument';
+      room.liarArgumentChoices = new Map();
+      room.liarArgumentEndsAt = Date.now() + 30 * 1000;
+    } else {
+      const tieTargets = top.map(([id]) => id);
+      room.liarVoteTieTargets = tieTargets;
+      room.liarVotes.clear();
+    }
+  }
+  await storage.saveRoom(room);
+  res.json({ success: true });
+});
+
+// Liar: Forgive or Execute (only voters of condemned)
+app.post('/api/liar-forgive-execute', async (req, res) => {
+  const { roomId, userId, choice } = req.body; // choice: 'forgive' | 'execute'
+  const room = await storage.getRoomById(roomId);
+  if (!room || room.gameType !== 'liar' || room.liarState !== 'argument') {
+    return res.status(400).json({ success: false, message: '잘못된 요청입니다.' });
+  }
+  if (!['forgive', 'execute'].includes(choice)) return res.status(400).json({ success: false });
+  const voters = Array.from(room.liarVotes.entries()).filter(([, tid]) => tid === room.liarCondemnedUserId).map(([uid]) => uid);
+  if (!voters.includes(userId)) return res.status(403).json({ success: false, message: '투표한 사람만 선택할 수 있습니다.' });
+  room.liarArgumentChoices.set(userId, choice);
+  room.lastActivity = Date.now();
+  const votersWhoChose = room.liarArgumentChoices.size;
+  if (votersWhoChose === voters.length) {
+    const forgives = Array.from(room.liarArgumentChoices.values()).filter(c => c === 'forgive').length;
+    if (forgives >= Math.ceil(voters.length / 2)) {
+      room.liarCondemnedUserId = null;
+      room.liarState = 'vote';
+      room.gameState = 'liarVote';
+      room.liarVotes.clear();
+      room.liarArgumentChoices.clear();
+    } else {
+      room.liarState = 'identify';
+      room.gameState = 'liarIdentify';
+      room.liarIdentifyVotes = new Map();
+      if (room.liarCondemnedUserId === room.liarLiarUserId) {
+        room.liarGuessEndsAt = Date.now() + 30 * 1000;
+      } else {
+        room.liarIdentifyEndsAt = Date.now() + 10 * 1000;
+      }
+    }
+  }
+  await storage.saveRoom(room);
+  res.json({ success: true });
+});
+
+// Liar: Liar guesses the word (identify state, when condemned is liar)
+app.post('/api/liar-guess', async (req, res) => {
+  const { roomId, userId, guessedWord } = req.body;
+  const room = await storage.getRoomById(roomId);
+  if (!room || room.gameType !== 'liar' || room.liarState !== 'identify') {
+    return res.status(400).json({ success: false, message: '잘못된 요청입니다.' });
+  }
+  if (userId !== room.liarLiarUserId || room.liarCondemnedUserId !== room.liarLiarUserId) {
+    return res.status(403).json({ success: false, message: '사형수(라이어)만 추측할 수 있습니다.' });
+  }
+  const normalized = (guessedWord || '').trim().replace(/\s+/g, '').toLowerCase();
+  const secretNorm = (room.liarSecretWord || '').replace(/\s+/g, '').toLowerCase();
+  if (normalized === secretNorm) {
+    const liarUser = room.users.get(room.liarLiarUserId);
+    room.liarState = 'result';
+    room.gameState = 'liarResult';
+    room.liarResultScenario = 'A';
+    room.liarResultData = { liarNickname: liarUser?.displayName || liarUser?.nickname, secretWord: room.liarSecretWord };
+  } else {
+    room.liarGuessedWord = (guessedWord || '').trim();
+  }
+  room.lastActivity = Date.now();
+  await storage.saveRoom(room);
+  res.json({ success: true });
+});
+
+// Liar: Normal players vote 인정/노인정 (when liar guessed wrong)
+app.post('/api/liar-identify-vote', async (req, res) => {
+  const { roomId, userId, choice } = req.body; // choice: '인정' | '노인정'
+  const room = await storage.getRoomById(roomId);
+  if (!room || room.gameType !== 'liar' || room.liarState !== 'identify') {
+    return res.status(400).json({ success: false, message: '잘못된 요청입니다.' });
+  }
+  if (!room.liarGuessedWord) return res.status(400).json({ success: false });
+  const attenders = Array.from(room.users.values()).filter(u => (u.role || 'attender') === 'attender');
+  const normalPlayers = attenders.filter(u => u.id !== room.liarLiarUserId);
+  if (!normalPlayers.find(u => u.id === userId)) return res.status(403).json({ success: false });
+  if (!['인정', '노인정'].includes(choice)) return res.status(400).json({ success: false });
+  room.liarIdentifyVotes.set(userId, choice);
+  room.lastActivity = Date.now();
+  if (room.liarIdentifyVotes.size === normalPlayers.length) {
+    const injeong = Array.from(room.liarIdentifyVotes.values()).filter(c => c === '인정').length;
+    const liarUser = room.users.get(room.liarLiarUserId);
+    if (injeong >= Math.ceil(normalPlayers.length / 2)) {
+      room.liarState = 'result';
+      room.gameState = 'liarResult';
+      room.liarResultScenario = 'A';
+      room.liarResultData = { liarNickname: liarUser?.displayName || liarUser?.nickname, secretWord: room.liarSecretWord };
+    } else {
+      room.liarState = 'result';
+      room.gameState = 'liarResult';
+      room.liarResultScenario = 'B';
+      room.liarResultData = { liarNickname: liarUser?.displayName || liarUser?.nickname, secretWord: room.liarSecretWord, guessedWord: room.liarGuessedWord };
+    }
+  }
+  await storage.saveRoom(room);
+  res.json({ success: true });
 });
 
 // Leave room

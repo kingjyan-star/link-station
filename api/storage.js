@@ -59,21 +59,35 @@ const memoryStore = {
   pendingRemovals: new Map() // { username: { roomId?, userId?, timestamp } }
 };
 
-const toSerializableRoom = (room) => ({
-  ...room,
-  users: Array.from(room.users.entries()),
-  selections: Array.from(room.selections.entries()),
-  returnedToWaiting: room.returnedToWaiting ? Array.from(room.returnedToWaiting) : []
-});
+const toSerializableRoom = (room) => {
+  const r = { ...room };
+  r.users = Array.from((room.users || new Map()).entries());
+  r.selections = Array.from((room.selections || new Map()).entries());
+  r.returnedToWaiting = room.returnedToWaiting ? Array.from(room.returnedToWaiting) : [];
+  if (room.liarUserWords) r.liarUserWords = Array.from(room.liarUserWords.entries());
+  if (room.liarVotes) r.liarVotes = Array.from(room.liarVotes.entries());
+  if (room.liarArgumentChoices) r.liarArgumentChoices = Array.from(room.liarArgumentChoices.entries());
+  if (room.liarIdentifyVotes) r.liarIdentifyVotes = Array.from(room.liarIdentifyVotes.entries());
+  if (room.liarMainTimerExtendedBy) r.liarMainTimerExtendedBy = Array.from(room.liarMainTimerExtendedBy);
+  if (room.liarDifficultClicks) r.liarDifficultClicks = Array.from(room.liarDifficultClicks);
+  return r;
+};
 
 const fromSerializableRoom = (room) => {
   if (!room) return null;
-  return {
+  const r = {
     ...room,
     users: new Map(room.users || []),
     selections: new Map(room.selections || []),
     returnedToWaiting: room.returnedToWaiting ? new Set(room.returnedToWaiting) : new Set()
   };
+  if (room.liarUserWords) r.liarUserWords = new Map(room.liarUserWords);
+  if (room.liarVotes) r.liarVotes = new Map(room.liarVotes);
+  if (room.liarArgumentChoices) r.liarArgumentChoices = new Map(room.liarArgumentChoices);
+  if (room.liarIdentifyVotes) r.liarIdentifyVotes = new Map(room.liarIdentifyVotes);
+  if (room.liarMainTimerExtendedBy) r.liarMainTimerExtendedBy = new Set(room.liarMainTimerExtendedBy || []);
+  if (room.liarDifficultClicks) r.liarDifficultClicks = new Set(room.liarDifficultClicks || []);
+  return r;
 };
 
 async function redisRequest(command, args = [], options = {}) {
