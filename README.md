@@ -2,7 +2,8 @@
 
 **오프라인 술자리 미니게임 플랫폼** – 친구들과 한 방에 모여 QR코드로 공유하고, 여러 미니게임을 즐기세요!
 
-**바로 체험하기:** https://link-station-pro.vercel.app
+**바로 체험하기:** https://link-station-pro.vercel.app  
+**v3.0.1** – Liar Game 14 fixes (커스텀주제 입력, 투표/사면·처형 UI, 타이머 등)
 
 ---
 

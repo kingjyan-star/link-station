@@ -2,7 +2,7 @@
 
 **Live URL:** https://link-station-pro.vercel.app  
 **Last Updated:** March 2026  
-**Status:** ✅ v3.0.0 – Offline Party Mini-Game Platform. Telepathy + Liar Game.
+**Status:** ✅ v3.0.1 – Liar Game 14 fixes deployed. Telepathy + Liar Game.
 
 ---
 
@@ -39,7 +39,7 @@ Vercel auto-deploys on push to main.
 
 ### Verify After Deploy
 
-1. Browser console → `🔗 Link Station v3.0.0 loaded`
+1. Browser console → `🔗 Link Station v3.0.1 loaded`
 2. Join room, press F5 → should stay in room
 3. 2+ users → all see each other immediately
 
@@ -208,6 +208,22 @@ Full details in `api/API_ROUTES.md`.
 
 ## 🐛 Recent Sessions (Condensed)
 
+### v3.0.1 (March 2026) - Liar Game 14 Fixes
+- **Custom subject input:** Polling no longer overwrites typing (focus guard).
+- **Who hasn't submitted:** Shows "아직 외치지 않은 사람들" in word-input phase.
+- **Liar card:** Shows "당신은 라이어입니다" when flipped (not "???").
+- **"이 단어는 선 넘었지" button:** 30s countdown; hides after 30s.
+- **Card color:** Gold/amber gradient (distinct from purple background).
+- **Text contrast:** White container; dark text for timer, 주제, hints.
+- **Time extend/shorten:** "[Nickname]이(가) 시간을 [연장/단축]했다!" message.
+- **Vote status:** "투표중" / "투표완료" tags.
+- **Argument stage:** Larger 사면/처형 buttons; timer visible to all.
+- **사형수 exclusion:** Cannot choose 사면/처형; excluded from voter count even if self-voted.
+- **Immediate execution:** Transition when threshold reached (no wait for all voters).
+- **사면/처형 thresholds:** 사면 ≥ half; 처형 > half (exclusive).
+- **Liar guess timer:** Visible countdown.
+- **Result messages:** Scenario A/B/C/D shown correctly.
+
 ### v3.0.0 (March 2026) - Offline Party Mini-Game Platform
 - **Vision:** Evolved from single matching game to multi-game platform (오프라인 술자리 미니게임 플랫폼).
 - **Liar Game:** New social deduction game (라이어 게임 / 단어 마피아) – rules and fun elements documented.
@@ -305,7 +321,7 @@ Full details in `api/API_ROUTES.md`.
 
 ## 🎯 For Next Session
 
-- **v3.0.0** Steps 1–3 done. Next: Step 4 (Liar Game – 6 State Flow).
+- **v3.0.1** Liar Game 14 fixes deployed. Platform stable.
 - **Doc update trigger:** When context >85% or at session end, say: *"Read UPDATE_DOCS.md and update all documentation"*
 
 ---
