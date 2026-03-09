@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-export function LiarWordInput({ attenders, submittedCount, userRole, onSubmit, setError, isLoading, setIsLoading }) {
+export function LiarWordInput({ attenders, submittedCount, notSubmittedNames = [], userRole, onSubmit, setError, isLoading, setIsLoading }) {
   const [word, setWord] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
@@ -20,10 +20,22 @@ export function LiarWordInput({ attenders, submittedCount, userRole, onSubmit, s
   };
 
   if (userRole === 'observer') return <p>참가자가 단어를 입력하는 중입니다...</p>;
-  if (submitted) return <p>제출 완료! 다른 참가자를 기다리는 중... ({submittedCount}/{attenders.length})</p>;
+  if (submitted) {
+    return (
+      <div className="liar-word-input">
+        <p>제출 완료! 다른 참가자를 기다리는 중... ({submittedCount}/{attenders.length})</p>
+        {notSubmittedNames.length > 0 && (
+          <p className="liar-pending-list">아직 외치지 않은 사람들: {notSubmittedNames.join(', ')}</p>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="liar-word-input">
       <p>주제에 맞는 단어를 입력하세요 (최대 16자)</p>
+      {notSubmittedNames.length > 0 && (
+        <p className="liar-pending-list">아직 외치지 않은 사람들: {notSubmittedNames.join(', ')}</p>
+      )}
       <input
         value={word}
         onChange={(e) => setWord(e.target.value.slice(0, 16))}
@@ -35,12 +47,16 @@ export function LiarWordInput({ attenders, submittedCount, userRole, onSubmit, s
   );
 }
 
+const DIFFICULT_WORD_WINDOW_MS = 30 * 1000;
+
 export function LiarPlay({
   attenders,
   amILiar,
   liarMyWord,
   mainTimerEndsAt,
+  playStartedAt,
   extendedBy,
+  lastTimeChange,
   onExtendTime,
   onDifficultWord,
   onStartVote,
@@ -50,6 +66,7 @@ export function LiarPlay({
 }) {
   const [cardFlipped, setCardFlipped] = useState(false);
   const [timeLeft, setTimeLeft] = useState(null);
+  const [difficultWordTimeLeft, setDifficultWordTimeLeft] = useState(null);
 
   useEffect(() => {
     if (!mainTimerEndsAt) return;
@@ -59,8 +76,18 @@ export function LiarPlay({
     return () => clearInterval(id);
   }, [mainTimerEndsAt]);
 
+  useEffect(() => {
+    if (!playStartedAt) return;
+    const endsAt = playStartedAt + DIFFICULT_WORD_WINDOW_MS;
+    const tick = () => setDifficultWordTimeLeft(Math.max(0, Math.ceil((endsAt - Date.now()) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [playStartedAt]);
+
   const usedExtend = Array.isArray(extendedBy) && extendedBy.includes(userId);
   const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const difficultWordExpired = difficultWordTimeLeft !== null && difficultWordTimeLeft <= 0;
 
   return (
     <div className="liar-play">
@@ -74,15 +101,25 @@ export function LiarPlay({
         onMouseLeave={() => setCardFlipped(false)}
         style={{ userSelect: 'none', WebkitTouchCallout: 'none' }}
       >
-        {cardFlipped ? (amILiar ? '???' : (liarMyWord || '?')) : '?'}
+        {cardFlipped
+          ? (amILiar ? '당신은 라이어입니다' : (liarMyWord || '?'))
+          : '?'}
       </div>
       <p className="liar-role-hint">
-        {amILiar ? '당신은 라이어입니다. 단어를 맞혀보세요!' : '카드를 눌러 단어를 확인하세요'}
+        {amILiar ? '단어를 맞혀보세요!' : '카드를 눌러 단어를 확인하세요'}
       </p>
-      {!amILiar && (
-        <button className="liar-difficult-btn" onClick={onDifficultWord}>
-          이 단어는 선 넘었지
-        </button>
+      {!amILiar && !difficultWordExpired && (
+        <div className="liar-difficult-row">
+          <button className="liar-difficult-btn" onClick={onDifficultWord}>
+            이 단어는 선 넘었지
+          </button>
+          <span className="liar-difficult-timer">{difficultWordTimeLeft !== null ? `${difficultWordTimeLeft}초` : '30'}</span>
+        </div>
+      )}
+      {lastTimeChange && (
+        <p className="liar-time-change-msg">
+          {lastTimeChange.nickname}이(가) 시간을 {lastTimeChange.action === 'extend' ? '연장' : '단축'}했다!
+        </p>
       )}
       {!usedExtend ? (
         <div className="liar-time-buttons">
@@ -104,9 +141,13 @@ export function LiarVote({ attenders, votes, tieTargets, onVote, userId, setErro
     ? attenders.filter((u) => tieTargets.includes(u.id))
     : attenders;
   const myVote = votes && votes[userId];
+  const voted = !!myVote;
 
   return (
     <div className="liar-vote">
+      <span className={`liar-vote-status ${voted ? 'voted' : ''}`}>
+        {voted ? '투표완료' : '투표중'}
+      </span>
       <p>
         {tieTargets?.length ? '동점! 아래 중에서 다시 투표하세요' : '라이어라고 생각하는 사람에게 투표하세요'}
       </p>
@@ -146,25 +187,31 @@ export function LiarArgument({
 
   const condemned = attenders.find((u) => u.id === condemnedUserId);
   const myChoice = choices && choices[userId];
+  const amICondemned = userId === condemnedUserId;
+  const canChoose = iVotedCondemned && !amICondemned;
 
-  if (!iVotedCondemned) {
+  const timerDisplay = timeLeft !== null ? `${timeLeft}초` : '--';
+
+  if (!canChoose) {
     return (
-      <p>
-        사형수를 지목한 사람들이 사면/처형을 결정합니다... ({timeLeft !== null ? `${timeLeft}초` : ''})
-      </p>
+      <div className="liar-argument-wait">
+        <p>사형수를 지목한 사람들이 사면/처형을 결정합니다...</p>
+        <div className="liar-argument-timer">{timerDisplay}</div>
+      </div>
     );
   }
 
   return (
     <div className="liar-argument">
+      <div className="liar-argument-timer">{timerDisplay}</div>
       <p>사형수: {condemned?.displayName || condemned?.nickname}</p>
       <p>사면하면 재투표, 처형하면 최종 발표로</p>
       {myChoice ? (
         <p>선택: {myChoice === 'forgive' ? '사면' : '처형'}</p>
       ) : (
-        <div>
-          <button onClick={() => onForgiveExecute('forgive')}>사면</button>
-          <button onClick={() => onForgiveExecute('execute')}>처형</button>
+        <div className="liar-forgive-execute-buttons">
+          <button className="liar-forgive-btn" onClick={() => onForgiveExecute('forgive')}>사면</button>
+          <button className="liar-execute-btn" onClick={() => onForgiveExecute('execute')}>처형</button>
         </div>
       )}
     </div>
@@ -186,7 +233,16 @@ export function LiarIdentify({
   setError
 }) {
   const [guess, setGuess] = useState('');
+  const [guessTimeLeft, setGuessTimeLeft] = useState(null);
   const myIdentifyVote = identifyVotes && identifyVotes[userId];
+
+  useEffect(() => {
+    if (!guessEndsAt || !canGuess) return;
+    const tick = () => setGuessTimeLeft(Math.max(0, Math.ceil((guessEndsAt - Date.now()) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [guessEndsAt, canGuess]);
 
   if (!condemnedIsLiar) {
     const sec = identifyEndsAt ? Math.max(0, Math.ceil((identifyEndsAt - Date.now()) / 1000)) : 10;
@@ -198,9 +254,11 @@ export function LiarIdentify({
   }
 
   if (canGuess) {
+    const timerDisplay = guessTimeLeft !== null ? `${guessTimeLeft}초` : '30';
     return (
       <div className="liar-guess">
-        <p>단어를 맞혀보세요! (30초)</p>
+        <div className="liar-guess-timer">{timerDisplay}</div>
+        <p>단어를 맞혀보세요!</p>
         <input
           value={guess}
           onChange={(e) => setGuess(e.target.value)}
@@ -232,16 +290,18 @@ export function LiarIdentify({
 
 export function LiarResult({ scenario, data, onReturnToWaiting, onLeave }) {
   const msgs = {
-    A: `라이어 승리! "${data.secretWord || ''}" 맞췄습니다. ${data.liarNickname || '라이어'} 🎭`,
-    B: `일반인 승리! 라이어가 "${data.guessedWord || ''}"로 틀렸습니다. 정답: "${data.secretWord || ''}"`,
-    C: `라이어 승리! 사형수 ${data.condemnedNickname || ''}는 라이어가 아니었습니다. 정답: "${data.secretWord || ''}"`,
-    D: `"이 단어는 선 넘었지"로 종료. 라이어: ${data.liarNickname || ''}, 정답: ${data.secretWord || ''}`
+    A: `라이어 승리! "${data?.secretWord || ''}" 맞췄습니다. ${data?.liarNickname || '라이어'} 🎭`,
+    B: `일반인 승리! 라이어가 "${data?.guessedWord || ''}"로 틀렸습니다. 정답: "${data?.secretWord || ''}"`,
+    C: `라이어 승리! 사형수 ${data?.condemnedNickname || ''}는 라이어가 아니었습니다. 정답: "${data?.secretWord || ''}"`,
+    D: `"이 단어는 선 넘었지"로 종료. 라이어: ${data?.liarNickname || ''}, 정답: ${data?.secretWord || ''}`
   };
+  const scenarioKey = scenario && String(scenario).toUpperCase();
+  const msg = msgs[scenarioKey] || '게임 종료';
 
   return (
     <div className="liar-result">
       <h3>게임 결과</h3>
-      <p>{msgs[scenario] || '게임 종료'}</p>
+      <p className="liar-result-msg">{msg}</p>
       <div className="result-actions">
         <button className="return-to-waiting-button" onClick={onReturnToWaiting}>
           대기실로 돌아가기

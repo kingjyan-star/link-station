@@ -102,6 +102,7 @@ function App() {
   const pollWaitingRoomStatusRef = useRef(null);
   const pollRoomStatusRef = useRef(null);
   const prevLiarGameStateRef = useRef(null); // For sound on liar state change
+  const liarCustomSubjectInputFocusedRef = useRef(false); // Prevent poll from overwriting while typing
   const unloadRef = useRef({ username: '', roomId: '', userId: '' });
 
   // Keep unloadRef in sync so tab-close beacon sends current session
@@ -624,7 +625,9 @@ function App() {
         setGameType(data.room.gameType || 'telepathy');
         setLiarSubject(data.room.liarSubject || '물건');
         setLiarMethod(data.room.liarMethod || '커스텀');
-        setLiarCustomSubject(data.room.liarCustomSubject || '');
+        if (!liarCustomSubjectInputFocusedRef.current) {
+          setLiarCustomSubject(data.room.liarCustomSubject || '');
+        }
         setRoomData(data.room);
         if (data.liarMyWord !== undefined) setLiarMyWord(data.liarMyWord);
         
@@ -762,7 +765,9 @@ function App() {
         setGameType(data.room.gameType || 'telepathy');
         setLiarSubject(data.room.liarSubject || '물건');
         setLiarMethod(data.room.liarMethod || '커스텀');
-        setLiarCustomSubject(data.room.liarCustomSubject || '');
+        if (!liarCustomSubjectInputFocusedRef.current) {
+          setLiarCustomSubject(data.room.liarCustomSubject || '');
+        }
 
         // Check if game started
         if (data.room.gameState === 'linking') {
@@ -2397,7 +2402,11 @@ function App() {
                     type="text"
                     value={liarCustomSubject}
                     onChange={(e) => setLiarCustomSubject(e.target.value.slice(0, 16))}
-                    onBlur={(e) => handleSetLiarSettings('커스텀주제', '커스텀', e.target.value.trim().slice(0, 16))}
+                    onFocus={() => { liarCustomSubjectInputFocusedRef.current = true; }}
+                    onBlur={(e) => {
+                      liarCustomSubjectInputFocusedRef.current = false;
+                      handleSetLiarSettings('커스텀주제', '커스텀', e.target.value.trim().slice(0, 16));
+                    }}
                     placeholder="주제를 입력하세요"
                     maxLength={16}
                   />
@@ -2482,6 +2491,10 @@ function App() {
     const submittedCount = (gs === 'liarWordInput' || rd.liarState === 'wordInput')
       ? (rd.liarSubmittedCount ?? 0)
       : (rd.liarUserWords ? Object.keys(rd.liarUserWords).length : 0);
+    const submittedUserIds = rd.liarSubmittedUserIds || [];
+    const notSubmittedNames = attenders
+      .filter((a) => !submittedUserIds.includes(a.id))
+      .map((a) => a.displayName || a.nickname);
     const votersOfCondemned = rd.liarCondemnedUserId && rd.liarVotes
       ? Object.entries(rd.liarVotes).filter(([, tid]) => tid === rd.liarCondemnedUserId).map(([uid]) => uid)
       : [];
@@ -2500,6 +2513,7 @@ function App() {
           <LiarWordInput
             attenders={attenders}
             submittedCount={submittedCount}
+            notSubmittedNames={notSubmittedNames}
             userRole={userRole}
             onSubmit={handleLiarSubmitWord}
             setError={setError}
@@ -2514,7 +2528,9 @@ function App() {
             amILiar={amILiar}
             liarMyWord={liarMyWord}
             mainTimerEndsAt={rd.liarMainTimerEndsAt}
+            playStartedAt={rd.liarPlayStartedAt}
             extendedBy={rd.liarMainTimerExtendedBy || []}
+            lastTimeChange={rd.liarLastTimeChange}
             onExtendTime={handleLiarExtendTime}
             onDifficultWord={handleLiarDifficultWord}
             onStartVote={handleLiarStartVote}

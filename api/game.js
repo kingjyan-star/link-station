@@ -779,6 +779,7 @@ app.post('/api/start-game', async (req, res) => {
       room.liarSecretWord = word || '비밀';
       room.liarLiarUserId = attenders[Math.floor(Math.random() * attenders.length)].id;
       room.liarState = 'play';
+      room.liarPlayStartedAt = Date.now();
       const minutes = attenders.length * 2;
       room.liarMainTimerEndsAt = Date.now() + minutes * 60 * 1000;
     } else {
@@ -1250,6 +1251,7 @@ app.post('/api/return-to-waiting', async (req, res) => {
       room.liarIdentifyEndsAt = null;
       room.liarMainTimerEndsAt = null;
       room.liarMainTimerExtendedBy = null;
+      room.liarLastTimeChange = null;
       room.liarDifficultClicks = null;
       room.liarAbortedByDifficult = null;
       room.liarResultScenario = null;
@@ -1389,6 +1391,7 @@ app.get('/api/room/:roomId', async (req, res) => {
       roomPayload.liarSecretWord = null; // Never send to client (only reveal per-user in play/result)
       if (room.liarState === 'wordInput') {
         roomPayload.liarSubmittedCount = room.liarUserWords ? room.liarUserWords.size : 0;
+        roomPayload.liarSubmittedUserIds = room.liarUserWords ? Array.from(room.liarUserWords.keys()) : [];
       } else {
         roomPayload.liarUserWords = room.liarUserWords ? Object.fromEntries(room.liarUserWords) : {};
       }
@@ -1399,7 +1402,9 @@ app.get('/api/room/:roomId', async (req, res) => {
       roomPayload.liarIdentifyVotes = room.liarIdentifyVotes ? Object.fromEntries(room.liarIdentifyVotes) : {};
       roomPayload.liarGuessedWord = room.liarGuessedWord || null;
       roomPayload.liarMainTimerEndsAt = room.liarMainTimerEndsAt || null;
+      roomPayload.liarPlayStartedAt = room.liarPlayStartedAt || null;
       roomPayload.liarMainTimerExtendedBy = room.liarMainTimerExtendedBy ? Array.from(room.liarMainTimerExtendedBy) : [];
+      roomPayload.liarLastTimeChange = room.liarLastTimeChange || null;
       roomPayload.liarDifficultClicks = room.liarDifficultClicks ? Array.from(room.liarDifficultClicks) : [];
       roomPayload.liarAbortedByDifficult = room.liarAbortedByDifficult || false;
       roomPayload.liarResultScenario = room.liarResultScenario || null;
@@ -1560,6 +1565,7 @@ app.post('/api/liar-submit-word', async (req, res) => {
     }
     room.liarState = 'play';
     room.gameState = 'liarPlay';
+    room.liarPlayStartedAt = Date.now();
     const minutes = attenders.length * 2;
     room.liarMainTimerEndsAt = Date.now() + minutes * 60 * 1000;
     room.liarMainTimerExtendedBy = room.liarMainTimerExtendedBy || new Set();
@@ -1579,9 +1585,12 @@ app.post('/api/liar-extend-time', async (req, res) => {
   if (room.liarMainTimerExtendedBy.has(userId)) {
     return res.status(400).json({ success: false, message: '이미 시간을 조절했습니다.' });
   }
+  const user = room.users.get(userId);
+  const nickname = user?.displayName || user?.nickname || '누군가';
   room.liarMainTimerExtendedBy.add(userId);
   const delta = action === 'extend' ? 60 * 1000 : -60 * 1000;
   room.liarMainTimerEndsAt = Math.max(Date.now() + 5000, (room.liarMainTimerEndsAt || Date.now()) + delta);
+  room.liarLastTimeChange = { userId, action, nickname };
   room.lastActivity = Date.now();
   await storage.saveRoom(room);
   res.json({ success: true });
@@ -1686,14 +1695,18 @@ app.post('/api/liar-forgive-execute', async (req, res) => {
     return res.status(400).json({ success: false, message: '잘못된 요청입니다.' });
   }
   if (!['forgive', 'execute'].includes(choice)) return res.status(400).json({ success: false });
-  const voters = Array.from(room.liarVotes.entries()).filter(([, tid]) => tid === room.liarCondemnedUserId).map(([uid]) => uid);
+  if (userId === room.liarCondemnedUserId) return res.status(403).json({ success: false, message: '사형수는 사면/처형을 선택할 수 없습니다.' });
+  const allVotersOfCondemned = Array.from(room.liarVotes.entries()).filter(([, tid]) => tid === room.liarCondemnedUserId).map(([uid]) => uid);
+  const voters = allVotersOfCondemned.filter((uid) => uid !== room.liarCondemnedUserId);
   if (!voters.includes(userId)) return res.status(403).json({ success: false, message: '투표한 사람만 선택할 수 있습니다.' });
   room.liarArgumentChoices.set(userId, choice);
   room.lastActivity = Date.now();
-  const votersWhoChose = room.liarArgumentChoices.size;
-  if (votersWhoChose === voters.length) {
-    const forgives = Array.from(room.liarArgumentChoices.values()).filter(c => c === 'forgive').length;
-    if (forgives >= Math.ceil(voters.length / 2)) {
+  const forgivesThresh = Math.ceil(voters.length / 2);
+  const executesThresh = Math.floor(voters.length / 2) + 1;
+  const forgives = voters.filter((uid) => room.liarArgumentChoices.get(uid) === 'forgive').length;
+  const executes = voters.filter((uid) => room.liarArgumentChoices.get(uid) === 'execute').length;
+  if (voters.length > 0 && (forgives >= forgivesThresh || executes >= executesThresh)) {
+    if (forgives >= forgivesThresh) {
       room.liarCondemnedUserId = null;
       room.liarState = 'vote';
       room.gameState = 'liarVote';
