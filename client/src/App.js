@@ -25,8 +25,8 @@ import {
 import { playStateChange, playPhaseAdvance, playResult } from './shared/sound/playSound.js';
 
 function App() {
-  // VERSION: Session 20 - 2026-03-10 (check console to verify deployment)
-  const VERSION = 'v3.0.5';
+  // VERSION: Session 21 - 2026-03-10 (check console to verify deployment)
+  const VERSION = 'v3.0.6';
   console.log(`🔗 Link Station ${VERSION} loaded`);
 
   // Glitches: random count (9–16) and positions per tab load
@@ -835,7 +835,7 @@ function App() {
       if (pollWaitingRoomStatusRef.current) {
         pollWaitingRoomStatusRef.current();
       }
-    }, 500); // 500ms - faster sync when new users join (fixes 4+ user visibility)
+    }, 1500); // 1.5s - balance sync speed vs Vercel usage (was 500ms)
   }, [roomId]); // Include roomId to restart polling when room changes
 
   const stopPolling = () => {
@@ -963,15 +963,15 @@ function App() {
     if (!name || name.trim() === '') {
       return { valid: false, message: '방 이름을 입력해주세요.' };
     }
-    if (name.length > 128) {
-      return { valid: false, message: '방 이름은 128자 이하여야 합니다.' };
+    if (name.length > 16) {
+      return { valid: false, message: '방 이름은 16자 이하여야 합니다.' };
     }
     return { valid: true };
   };
 
   const validatePassword = (password) => {
-    if (password && password.length > 16) {
-      return { valid: false, message: '비밀번호는 16자 이하여야 합니다.' };
+    if (password && password.length > 8) {
+      return { valid: false, message: '비밀번호는 8자 이하여야 합니다.' };
     }
     return { valid: true };
   };
@@ -1225,7 +1225,7 @@ function App() {
       setError(validation.message);
       return;
     }
-    if (username.trim().toLowerCase() === 'link-station-admin') {
+    if (username.trim().toLowerCase() === 'lsta-gm') {
       setError('관리자 전용 이름입니다. 다른 이름을 사용해주세요.');
       return;
     }
@@ -2832,6 +2832,7 @@ function App() {
           />
         ))}
       </div>
+      <div className="app-content">
       <div className="app-version-badge">{VERSION}</div>
       {error && <div className="error-message">{error}</div>}
       {success && <div className="success-message">{success}</div>}
@@ -3041,6 +3042,7 @@ function App() {
           </div>
         </div>
       )}
+      </div>
       </div>
   );
 }

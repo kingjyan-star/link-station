@@ -9,7 +9,7 @@
 
 - Username registration and availability check.
 - Shutdown status check before entry.
-- Route to admin flow when username is `link-station-admin`.
+- Route to admin flow when username is `lsta-gm`.
 - Session recovery on duplicate-username (if session exists).
 
 ---

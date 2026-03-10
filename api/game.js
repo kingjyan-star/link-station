@@ -7,7 +7,7 @@ app.use(express.json());
 const storage = require('./storage');
 const { getRandomWord } = require('./liarWords');
 
-const ADMIN_USERNAME = 'link-station-admin';
+const ADMIN_USERNAME = 'lsta-gm';
 
 // ============================================================================
 // ⏰ TIMEOUT & ALARM CONFIGURATION
@@ -253,7 +253,12 @@ app.post('/api/create-room', async (req, res) => {
   if (!roomName || roomName.trim() === '') {
     return res.status(400).json({ success: false, message: '방 이름을 입력해주세요.' });
   }
-  
+  if (roomName.trim().length > 16) {
+    return res.status(400).json({ success: false, message: '방 이름은 16자 이하여야 합니다.' });
+  }
+  if (roomPassword && roomPassword.length > 8) {
+    return res.status(400).json({ success: false, message: '비밀번호는 8자 이하여야 합니다.' });
+  }
   if (memberLimit < 2 || memberLimit > 99) {
     return res.status(400).json({ success: false, message: '최대 인원은 2-99명 사이여야 합니다.' });
   }

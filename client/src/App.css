@@ -61,6 +61,16 @@ body {
   padding: 20px;
 }
 
+/* Content above glitches - game containers cover glitches, glitches only visible in dark app background */
+.app-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
 /* Container styles */
 .register-name-container,
 .make-or-join-container,
@@ -408,7 +418,7 @@ body {
 }
 .users-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 15px;
 }
 
@@ -462,6 +472,10 @@ body {
   font-weight: 600;
   color: #4a5568;
   font-size: 1.1rem;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .you-badge {
@@ -808,8 +822,17 @@ body {
   perspective: 1000px;
   cursor: pointer;
   user-select: none;
+  -webkit-user-select: none;
   -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-drag: none;
   touch-action: manipulation;
+}
+.liar-card,
+.liar-card * {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 .liar-card-inner {
   width: 100%;
@@ -979,6 +1002,9 @@ body {
   border-color: #6ee7b7;
 }
 
+.liar-vote-pending-badge {
+  margin: 12px 0 0;
+}
 .liar-vote-list {
   display: flex;
   flex-wrap: wrap;

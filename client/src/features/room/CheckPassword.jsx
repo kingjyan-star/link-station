@@ -20,7 +20,7 @@ export function CheckPassword({
 
       <div className="checkpassword-form">
         <div className="input-group">
-          <label htmlFor="enteredPassword">방 비밀번호 (최대 16자)</label>
+          <label htmlFor="enteredPassword">방 비밀번호 (최대 8자)</label>
           <div className="password-input-wrapper">
             <input
               id="enteredPassword"
@@ -28,7 +28,7 @@ export function CheckPassword({
               value={enteredPassword}
               onChange={(e) => setEnteredPassword(e.target.value)}
               placeholder="비밀번호를 입력하세요"
-              maxLength={16}
+              maxLength={8}
             />
             <PasswordToggle visible={showPassword} onToggle={() => setShowPassword(!showPassword)} />
           </div>

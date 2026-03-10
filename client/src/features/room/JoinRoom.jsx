@@ -10,14 +10,14 @@ export function JoinRoom({ enteredRoomName, setEnteredRoomName, onSubmit, onCanc
 
       <div className="enterroom-form">
         <div className="input-group">
-          <label htmlFor="enteredRoomName">방 이름 (최대 128자)</label>
+          <label htmlFor="enteredRoomName">방 이름 (최대 16자)</label>
           <input
             id="enteredRoomName"
             type="text"
             value={enteredRoomName}
             onChange={(e) => setEnteredRoomName(e.target.value)}
             placeholder="방 이름을 입력하세요"
-            maxLength={128}
+            maxLength={16}
           />
         </div>
 

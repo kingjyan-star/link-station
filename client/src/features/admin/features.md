@@ -42,14 +42,14 @@ Key: admin-login, admin-status, admin-users, admin-rooms, admin-kick-user, admin
 - **Does NOT:** Handle normal game flow (rooms, linking, results).
 - **Does NOT:** Import from other feature folders (except shared).
 - **May import:** `shared/api`, `shared/ui`.
-- **Admin username:** `link-station-admin` — reserved, cannot be used for normal play.
+- **Admin username:** `lsta-gm` — reserved, cannot be used for normal play.
 
 ---
 
 ## Integration (App.js)
 
 - All `renderAdmin*()` functions render this slice.
-- Entry: `registerName` with username `link-station-admin` → `adminPassword`.
+- Entry: `registerName` with username `lsta-gm` → `adminPassword`.
 
 ---
 

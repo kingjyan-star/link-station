@@ -23,19 +23,19 @@ export function MakeRoom({
 
       <div className="makeroom-form">
         <div className="input-group">
-          <label htmlFor="roomName">방 이름 (최대 128자)</label>
+          <label htmlFor="roomName">방 이름 (최대 16자)</label>
           <input
             id="roomName"
             type="text"
             value={roomName}
             onChange={(e) => setRoomName(e.target.value)}
             placeholder="방 이름을 입력하세요"
-            maxLength={128}
+            maxLength={16}
           />
         </div>
 
         <div className="input-group">
-          <label htmlFor="roomPassword">방 비밀번호 (선택사항, 최대 16자)</label>
+          <label htmlFor="roomPassword">방 비밀번호 (선택사항, 최대 8자)</label>
           <div className="password-input-wrapper">
             <input
               id="roomPassword"
@@ -43,7 +43,7 @@ export function MakeRoom({
               value={roomPassword}
               onChange={(e) => setRoomPassword(e.target.value)}
               placeholder="비밀번호를 입력하세요 (선택사항)"
-              maxLength={16}
+              maxLength={8}
             />
             <PasswordToggle visible={showPassword} onToggle={() => setShowPassword(!showPassword)} />
           </div>

@@ -2,7 +2,7 @@
 
 **Live URL:** https://lsta.app  
 **Last Updated:** March 10, 2026  
-**Status:** ✅ v3.0.5 – Glitches vivid, room spacing, result mosaic staggered, line breaks, 투표한 사람 badge.
+**Status:** ✅ v3.0.6 – Polling 1.5s, glitches fix, limits (user 8, room 16, pwd 8), admin lsta-gm.
 
 ### Current work in progress
 
@@ -14,6 +14,7 @@
 
 | Version | Short description |
 |---------|-------------------|
+| v3.0.6 | Polling 1.5s, glitches fix, input limits, admin lsta-gm |
 | v3.0.5 | Glitches vivid, room spacing, result mosaic/line breaks, 투표한 사람 badge |
 | v3.0.4 | Liar UI: voting self highlight, MM:SS timer, result badge/mosaic/table |
 | v3.0.3 | UX: user cards, room capacity, Telepathy/Liar polish, result snapshot |
@@ -161,7 +162,7 @@ A **social deduction** game where all players except one (the **Liar**) receive 
 
 ### 1. **RegisterName State**
 - **Purpose**: Initial entry point for username registration
-- **Inputs**: Username (max 32 chars)
+- **Inputs**: Username (max 8 chars)
 - **Validation**: Blank check, duplication check
 - **Actions**: "계속하기" (Continue) → goes to MakeOrJoinRoom state
 - **VSA:** Extracted to `features/auth/RegisterName.jsx`
@@ -173,7 +174,7 @@ A **social deduction** game where all players except one (the **Liar**) receive 
 
 ### 3. **MakeRoom State**
 - **Purpose**: Create new room
-- **Inputs**: Room name (max 128), password (optional, max 16), member limit (2-99)
+- **Inputs**: Room name (max 16), password (optional, max 8), member limit (2-99)
 - **Success**: Redirects to WaitingRoom as master
 
 ### 4. **JoinRoom State**

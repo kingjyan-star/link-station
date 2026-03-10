@@ -10,14 +10,14 @@ export function JoinRoomWithQR({ username, setUsername, onSubmit, onCancel, isLo
 
       <div className="enterroomwithqr-form">
         <div className="input-group">
-          <label htmlFor="qrUsername">사용자 이름 (최대 32자)</label>
+          <label htmlFor="qrUsername">사용자 이름 (최대 8자)</label>
           <input
             id="qrUsername"
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="사용자 이름을 입력하세요"
-            maxLength={32}
+            maxLength={8}
           />
         </div>
 

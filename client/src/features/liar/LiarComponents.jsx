@@ -134,7 +134,8 @@ export function LiarPlay({
         onTouchEnd={() => setCardFlipped(false)}
         onMouseUp={() => setCardFlipped(false)}
         onMouseLeave={() => setCardFlipped(false)}
-        style={{ userSelect: 'none', WebkitTouchCallout: 'none' }}
+        onSelectStart={(e) => e.preventDefault()}
+        onDragStart={(e) => e.preventDefault()}
       >
         <div className="liar-card-inner">
           {cardFlipped ? (
@@ -191,6 +192,8 @@ export function LiarVote({ attenders, votes, tieTargets, onVote, userId, setErro
     : attenders;
   const myVote = votes && votes[userId];
   const voted = !!myVote;
+  const notVotedList = attenders.filter((u) => !votes || !(u.id in votes))
+    .map((u) => ({ id: u.id, name: u.displayName || u.nickname }));
 
   return (
     <div className="liar-vote">
@@ -200,6 +203,19 @@ export function LiarVote({ attenders, votes, tieTargets, onVote, userId, setErro
       <p className="liar-vote-header">
         {tieTargets?.length ? '동점! 아래 중에서 다시 투표하세요' : '당신의 라이어에 투표하세요'}
       </p>
+      {notVotedList.length > 0 && (
+        <div className="liar-pending-badge liar-vote-pending-badge">
+          <span className="liar-pending-label">아직 투표하지 않은 사람들</span>
+          <span className="liar-pending-names">
+            {notVotedList.map(({ id, name }, i) => (
+              <React.Fragment key={id}>
+                <span className={id === userId ? 'liar-pending-self' : ''}>{name}</span>
+                {i < notVotedList.length - 1 && ', '}
+              </React.Fragment>
+            ))}
+          </span>
+        </div>
+      )}
       <div className="liar-vote-list">
         {targets.map((u) => (
           <button
@@ -418,7 +434,7 @@ export function LiarResult({ scenario, data, liarMethod, attenders = [], votes =
   useEffect(() => {
     const timers = [];
     for (let i = 1; i < messages.length; i++) {
-      timers.push(setTimeout(() => setRevealedCount((c) => Math.max(c, i + 1)), i * 2000));
+      timers.push(setTimeout(() => setRevealedCount((c) => Math.max(c, i + 1)), i * 4000));
     }
     return () => timers.forEach(clearTimeout);
   }, [messages.length]);

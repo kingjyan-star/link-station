@@ -29,7 +29,7 @@ export function RegisterName({
     try {
       const shutdownResponse = await fetch(`${API_URL}/api/admin-shutdown-status`);
       const shutdownData = await shutdownResponse.json();
-      if (shutdownData.success && shutdownData.isShutdown && username !== 'link-station-admin') {
+      if (shutdownData.success && shutdownData.isShutdown && username !== 'lsta-gm') {
         setError('앱이 종료되어 게임을 할 수 없습니다.');
         return;
       }
@@ -43,7 +43,7 @@ export function RegisterName({
       return;
     }
 
-    if (username.trim().toLowerCase() === 'link-station-admin') {
+    if (username.trim().toLowerCase() === 'lsta-gm') {
       setCurrentState('adminPassword');
       setError('');
       return;
@@ -114,14 +114,14 @@ export function RegisterName({
 
       <div className="register-name-form">
         <div className="input-group">
-          <label htmlFor="username">사용자 이름 (최대 32자)</label>
+          <label htmlFor="username">사용자 이름 (최대 8자)</label>
           <input
             id="username"
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="사용자 이름을 입력하세요"
-            maxLength={32}
+            maxLength={8}
           />
         </div>
 
