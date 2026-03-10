@@ -2,7 +2,7 @@
 
 **Live URL:** https://lsta.app  
 **Last Updated:** March 10, 2026  
-**Status:** ✅ v3.0.6 – Polling 1.5s, glitches fix, limits (user 8, room 16, pwd 8), admin lsta-gm.
+**Status:** ✅ v3.0.7 – Mobile user grid multi-column; polling, limits, admin lsta-gm.
 
 ### Current work in progress
 
@@ -14,6 +14,7 @@
 
 | Version | Short description |
 |---------|-------------------|
+| v3.0.7 | Mobile user grid multi-column (was 1 per row) |
 | v3.0.6 | Polling 1.5s, glitches fix, input limits, admin lsta-gm |
 | v3.0.5 | Glitches vivid, room spacing, result mosaic/line breaks, 투표한 사람 badge |
 | v3.0.4 | Liar UI: voting self highlight, MM:SS timer, result badge/mosaic/table |
@@ -243,6 +244,17 @@ Full details in `api/API_ROUTES.md`.
 ---
 
 ## 🐛 Recent Sessions (Condensed)
+
+### v3.0.6–3.0.7 (March 2026) – Polling, Limits, Mobile
+- **Polling:** Waiting room 500ms → 1500ms (reduces Vercel Fluid usage).
+- **Glitches:** Content wrapper z-index so glitches stay behind game cards.
+- **Card touch:** Prevent mobile text-selection/drag overlay on Liar card flip.
+- **Liar vote:** "아직 투표하지 않은 사람들" badge, real-time.
+- **Result:** Mosaic 2s → 4s per sentence; click reveals one-by-one; line breaks at phrase boundaries.
+- **투표한 사람:** Badge styling in final argument.
+- **Input limits:** Username 32→8; room name 128→16; password 16→8. Admin ID: link-station-admin→lsta-gm.
+- **User box:** Narrower (minmax 200→130px); mobile grid was 1fr (1 per row) → minmax(100px,1fr) for 2–3 columns.
+- **Status:** RESOLVED
 
 ### Architecture Consolidation (March 2026)
 - **Focus:** 4-feature domain structure (user, room, telepathy, liar).

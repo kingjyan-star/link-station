@@ -3,7 +3,7 @@
 **오프라인 술자리 미니게임 플랫폼** – 친구들과 한 방에 모여 QR코드로 공유하고, 여러 미니게임을 즐기세요!
 
 **바로 체험하기:** https://lsta.app  
-**v3.0.6** – Polling 1.5s, glitches fix, input limits, admin lsta-gm
+**v3.0.7** – Mobile user grid multi-column
 
 ---
 

@@ -25,8 +25,8 @@ import {
 import { playStateChange, playPhaseAdvance, playResult } from './shared/sound/playSound.js';
 
 function App() {
-  // VERSION: Session 21 - 2026-03-10 (check console to verify deployment)
-  const VERSION = 'v3.0.6';
+  // VERSION: Session 22 - 2026-03-10 (check console to verify deployment)
+  const VERSION = 'v3.0.7';
   console.log(`🔗 Link Station ${VERSION} loaded`);
 
   // Glitches: random count (9–16) and positions per tab load
