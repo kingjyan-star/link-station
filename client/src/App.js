@@ -893,6 +893,41 @@ function App() {
     };
   }, [currentState]);
 
+  // Liar Play: Silent keep-alive every 1 min while Main Timer is running (CRITICAL: prevents zombie rooms)
+  useEffect(() => {
+    if (currentState !== 'liar' || !roomId || !username) return;
+    const rd = roomData || {};
+    const gs = rd.gameState;
+    const ls = rd.liarState || gs;
+    const mainTimerEndsAt = rd.liarMainTimerEndsAt;
+    const inPlay = gs === 'liarPlay' || ls === 'play';
+    if (!inPlay || !mainTimerEndsAt) return;
+
+    const ping = () => {
+      if (Date.now() >= mainTimerEndsAt) return; // Timer ended: stop pinging (fail-safe)
+      fetch(`${API_URL}/api/keep-alive-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username })
+      }).catch(() => {});
+      fetch(`${API_URL}/api/keep-alive-room`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId })
+      }).catch(() => {});
+    };
+
+    const id = setInterval(() => {
+      if (Date.now() >= mainTimerEndsAt) {
+        clearInterval(id);
+        return;
+      }
+      ping();
+    }, 60 * 1000);
+
+    return () => clearInterval(id);
+  }, [currentState, roomId, username, roomData?.gameState, roomData?.liarState, roomData?.liarMainTimerEndsAt]);
+
   // Validation functions
   const validateRoomName = (name) => {
     if (!name || name.trim() === '') {
@@ -2560,6 +2595,7 @@ function App() {
             argumentEndsAt={rd.liarArgumentEndsAt}
             onForgiveExecute={handleLiarForgiveExecute}
             userId={userId}
+            voterNames={votersOfCondemned.map(uid => attenders.find(a => a.id === uid)?.displayName || attenders.find(a => a.id === uid)?.nickname || '?')}
           />
         )}
 
@@ -2567,6 +2603,7 @@ function App() {
           <LiarIdentify
             attenders={attenders}
             amILiar={amILiar}
+            condemnedUserId={rd.liarCondemnedUserId}
             condemnedIsLiar={condemnedIsLiar}
             canGuess={canGuess}
             guessedWord={rd.liarGuessedWord}
@@ -2584,6 +2621,9 @@ function App() {
           <LiarResult
             scenario={rd.liarResultScenario}
             data={rd.liarResultData || {}}
+            liarMethod={rd.liarMethod || liarMethod || '커스텀'}
+            attenders={attenders}
+            votes={rd.liarVotes || {}}
             onReturnToWaiting={handleReturnToWaitingRoom}
             onLeave={handleLeaveRoom}
           />
