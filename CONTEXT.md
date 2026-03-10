@@ -2,34 +2,11 @@
 
 **Live URL:** https://lsta.app  
 **Last Updated:** March 10, 2026  
-**Status:** ✅ v3.0.4 – Liar UI: voting self highlight, MM:SS timer, result [라이어] badge, mosaic, 3-col table.
+**Status:** ✅ v3.0.5 – Glitches vivid, room spacing, result mosaic staggered, line breaks, 투표한 사람 badge.
 
 ### Current work in progress
 
-**Done:** Version badge (bottom-right); space black background + random glitches; game bg light grey, user box white; 4-feature architecture (user, room, telepathy, liar).
-
-**Remaining:**
-
-1. **Overall**
-   - [x] UI color adjustments for visibility (after background changes)
-   - [x] Message line spacing – make/join room, liar custom word input, etc. (distances too small)
-
-2. **Make room**
-   - [x] Capacity number: remove bold
-   - [x] Room capacity: remove up/down buttons beside textbox; remove spinner in textbox; add separate ▲/▼ arrows only (where spinner was)
-
-3. **In room**
-   - [x] Fix user count display: show "1/8" not "1/" (API: add roomName, memberLimit to room payload)
-   - [x] Remove "나" badge (user distinguished by UI)
-   - [x] "결과 확인중" user box: heavier grey
-   - [x] Remove "대기실" badge (distinguished by UI)
-
-4. **Liar game**
-   - [x] **Word input (custom):** "아직 외치지 않은 사람들" under textbox; badge-style box; delete ":"; self name bold + different color
-   - [x] **Debate:** On "이 단어는 선 넘었지" click → hide button and timer; message below card same as normal user
-   - [x] **Voting:** User self box distinguished (outline, color like room)
-   - [x] **Guessing:** Timer "00:00" format, not "00초"
-   - [x] **Result:** [라이어] emphasized; sentence wrapping; sentences in moving mosaic (2s or click); remove bullet below "투표 결과"; 3-column table (voted person | voters | count) with badges; self in voters bold+color; vote count bold
+*Empty – add tasks here when you ask the AI to do something. Delete content when all items are complete (section stays).*
 
 ---
 
@@ -37,6 +14,7 @@
 
 | Version | Short description |
 |---------|-------------------|
+| v3.0.5 | Glitches vivid, room spacing, result mosaic/line breaks, 투표한 사람 badge |
 | v3.0.4 | Liar UI: voting self highlight, MM:SS timer, result badge/mosaic/table |
 | v3.0.3 | UX: user cards, room capacity, Telepathy/Liar polish, result snapshot |
 | v3.0.2 | Liar spec messages, keep-alive pings, voter display |

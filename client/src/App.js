@@ -25,14 +25,14 @@ import {
 import { playStateChange, playPhaseAdvance, playResult } from './shared/sound/playSound.js';
 
 function App() {
-  // VERSION: Session 19 - 2026-03-10 (check console to verify deployment)
-  const VERSION = 'v3.0.4';
+  // VERSION: Session 20 - 2026-03-10 (check console to verify deployment)
+  const VERSION = 'v3.0.5';
   console.log(`🔗 Link Station ${VERSION} loaded`);
 
   // Glitches: random count (9–16) and positions per tab load
   const [stars] = useState(() => {
     const COUNT = 9 + Math.floor(Math.random() * 8);
-    const COLORS = ['#e8f4fc', '#fffde7', '#ffe4ec', '#b8e6ff', '#ffffff', '#fffacd', '#ffd6e8', '#d4eeff', '#fff8dc', '#e0f4ff', '#ffeef5', '#f0f9ff', '#fff5ee', '#c8f0ff', '#ffe0eb'];
+    const COLORS = ['#7dd3fc', '#a78bfa', '#f472b6', '#34d399', '#fbbf24', '#fb923c', '#60a5fa', '#c084fc', '#2dd4bf', '#f59e0b', '#ec4899', '#22d3ee'];
     return Array.from({ length: COUNT }, (_, i) => ({
       id: i,
       left: 5 + Math.random() * 88,

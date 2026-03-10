@@ -28,13 +28,13 @@ Update docs when making significant changes. **There is no automatic update**—
 
 **During work** – record in-progress updates in documentation (e.g. CONTEXT.md "Current work in progress" section) so context is not lost across turns or context limits.
 
-**As soon as work is cleared** – delete that "Current work in progress" content. Do not leave stale in-progress items. This prevents confusion and token overuse.
+**As soon as work is cleared** – delete the content of "Current work in progress" (the checklist items). **The section itself stays** – leave a placeholder like *Empty – add tasks when starting new work.* Do not leave stale in-progress items.
 
 | When | Action |
 |------|--------|
 | Starting/fixing something | Add to "Current work in progress" in CONTEXT.md |
-| Task completed | Remove from "Current work in progress" immediately |
-| Session end | Clear or archive; do not leave dangling items |
+| Task completed | Remove completed items from "Current work in progress"; when all done, clear content and leave placeholder |
+| Session end | Clear content if all done; do not leave dangling items |
 
 ---
 

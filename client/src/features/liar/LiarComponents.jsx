@@ -247,7 +247,7 @@ export function LiarArgument({
       <div className="liar-argument-wait">
         <p>사형수를 지목한 사람들이 사면/처형을 결정합니다...</p>
         {voterNames.length > 0 && (
-          <p className="liar-argument-voters">투표한 사람: {voterNames.join(', ')}</p>
+          <span className="liar-argument-voters-badge">투표한 사람: {voterNames.join(', ')}</span>
         )}
         <div className="liar-argument-timer">{timerDisplay}</div>
       </div>
@@ -260,7 +260,7 @@ export function LiarArgument({
       <p className="liar-argument-header">사형수: {condemned?.displayName || condemned?.nickname}</p>
       <p>최후의 변론</p>
       {voterNames.length > 0 && (
-        <p className="liar-argument-voters">투표한 사람: {voterNames.join(', ')}</p>
+        <span className="liar-argument-voters-badge">투표한 사람: {voterNames.join(', ')}</span>
       )}
       {myChoice ? (
         <p>선택: {myChoice === 'forgive' ? '사면하기' : '처형하기'}</p>
@@ -369,11 +369,7 @@ export function LiarIdentify({
 }
 
 export function LiarResult({ scenario, data, liarMethod, attenders = [], votes = {}, userId, liarId, onReturnToWaiting, onLeave }) {
-  const [mosaicRevealed, setMosaicRevealed] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setMosaicRevealed(true), 2000);
-    return () => clearTimeout(t);
-  }, []);
+  const [revealedCount, setRevealedCount] = useState(1);
   const liar = data?.liarNickname || '라이어';
   const word = data?.secretWord || '';
   const guessed = data?.guessedWord || '';
@@ -381,44 +377,51 @@ export function LiarResult({ scenario, data, liarMethod, attenders = [], votes =
   const condemned = data?.condemnedNickname || '';
   const author = data?.wordAuthorNickname || '';
 
-  const liarBadge = <span className="liar-result-liar-badge">[라이어]</span>;
   const scenarioKey = scenario && String(scenario).toUpperCase();
   let messages = [];
   if (scenarioKey === 'A') {
     messages = [
-      <>{liarBadge} {liar}이(가) 비밀 단어를 읊조리자 강력한 힘이 샘솟으며 벌떡 일어났습니다.</>,
-      <>{liarBadge} {liar}은(는) <span className="liar-result-highlight">&quot;{word}&quot;</span>을(를) 연신 외치며 마을 주민들을 모두 학살했습니다!</>
+      <>{liar}이(가) 비밀 단어를 읊조리자<br />강력한 힘이 샘솟으며 벌떡 일어났습니다.</>,
+      <>{liar}은(는) <span className="liar-result-highlight">&quot;{word}&quot;</span>을(를) 연신 외치며<br />마을 주민들을 모두 학살했습니다!</>
     ];
   } else if (scenarioKey === 'B') {
     const firstMsg = liarNoGuess
-      ? <>{liarBadge} {liar}은(는) 아무 말도 하지 못했습니다..</>
-      : <>{liarBadge} {liar}은(는) <span className="liar-result-highlight">&quot;{guessed}&quot;</span>(이)라고 읊조리며 생명을 다했습니다..</>;
+      ? <>{liar}은(는) 아무 말도 하지 못했습니다..</>
+      : <>{liar}은(는) <span className="liar-result-highlight">&quot;{guessed}&quot;</span>(이)라고 읊조리며<br />생명을 다했습니다..</>;
     messages = [
       firstMsg,
-      <>마을주민들은 <span className="liar-result-highlight">&quot;{word}&quot;</span>을(를) 연신 외치며 {liarBadge} {liar}을(를) 비웃었습니다 &gt;_&lt;</>
+      <>마을주민들은 <span className="liar-result-highlight">&quot;{word}&quot;</span>을(를) 연신 외치며<br />{liar}을(를) 비웃었습니다 &gt;_&lt;</>
     ];
   } else if (scenarioKey === 'C') {
     messages = [
-      <>{liarBadge} {liar}이(가) 음흉한 미소를 지으며 쓰러진 {condemned} 주머니를 뒤적거립니다.</>,
-      <>{liarBadge} {liar}는 주머니 속 쪽지에 쓰여진 <span className="liar-result-highlight">&quot;{word}&quot;</span>를 읊조리며 강력한 힘을 얻었습니다</>,
-      <>{liarBadge} {liar}은(는) <span className="liar-result-highlight">&quot;{word}&quot;</span>을(를) 연신 외치며 마을 주민들을 모두 학살했습니다!</>
+      <>라이어 {liar}이(가) 음흉한 미소를 지으며<br />쓰러진 {condemned} 주머니를 뒤적거립니다.</>,
+      <>{liar}는 주머니 속 쪽지에 쓰여진 <span className="liar-result-highlight">&quot;{word}&quot;</span>를 읊조리며<br />강력한 힘을 얻었습니다</>,
+      <>{liar}은(는) <span className="liar-result-highlight">&quot;{word}&quot;</span>을(를) 연신 외치며<br />마을 주민들을 모두 학살했습니다!</>
     ];
   } else if (scenarioKey === 'D') {
     if (liarMethod === '랜덤') {
       messages = [
         <>비밀 단어는 <span className="liar-result-highlight">&quot;{word}&quot;</span>였습니다.</>,
-        <>{liarBadge} {liar}은(는) 어이없는 표정을 지으며 안도했습니다..</>
+        <><span className="liar-result-liar-name">{liar}</span>은(는) 어이없는 표정을 지으며<br />안도했습니다..</>
       ];
     } else {
       messages = [
-        <>비밀 단어는 {author}이(가) 창조한 <span className="liar-result-highlight">&quot;{word}&quot;</span>였습니다.</>,
-        <>마을주민들은 고개를 저으며 {author}을(를) 손가락질했습니다!</>,
-        <>{liarBadge} {liar}은(는) 어이없는 표정을 지으며 안도했습니다..</>
+        <>비밀 단어는 {author}이(가) 창조한<br /><span className="liar-result-highlight">&quot;{word}&quot;</span>였습니다.</>,
+        <>마을주민들은 고개를 저으며<br />{author}을(를) 손가락질했습니다!</>,
+        <><span className="liar-result-liar-name">{liar}</span>은(는) 어이없는 표정을 지으며<br />안도했습니다..</>
       ];
     }
   } else {
     messages = [<>게임 종료</>];
   }
+
+  useEffect(() => {
+    const timers = [];
+    for (let i = 1; i < messages.length; i++) {
+      timers.push(setTimeout(() => setRevealedCount((c) => Math.max(c, i + 1)), i * 2000));
+    }
+    return () => timers.forEach(clearTimeout);
+  }, [messages.length]);
 
   // Result Status: use snapshot from result time (like Telepathy matchResult) so names persist when users leave
   const snapshot = data?.voteRankingSnapshot;
@@ -450,27 +453,20 @@ export function LiarResult({ scenario, data, liarMethod, attenders = [], votes =
     <div className="liar-result">
       <h3>게임 결과</h3>
       <div
-        className={`liar-result-msgs ${mosaicRevealed ? '' : 'liar-result-msgs-mosaic'}`}
-        onClick={() => setMosaicRevealed(true)}
+        className="liar-result-msgs"
+        onClick={() => setRevealedCount((c) => Math.min(c + 1, messages.length))}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => e.key === 'Enter' && setMosaicRevealed(true)}
+        onKeyDown={(e) => e.key === 'Enter' && setRevealedCount((c) => Math.min(c + 1, messages.length))}
       >
         {messages.map((msg, i) => (
-          <p key={i} className="liar-result-msg">{msg}</p>
+          <p key={i} className={`liar-result-msg ${i < revealedCount ? '' : 'liar-result-msg-mosaic'}`}>{msg}</p>
         ))}
       </div>
       {ranked.length > 0 && (
         <div className="liar-result-status">
           <h4>투표 결과</h4>
           <table className="liar-vote-table">
-            <thead>
-              <tr>
-                <th>투표받은 사람</th>
-                <th>투표한 사람</th>
-                <th>표</th>
-              </tr>
-            </thead>
             <tbody>
               {ranked.map((r) => {
                 const isLiar = r.id === liarId;
