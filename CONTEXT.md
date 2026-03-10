@@ -1,8 +1,23 @@
 # 🔗 Link Station - Complete Context
 
-**Live URL:** https://link-station-pro.vercel.app  
+**Live URL:** https://lsta.app  
 **Last Updated:** March 2026  
-**Status:** ✅ v3.0.1 – Liar Game 14 fixes deployed. Telepathy + Liar Game.
+**Status:** ✅ v3.0.2 – Liar spec messages, keep-alive pings, voter display deployed.
+
+### Current work in progress
+
+*(Leave empty when nothing in progress. Delete items as soon as cleared.)*
+
+---
+
+### Recent versions (for deploy decisions)
+
+| Version | Short description |
+|---------|-------------------|
+| v3.0.2 | Liar spec messages, keep-alive pings, voter display |
+| v3.0.1 | Liar Game 14 fixes, version/docs, API test script |
+| v3.0.0 | Offline Party Mini-Game Platform, Liar game added |
+| v2.0.5 | Return-to-waiting tag fix |
 
 ---
 
@@ -39,7 +54,7 @@ Vercel auto-deploys on push to main.
 
 ### Verify After Deploy
 
-1. Browser console → `🔗 Link Station v3.0.1 loaded`
+1. Browser console → `🔗 Link Station v3.0.2 loaded`
 2. Join room, press F5 → should stay in room
 3. 2+ users → all see each other immediately
 
@@ -59,14 +74,20 @@ Vercel auto-deploys on push to main.
 - **API not working:** Check `vercel.json` rewrites, `api/game.js` exports
 - **Build fails:** Check Node version, dependencies, Vercel logs
 
-### Local API + Tab-close reclaim test
+### Local API + Automated tests
 
 ```powershell
 # Terminal 1: API
 node dev-server.js
 
-# Terminal 2: Run API-level test
-node scripts/test-tab-close-reclaim.js
+# Terminal 2: Run API-level tests
+npm run test:tab-close   # Tab-close reclaim
+npm run test:liar        # Liar Game (3 users, full flow)
+```
+
+**Against live server:**
+```powershell
+BASE_URL=https://lsta.app npm run test:liar
 ```
 
 ---
@@ -321,7 +342,7 @@ Full details in `api/API_ROUTES.md`.
 
 ## 🎯 For Next Session
 
-- **v3.0.1** Liar Game 14 fixes deployed. Platform stable.
+- **v3.0.2** Liar spec messages, keep-alive, voter display deployed.
 - **Doc update trigger:** When context >85% or at session end, say: *"Read UPDATE_DOCS.md and update all documentation"*
 
 ---

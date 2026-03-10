@@ -19,7 +19,7 @@ import { playStateChange, playPhaseAdvance, playResult } from './shared/sound/pl
 
 function App() {
   // VERSION: Session 18 - 2026-01-25 (check console to verify deployment)
-  console.log('🔗 Link Station v3.0.1 loaded');
+  console.log('🔗 Link Station v3.0.2 loaded');
   
   // State management
   const [currentState, setCurrentState] = useState('registerName'); // registerName, makeOrJoinRoom, makeroom, joinroom, checkpassword, joinroomwithqr, waitingroom, telepathy, telepathyResult, adminPassword, adminDashboard, adminStatus, adminCleanup, adminShutdown, adminChangePassword
