@@ -1337,7 +1337,14 @@ app.get('/api/room/:roomId', async (req, res) => {
         room.liarState = 'result';
         room.gameState = 'liarResult';
         room.liarResultScenario = 'C';
-        room.liarResultData = { liarNickname: liarUser?.displayName || liarUser?.nickname, condemnedNickname: condemnedUser?.displayName || condemnedUser?.nickname, secretWord: room.liarSecretWord };
+        room.liarResultData = { liarNickname: liarUser?.displayName || liarUser?.nickname, condemnedNickname: condemnedUser?.displayName || condemnedUser?.nickname, secretWord: room.liarSecretWord, voteRankingSnapshot: buildLiarVoteRankingSnapshot(room) };
+        await storage.saveRoom(room);
+      } else if (room.liarState === 'identify' && room.liarCondemnedUserId === room.liarLiarUserId && room.liarGuessEndsAt && now >= room.liarGuessEndsAt && !room.liarGuessedWord) {
+        const liarUser = room.users.get(room.liarLiarUserId);
+        room.liarState = 'result';
+        room.gameState = 'liarResult';
+        room.liarResultScenario = 'B';
+        room.liarResultData = { liarNickname: liarUser?.displayName || liarUser?.nickname, secretWord: room.liarSecretWord, liarNoGuess: true, voteRankingSnapshot: buildLiarVoteRankingSnapshot(room) };
         await storage.saveRoom(room);
       }
     }
@@ -1618,7 +1625,8 @@ app.post('/api/liar-difficult-word', async (req, res) => {
     room.liarResultData = {
       liarNickname: liarUser?.displayName || liarUser?.nickname,
       secretWord: room.liarSecretWord,
-      wordAuthorNickname: authorUser?.displayName || authorUser?.nickname
+      wordAuthorNickname: authorUser?.displayName || authorUser?.nickname,
+      voteRankingSnapshot: buildLiarVoteRankingSnapshot(room)
     };
   }
   room.lastActivity = Date.now();
@@ -1727,6 +1735,28 @@ app.post('/api/liar-forgive-execute', async (req, res) => {
   res.json({ success: true });
 });
 
+// Helper: build vote ranking snapshot (names at result time - like Telepathy matchResult)
+function buildLiarVoteRankingSnapshot(room) {
+  const votes = room.liarVotes || new Map();
+  const voteCounts = {};
+  const votersByTarget = {};
+  for (const [voterId, targetId] of votes) {
+    voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
+    (votersByTarget[targetId] = votersByTarget[targetId] || []).push(voterId);
+  }
+  const allTargetIds = [...new Set(Object.keys(voteCounts))];
+  return allTargetIds
+    .sort((a, b) => (voteCounts[b] || 0) - (voteCounts[a] || 0))
+    .map((id) => {
+      const u = room.users?.get(id);
+      const voterNames = (votersByTarget[id] || []).map((vid) => {
+        const v = room.users?.get(vid);
+        return v?.displayName || v?.nickname || '?';
+      });
+      return { id, name: u?.displayName || u?.nickname || '?', voteCount: voteCounts[id] || 0, voterNames };
+    });
+}
+
 // Liar: Liar guesses the word (identify state, when condemned is liar)
 app.post('/api/liar-guess', async (req, res) => {
   const { roomId, userId, guessedWord } = req.body;
@@ -1737,6 +1767,12 @@ app.post('/api/liar-guess', async (req, res) => {
   if (userId !== room.liarLiarUserId || room.liarCondemnedUserId !== room.liarLiarUserId) {
     return res.status(403).json({ success: false, message: '사형수(라이어)만 추측할 수 있습니다.' });
   }
+  if (room.liarGuessedWord) {
+    return res.status(400).json({ success: false, message: '이미 제출했습니다.' });
+  }
+  if (room.liarGuessEndsAt && Date.now() >= room.liarGuessEndsAt) {
+    return res.status(400).json({ success: false, message: '제한 시간이 지났습니다.' });
+  }
   const normalized = (guessedWord || '').trim().replace(/\s+/g, '').toLowerCase();
   const secretNorm = (room.liarSecretWord || '').replace(/\s+/g, '').toLowerCase();
   if (normalized === secretNorm) {
@@ -1744,7 +1780,7 @@ app.post('/api/liar-guess', async (req, res) => {
     room.liarState = 'result';
     room.gameState = 'liarResult';
     room.liarResultScenario = 'A';
-    room.liarResultData = { liarNickname: liarUser?.displayName || liarUser?.nickname, secretWord: room.liarSecretWord };
+    room.liarResultData = { liarNickname: liarUser?.displayName || liarUser?.nickname, secretWord: room.liarSecretWord, voteRankingSnapshot: buildLiarVoteRankingSnapshot(room) };
   } else {
     room.liarGuessedWord = (guessedWord || '').trim();
   }
@@ -1767,19 +1803,23 @@ app.post('/api/liar-identify-vote', async (req, res) => {
   if (!['인정', '노인정'].includes(choice)) return res.status(400).json({ success: false });
   room.liarIdentifyVotes.set(userId, choice);
   room.lastActivity = Date.now();
-  if (room.liarIdentifyVotes.size === normalPlayers.length) {
-    const injeong = Array.from(room.liarIdentifyVotes.values()).filter(c => c === '인정').length;
+  const injeong = Array.from(room.liarIdentifyVotes.values()).filter(c => c === '인정').length;
+  const noinjeong = Array.from(room.liarIdentifyVotes.values()).filter(c => c === '노인정').length;
+  const injeongThresh = Math.ceil(normalPlayers.length / 2);
+  const immediateInjeong = injeong >= injeongThresh;
+  const immediateNoinjeong = noinjeong > normalPlayers.length / 2;
+  if (immediateInjeong || immediateNoinjeong || room.liarIdentifyVotes.size === normalPlayers.length) {
     const liarUser = room.users.get(room.liarLiarUserId);
-    if (injeong >= Math.ceil(normalPlayers.length / 2)) {
+    if (injeong >= injeongThresh) {
       room.liarState = 'result';
       room.gameState = 'liarResult';
       room.liarResultScenario = 'A';
-      room.liarResultData = { liarNickname: liarUser?.displayName || liarUser?.nickname, secretWord: room.liarSecretWord };
+      room.liarResultData = { liarNickname: liarUser?.displayName || liarUser?.nickname, secretWord: room.liarSecretWord, voteRankingSnapshot: buildLiarVoteRankingSnapshot(room) };
     } else {
       room.liarState = 'result';
       room.gameState = 'liarResult';
       room.liarResultScenario = 'B';
-      room.liarResultData = { liarNickname: liarUser?.displayName || liarUser?.nickname, secretWord: room.liarSecretWord, guessedWord: room.liarGuessedWord };
+      room.liarResultData = { liarNickname: liarUser?.displayName || liarUser?.nickname, secretWord: room.liarSecretWord, guessedWord: room.liarGuessedWord, voteRankingSnapshot: buildLiarVoteRankingSnapshot(room) };
     }
   }
   await storage.saveRoom(room);

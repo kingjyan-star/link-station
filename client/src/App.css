@@ -154,6 +154,60 @@ body {
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
+/* Member limit: separate up/down arrows + typable input */
+.member-limit-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.member-limit-control .member-limit-btn {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f7fafc;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4a5568;
+  -webkit-tap-highlight-color: transparent;
+}
+.member-limit-control .member-limit-btn:hover {
+  background: #eef2ff;
+  border-color: #667eea;
+  color: #667eea;
+}
+.member-limit-control .member-limit-up {
+  color: #22c55e;
+}
+.member-limit-control .member-limit-up:hover {
+  background: #dcfce7;
+  border-color: #22c55e;
+  color: #16a34a;
+}
+.member-limit-control .member-limit-down {
+  color: #ef4444;
+}
+.member-limit-control .member-limit-down:hover {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #dc2626;
+}
+.member-limit-control input {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
 /* Button styles */
 .button-group {
   display: flex;
@@ -313,6 +367,29 @@ body {
   transform: translateY(-2px);
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
   border-color: #667eea;
+}
+
+/* Current user (나) - intuitive highlight: bold outline, light tint, bold font */
+.user-card.user-card-you {
+  border-width: 3px;
+  border-color: #667eea;
+  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+}
+.user-card.user-card-you .user-nickname {
+  font-weight: 700;
+}
+
+/* User still in result screen - gray box, subdued badge */
+.user-card.user-card-still-in-result {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+.user-card.user-card-still-in-result .viewing-results-badge {
+  background: none;
+  color: #64748b;
+  font-style: italic;
+  font-weight: 700;
 }
 
 .user-info {
@@ -628,30 +705,123 @@ body {
   font-size: 2rem;
   font-weight: 700;
   color: #4a5568;
+  transition: transform 0.3s ease;
+}
+.liar-timer.liar-timer-animate {
+  animation: liar-timer-roll 0.5s ease-out;
+}
+@keyframes liar-timer-roll {
+  0% { transform: scale(1.1); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .liar-card {
-  width: 160px;
-  height: 220px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-  font-weight: 600;
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-  color: #1e293b;
-  border: 3px solid rgba(255, 255, 255, 0.5);
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  width: 180px;
+  height: 252px;
+  perspective: 1000px;
   cursor: pointer;
   user-select: none;
   -webkit-touch-callout: none;
   touch-action: manipulation;
-  transition: transform 0.2s;
+}
+.liar-card-inner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transition: transform 0.5s;
+  transform-style: preserve-3d;
+}
+.liar-card.flipped .liar-card-inner {
+  transform: rotateY(180deg);
+}
+.liar-card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  background: linear-gradient(145deg, #1e1b4b 0%, #312e81 30%, #4c1d95 70%, #581c87 100%);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 14px;
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.liar-card-secret-label {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: rgba(255, 255, 255, 0.7);
+  transform: rotate(-25deg);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.liar-card-front {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  transform: rotateY(180deg);
+  background: #fff;
+  border: 2px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1e293b;
+  padding: 16px;
+  text-align: center;
+}
+.liar-card:active .liar-card-inner {
+  transform: scale(0.98);
+}
+.liar-card.flipped:active .liar-card-inner {
+  transform: rotateY(180deg) scale(0.98);
 }
 
-.liar-card:active {
-  transform: scale(0.98);
+.liar-time-buttons {
+  display: flex;
+  gap: 16px;
+}
+.liar-time-buttons button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 20px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-radius: 12px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+.liar-time-extend {
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  color: #166534;
+  border-color: #22c55e;
+}
+.liar-time-extend:hover {
+  background: linear-gradient(135deg, #bbf7d0 0%, #86efac 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+.liar-time-shorten {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  color: #991b1b;
+  border-color: #ef4444;
+}
+.liar-time-shorten:hover {
+  background: linear-gradient(135deg, #fecaca 0%, #fca5a5 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+.liar-time-arrow {
+  font-size: 1.2rem;
+  line-height: 1;
 }
 
 .liar-role-hint {
@@ -688,19 +858,6 @@ body {
   margin: 0;
 }
 
-.liar-time-buttons {
-  display: flex;
-  gap: 12px;
-}
-
-.liar-time-buttons button {
-  padding: 8px 16px;
-  font-size: 0.95rem;
-  background: #e2e8f0;
-  border: 2px solid #cbd5e0;
-  border-radius: 8px;
-  cursor: pointer;
-}
 
 .liar-start-vote-btn {
   padding: 12px 24px;
@@ -829,6 +986,69 @@ body {
   margin-bottom: 12px;
 }
 
+.liar-highlight {
+  font-weight: 700;
+  font-size: 1.15em;
+  color: #7c3aed;
+}
+.liar-result-highlight {
+  font-weight: 700;
+  font-size: 1.1em;
+  color: #6d28d9;
+}
+.liar-guess-submit {
+  padding: 14px 32px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 12px;
+}
+.liar-guess-submit:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+}
+.liar-guess-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.liar-identify-vote-buttons {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 16px;
+}
+.liar-identify-btn {
+  padding: 14px 28px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.liar-identify-yes {
+  background: linear-gradient(135deg, #dcfce7 0%, #86efac 100%);
+  color: #166534;
+  border-color: #22c55e;
+}
+.liar-identify-yes:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+.liar-identify-no {
+  background: linear-gradient(135deg, #fee2e2 0%, #fca5a5 100%);
+  color: #991b1b;
+  border-color: #ef4444;
+}
+.liar-identify-no:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
 .liar-guess input,
 .liar-identify-vote input {
   width: 100%;

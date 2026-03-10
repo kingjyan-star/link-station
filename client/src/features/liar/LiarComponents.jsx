@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 export function LiarWordInput({ attenders, submittedCount, notSubmittedNames = [], userRole, onSubmit, setError, isLoading, setIsLoading }) {
   const [word, setWord] = useState('');
@@ -66,6 +66,8 @@ export function LiarPlay({
 }) {
   const [cardFlipped, setCardFlipped] = useState(false);
   const [timeLeft, setTimeLeft] = useState(null);
+  const prevTimeLeftRef = useRef(null);
+  const [timerAnimating, setTimerAnimating] = useState(false);
   const [difficultWordTimeLeft, setDifficultWordTimeLeft] = useState(null);
 
   useEffect(() => {
@@ -75,6 +77,17 @@ export function LiarPlay({
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [mainTimerEndsAt]);
+
+  useEffect(() => {
+    if (timeLeft === null) return;
+    const prev = prevTimeLeftRef.current;
+    prevTimeLeftRef.current = timeLeft;
+    if (prev !== null && Math.abs(timeLeft - prev) > 1) {
+      setTimerAnimating(true);
+      const t = setTimeout(() => setTimerAnimating(false), 500);
+      return () => clearTimeout(t);
+    }
+  }, [timeLeft]);
 
   useEffect(() => {
     if (!playStartedAt) return;
@@ -93,7 +106,7 @@ export function LiarPlay({
     <div className="liar-play">
       <p className="liar-play-header">평화로운 마을에 라이어가 침입했습니다.</p>
       <p className="liar-play-subheader">카드 뒷면의 비밀 단어를 숨긴 채 라이어를 색출해주세요!</p>
-      <div className="liar-timer">{timeLeft !== null ? fmt(timeLeft) : '--:--'}</div>
+      <div className={`liar-timer ${timerAnimating ? 'liar-timer-animate' : ''}`}>{timeLeft !== null ? fmt(timeLeft) : '--:--'}</div>
       <div
         className={`liar-card ${cardFlipped ? 'flipped' : ''}`}
         onTouchStart={() => setCardFlipped(true)}
@@ -103,9 +116,17 @@ export function LiarPlay({
         onMouseLeave={() => setCardFlipped(false)}
         style={{ userSelect: 'none', WebkitTouchCallout: 'none' }}
       >
-        {cardFlipped
-          ? (amILiar ? '당신은 라이어입니다' : (liarMyWord || '?'))
-          : 'Top 1 Secret'}
+        <div className="liar-card-inner">
+          {cardFlipped ? (
+            <div className="liar-card-front">
+              {amILiar ? '당신은 라이어입니다' : (liarMyWord || '?')}
+            </div>
+          ) : (
+            <div className="liar-card-back">
+              <span className="liar-card-secret-label">Top 1 Secret</span>
+            </div>
+          )}
+        </div>
       </div>
       <p className="liar-role-hint">
         {amILiar ? '단어를 맞혀보세요!' : '카드를 눌러 단어를 확인하세요'}
@@ -125,8 +146,14 @@ export function LiarPlay({
       )}
       {!usedExtend ? (
         <div className="liar-time-buttons">
-          <button onClick={() => onExtendTime('extend')}>시간 연장</button>
-          <button onClick={() => onExtendTime('shorten')}>시간 단축</button>
+          <button className="liar-time-extend" onClick={() => onExtendTime('extend')} title="시간 연장">
+            <span className="liar-time-arrow">▲</span>
+            <span>시간 연장</span>
+          </button>
+          <button className="liar-time-shorten" onClick={() => onExtendTime('shorten')} title="시간 단축">
+            <span className="liar-time-arrow">▼</span>
+            <span>시간 단축</span>
+          </button>
         </div>
       ) : null}
       {isMaster && (
@@ -245,16 +272,17 @@ export function LiarIdentify({
   const condemned = attenders.find((u) => u.id === condemnedUserId);
   const condemnedNickname = condemned?.displayName || condemned?.nickname || '사형수';
   const [guess, setGuess] = useState('');
+  const [guessSubmitted, setGuessSubmitted] = useState(false);
   const [guessTimeLeft, setGuessTimeLeft] = useState(null);
   const myIdentifyVote = identifyVotes && identifyVotes[userId];
 
   useEffect(() => {
-    if (!guessEndsAt || !canGuess) return;
+    if (!guessEndsAt || !condemnedIsLiar) return;
     const tick = () => setGuessTimeLeft(Math.max(0, Math.ceil((guessEndsAt - Date.now()) / 1000)));
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [guessEndsAt, canGuess]);
+  }, [guessEndsAt, condemnedIsLiar]);
 
   if (!condemnedIsLiar) {
     const sec = identifyEndsAt ? Math.max(0, Math.ceil((identifyEndsAt - Date.now()) / 1000)) : 10;
@@ -267,19 +295,34 @@ export function LiarIdentify({
     );
   }
 
+  const guessExpired = guessTimeLeft !== null && guessTimeLeft <= 0;
+
   if (canGuess) {
     const timerDisplay = guessTimeLeft !== null ? `${guessTimeLeft}초` : '30';
     return (
       <div className="liar-guess">
-        <p>처형된 {condemnedNickname}은(는) 라이어가 맞습니다.</p>
-        <p>라이어가 처형대 밑에서 읊조리기 시작합니다..</p>
+        <p>처형된 <span className="liar-highlight">&quot;{condemnedNickname}&quot;</span>은(는) 라이어가 맞습니다.</p>
+        <p><span className="liar-highlight">&quot;{condemnedNickname}&quot;</span>이(가) 처형대 밑에서 읊조리기 시작합니다..</p>
         <div className="liar-guess-timer">{timerDisplay}</div>
         <input
           value={guess}
           onChange={(e) => setGuess(e.target.value)}
           placeholder="추측"
+          disabled={guessSubmitted}
         />
-        <button onClick={() => onGuess(guess)}>제출</button>
+        <button className="liar-guess-submit" onClick={async () => { const ok = await onGuess(guess); if (ok) setGuessSubmitted(true); }} disabled={guessExpired || guessSubmitted}>
+          제출
+        </button>
+      </div>
+    );
+  }
+
+  if (!amILiar && condemnedIsLiar && !guessedWord) {
+    return (
+      <div className="liar-identify-wait-liar">
+        <p>처형된 <span className="liar-highlight">&quot;{condemnedNickname}&quot;</span>은(는) 라이어가 맞습니다.</p>
+        <p><span className="liar-highlight">&quot;{condemnedNickname}&quot;</span>이(가) 처형대 밑에서 읊조리기 시작합니다..</p>
+        <div className="liar-guess-timer">{guessTimeLeft !== null ? `${guessTimeLeft}초` : '30'}</div>
       </div>
     );
   }
@@ -287,13 +330,13 @@ export function LiarIdentify({
   if (guessedWord && !amILiar) {
     return (
       <div className="liar-identify-vote">
-        <p>{condemnedNickname}는 &quot;{guessedWord}&quot;라고 읊조렸습니다. 인정하십니까?</p>
+        <p>{condemnedNickname}는 <span className="liar-guessed-word">&quot;{guessedWord}&quot;</span>라고 읊조렸습니다. 인정하십니까?</p>
         {myIdentifyVote ? (
           <p>선택: {myIdentifyVote}</p>
         ) : (
-          <div>
-            <button onClick={() => onIdentifyVote('인정')}>인정</button>
-            <button onClick={() => onIdentifyVote('노인정')}>노인정</button>
+          <div className="liar-identify-vote-buttons">
+            <button className="liar-identify-btn liar-identify-yes" onClick={() => onIdentifyVote('인정')}>인정</button>
+            <button className="liar-identify-btn liar-identify-no" onClick={() => onIdentifyVote('노인정')}>노인정</button>
           </div>
         )}
       </div>
@@ -307,6 +350,7 @@ export function LiarResult({ scenario, data, liarMethod, attenders = [], votes =
   const liar = data?.liarNickname || '라이어';
   const word = data?.secretWord || '';
   const guessed = data?.guessedWord || '';
+  const liarNoGuess = data?.liarNoGuess;
   const condemned = data?.condemnedNickname || '';
   const author = data?.wordAuthorNickname || '';
 
@@ -314,49 +358,63 @@ export function LiarResult({ scenario, data, liarMethod, attenders = [], votes =
   let messages = [];
   if (scenarioKey === 'A') {
     messages = [
-      `${liar}이(가) 비밀 단어를 읊조리자 강력한 힘이 샘솟으며 벌떡 일어났습니다.`,
-      `${liar}은(는) ${word}을(를) 연신 외치며 마을 주민들을 모두 학살했습니다!`
+      <>{liar}이(가) 비밀 단어를 읊조리자 강력한 힘이 샘솟으며 벌떡 일어났습니다.</>,
+      <>{liar}은(는) <span className="liar-result-highlight">&quot;{word}&quot;</span>을(를) 연신 외치며 마을 주민들을 모두 학살했습니다!</>
     ];
   } else if (scenarioKey === 'B') {
+    const firstMsg = liarNoGuess
+      ? <>{liar}은(는) 아무 말도 하지 못했습니다..</>
+      : <>{liar}은(는) <span className="liar-result-highlight">&quot;{guessed}&quot;</span>(이)라고 읊조리며 생명을 다했습니다..</>;
     messages = [
-      `${liar}은(는) ${guessed}라고 읊조리며 생명을 다했습니다..`,
-      `마을주민들은 ${word}을(를) 연신 외치며 ${liar}을(를) 비웃었습니다 >_<`
+      firstMsg,
+      <>마을주민들은 <span className="liar-result-highlight">&quot;{word}&quot;</span>을(를) 연신 외치며 {liar}을(를) 비웃었습니다 &gt;_&lt;</>
     ];
   } else if (scenarioKey === 'C') {
     messages = [
-      `라이어 ${liar}이(가) 음흉한 미소를 지으며 쓰러진 ${condemned} 주머니를 뒤적거립니다.`,
-      `${liar}는 주머니 속 쪽지에 쓰여진 ${word}를 읊조리며 강력한 힘을 얻었습니다`,
-      `${liar}은(는) ${word}을(를) 연신 외치며 마을 주민들을 모두 학살했습니다!`
+      <>라이어 {liar}이(가) 음흉한 미소를 지으며 쓰러진 {condemned} 주머니를 뒤적거립니다.</>,
+      <>{liar}는 주머니 속 쪽지에 쓰여진 <span className="liar-result-highlight">&quot;{word}&quot;</span>를 읊조리며 강력한 힘을 얻었습니다</>,
+      <>{liar}은(는) <span className="liar-result-highlight">&quot;{word}&quot;</span>을(를) 연신 외치며 마을 주민들을 모두 학살했습니다!</>
     ];
   } else if (scenarioKey === 'D') {
     if (liarMethod === '랜덤') {
       messages = [
-        `비밀 단어는 ${word}였습니다.`,
-        `라이어 ${liar}은(는) 어이없는 표정을 지으며 안도했습니다..`
+        <>비밀 단어는 <span className="liar-result-highlight">&quot;{word}&quot;</span>였습니다.</>,
+        <>라이어 {liar}은(는) 어이없는 표정을 지으며 안도했습니다..</>
       ];
     } else {
       messages = [
-        `비밀 단어는 ${author}이(가) 창조한 ${word}였습니다.`,
-        `마을주민들은 고개를 저으며 ${author}을(를) 손가락질했습니다!`,
-        `라이어 ${liar}은(는) 어이없는 표정을 지으며 안도했습니다..`
+        <>비밀 단어는 {author}이(가) 창조한 <span className="liar-result-highlight">&quot;{word}&quot;</span>였습니다.</>,
+        <>마을주민들은 고개를 저으며 {author}을(를) 손가락질했습니다!</>,
+        <>라이어 {liar}은(는) 어이없는 표정을 지으며 안도했습니다..</>
       ];
     }
   } else {
-    messages = ['게임 종료'];
+    messages = [<>게임 종료</>];
   }
 
-  // Result Status: players descending by votes, with who voted
-  const voteCounts = {};
-  const votersByTarget = {};
-  for (const [voterId, targetId] of Object.entries(votes)) {
-    voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
-    (votersByTarget[targetId] = votersByTarget[targetId] || []).push(voterId);
-  }
-  const ranked = [...attenders]
-    .filter(u => voteCounts[u.id] != null)
-    .sort((a, b) => (voteCounts[b.id] || 0) - (voteCounts[a.id] || 0));
-
-  const getName = (u) => u?.displayName || u?.nickname || u?.id || '?';
+  // Result Status: use snapshot from result time (like Telepathy matchResult) so names persist when users leave
+  const snapshot = data?.voteRankingSnapshot;
+  const ranked = snapshot && snapshot.length > 0
+    ? snapshot
+    : (() => {
+        const voteCounts = {};
+        const votersByTarget = {};
+        for (const [voterId, targetId] of Object.entries(votes)) {
+          voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
+          (votersByTarget[targetId] = votersByTarget[targetId] || []).push(voterId);
+        }
+        const allTargetIds = [...new Set(Object.values(votes))];
+        return allTargetIds
+          .filter((id) => voteCounts[id] != null)
+          .sort((a, b) => (voteCounts[b] || 0) - (voteCounts[a] || 0))
+          .map((id) => {
+            const u = attenders.find((a) => a.id === id);
+            return { id, name: u ? (u.displayName || u.nickname) : '?', voteCount: voteCounts[id], voterNames: (votersByTarget[id] || []).map((vid) => {
+              const vu = attenders.find((a) => a.id === vid);
+              return vu ? (vu.displayName || vu.nickname) : '?';
+            }) };
+          });
+      })();
 
   return (
     <div className="liar-result">
@@ -370,12 +428,12 @@ export function LiarResult({ scenario, data, liarMethod, attenders = [], votes =
         <div className="liar-result-status">
           <h4>투표 결과</h4>
           <ul>
-            {ranked.map((u) => (
-              <li key={u.id}>
-                {getName(u)}: {voteCounts[u.id]}표
-                {votersByTarget[u.id]?.length > 0 && (
+            {ranked.map((r) => (
+              <li key={r.id}>
+                {r.name}: {r.voteCount}표
+                {r.voterNames?.length > 0 && (
                   <span className="liar-voters">
-                    ({votersByTarget[u.id].map(vid => getName(attenders.find(a => a.id === vid))).join(', ')})
+                    ({r.voterNames.join(', ')})
                   </span>
                 )}
               </li>

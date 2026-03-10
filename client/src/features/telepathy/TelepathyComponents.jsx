@@ -27,7 +27,7 @@ export function TelepathyPlay({
         <h3>참가자 목록</h3>
         <div className="users-grid">
           {attenders.map((user) => (
-            <div key={user.id} className="user-card">
+            <div key={user.id} className={`user-card ${user.id === userId ? 'user-card-you' : ''}`}>
               <div className="user-info">
                 <span className="user-nickname">{user.displayName || user.nickname}</span>
                 {user.id === userId && <span className="you-badge">나</span>}
@@ -95,7 +95,7 @@ export function TelepathyResult({ matches, unmatched, onReturnToWaiting, onLeave
                 <span className="match-arrow">↔️</span>
                 <span className="user-name">{match.user2.displayName || match.user2.nickname}</span>
               </div>
-              <p className="match-message">축하합니다! 파트너가 되셨습니다! 🎊</p>
+              <p className="match-message">축하합니다! 텔레파시가 통했습니다!! 🎊</p>
             </div>
           ))}
         </div>
@@ -107,7 +107,7 @@ export function TelepathyResult({ matches, unmatched, onReturnToWaiting, onLeave
           {unmatched.map((user, index) => (
             <div key={index} className="match-card fail">
               <span className="user-name">{user.displayName || user.nickname}</span>
-              <p className="match-message">아쉽네요. 다음 라운드에 도전하세요!</p>
+              <p className="match-message">아쉽네요. 텔레파시 신호가 약했습니다..</p>
             </div>
           ))}
         </div>

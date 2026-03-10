@@ -2,7 +2,7 @@
 
 **Live URL:** https://lsta.app  
 **Last Updated:** March 2026  
-**Status:** ✅ v3.0.2 – Liar spec messages, keep-alive pings, voter display deployed.
+**Status:** ✅ v3.0.3 – UX updates: user cards, room capacity, Telepathy/Liar polish, result snapshot.
 
 ### Current work in progress
 
@@ -14,6 +14,7 @@
 
 | Version | Short description |
 |---------|-------------------|
+| v3.0.3 | UX: user cards, room capacity, Telepathy/Liar polish, result snapshot |
 | v3.0.2 | Liar spec messages, keep-alive pings, voter display |
 | v3.0.1 | Liar Game 14 fixes, version/docs, API test script |
 | v3.0.0 | Offline Party Mini-Game Platform, Liar game added |
@@ -37,6 +38,13 @@
 
 ## 🚀 Deployment
 
+### Version Update (REQUIRED – Every Deploy)
+
+**Before** build/commit: Follow `UPDATE_DOCS.md` Rule 1.
+1. Ask user for version (or show recent 3 versions for them to pick).
+2. Update: `package.json`, `client/src/App.js` (console.log), `CONTEXT.md` status, `README.md`.
+3. Rebuild so the new version is in the deployed bundle.
+
 ### Build & Deploy (Windows)
 
 ```powershell
@@ -54,7 +62,7 @@ Vercel auto-deploys on push to main.
 
 ### Verify After Deploy
 
-1. Browser console → `🔗 Link Station v3.0.2 loaded`
+1. Browser console → `🔗 Link Station v3.0.3 loaded`
 2. Join room, press F5 → should stay in room
 3. 2+ users → all see each other immediately
 
@@ -342,7 +350,7 @@ Full details in `api/API_ROUTES.md`.
 
 ## 🎯 For Next Session
 
-- **v3.0.2** Liar spec messages, keep-alive, voter display deployed.
+- **v3.0.3** UX updates deployed (user cards, room capacity, Telepathy/Liar polish).
 - **Doc update trigger:** When context >85% or at session end, say: *"Read UPDATE_DOCS.md and update all documentation"*
 
 ---

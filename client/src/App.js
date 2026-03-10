@@ -19,7 +19,7 @@ import { playStateChange, playPhaseAdvance, playResult } from './shared/sound/pl
 
 function App() {
   // VERSION: Session 18 - 2026-01-25 (check console to verify deployment)
-  console.log('🔗 Link Station v3.0.2 loaded');
+  console.log('🔗 Link Station v3.0.3 loaded');
   
   // State management
   const [currentState, setCurrentState] = useState('registerName'); // registerName, makeOrJoinRoom, makeroom, joinroom, checkpassword, joinroomwithqr, waitingroom, telepathy, telepathyResult, adminPassword, adminDashboard, adminStatus, adminCleanup, adminShutdown, adminChangePassword
@@ -657,8 +657,10 @@ function App() {
           console.log('✅ Match results found, showing results to user');
           setMatches(data.matchResult.matches || []);
           setUnmatched(data.matchResult.unmatched || []);
-          playResult();
-          setCurrentState('telepathyResult');
+          if (currentState !== 'telepathyResult') {
+            playResult();
+            setCurrentState('telepathyResult');
+          }
         } else if (hasCurrentUserReturned || (!data.matchResult && data.room.gameState === 'waiting')) {
           console.log('👤 User has returned (or all returned), switching to waitingroom');
           setCurrentState('waitingroom');
@@ -765,22 +767,29 @@ function App() {
         setGameType(data.room.gameType || 'telepathy');
         setLiarSubject(data.room.liarSubject || '물건');
         setLiarMethod(data.room.liarMethod || '커스텀');
+        setRoomData(data.room);
         if (!liarCustomSubjectInputFocusedRef.current) {
           setLiarCustomSubject(data.room.liarCustomSubject || '');
         }
 
-        // Check if game started
+        // Check if game started (don't switch back to liar if user already returned)
+        const currentUserData = data.room.users?.find((u) => u.id === userId);
+        const hasReturned = currentUserData?.hasReturnedToWaiting || false;
         if (data.room.gameState === 'linking') {
           console.log('🎮 Game state changed to telepathy, switching to game polling...');
           playStateChange();
           setCurrentState('telepathy');
           startPolling();
         } else if (['liarWordInput', 'liarPlay', 'liarVote', 'liarArgument', 'liarIdentify', 'liarResult'].includes(data.room.gameState)) {
-          console.log('🎮 Liar game started, switching to liar polling...');
-          playStateChange();
-          prevLiarGameStateRef.current = data.room.gameState;
-          setCurrentState('liar');
-          startPolling();
+          if (data.room.gameState === 'liarResult' && hasReturned) {
+            // User returned to waiting; stay in waitingroom, don't bounce back
+          } else {
+            console.log('🎮 Liar game started, switching to liar polling...');
+            playStateChange();
+            prevLiarGameStateRef.current = data.room.gameState;
+            setCurrentState('liar');
+            startPolling();
+          }
         }
       }
     } catch (error) {
@@ -1395,7 +1404,11 @@ function App() {
         body: JSON.stringify({ roomId, userId, action })
       });
       const data = await res.json();
-      if (!data.success) setError(data.message || '시간 조절 실패');
+      if (data.success && pollRoomStatusRef.current) {
+        pollRoomStatusRef.current(); // Immediate poll to reflect timer change
+      } else if (!data.success) {
+        setError(data.message || '시간 조절 실패');
+      }
     } catch (e) {
       setError('네트워크 오류');
     }
@@ -1462,7 +1475,7 @@ function App() {
   };
 
   const handleLiarGuess = async (guessedWord) => {
-    if (!roomId || !userId) return;
+    if (!roomId || !userId) return false;
     try {
       const res = await fetch(`${API_URL}/api/liar-guess`, {
         method: 'POST',
@@ -1470,9 +1483,12 @@ function App() {
         body: JSON.stringify({ roomId, userId, guessedWord: (guessedWord || '').trim() })
       });
       const data = await res.json();
+      if (data.success && pollRoomStatusRef.current) pollRoomStatusRef.current();
       if (!data.success) setError(data.message || '제출 실패');
+      return !!data.success;
     } catch (e) {
       setError('네트워크 오류');
+      return false;
     }
   };
 
@@ -1485,6 +1501,7 @@ function App() {
         body: JSON.stringify({ roomId, userId, choice })
       });
       const data = await res.json();
+      if (data.success && pollRoomStatusRef.current) pollRoomStatusRef.current();
       if (!data.success) setError(data.message || '투표 실패');
     } catch (e) {
       setError('네트워크 오류');
@@ -2093,14 +2110,41 @@ function App() {
           
           <div className="input-group">
           <label htmlFor="memberLimit">최대 인원 (2-99명)</label>
-          <input
-            id="memberLimit"
-            type="number"
-            value={memberLimit}
-            onChange={(e) => setMemberLimit(parseInt(e.target.value) || 8)}
-            min="2"
-            max="99"
-          />
+          <div className="member-limit-control">
+            <button
+              type="button"
+              className="member-limit-btn member-limit-up"
+              onClick={() => setMemberLimit((m) => Math.min(99, (m || 2) + 1))}
+              aria-label="인원 증가"
+            >
+              ▲
+            </button>
+            <input
+              id="memberLimit"
+              type="number"
+              value={memberLimit}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (!Number.isNaN(v)) setMemberLimit(Math.min(99, Math.max(1, v)));
+                else if (e.target.value === '') setMemberLimit(1);
+              }}
+              onBlur={() => {
+                if (memberLimit < 2) setMemberLimit(2);
+                else if (memberLimit > 99) setMemberLimit(99);
+              }}
+              min={1}
+              max={99}
+              inputMode="numeric"
+            />
+            <button
+              type="button"
+              className="member-limit-btn member-limit-down"
+              onClick={() => setMemberLimit((m) => Math.max(2, (m || 8) - 1))}
+              aria-label="인원 감소"
+            >
+              ▼
+            </button>
+          </div>
         </div>
         
         <div className="button-group">
@@ -2316,16 +2360,19 @@ function App() {
         <h3>참가자 목록</h3>
         <div className="users-grid">
           {users.filter(user => user.role === 'attender').map(user => (
-            <div key={user.id} className="user-card">
+            <div
+              key={user.id}
+              className={`user-card ${user.id === userId ? 'user-card-you' : ''} ${(gameState === 'completed' || gameState === 'liarResult') && !user.hasReturnedToWaiting ? 'user-card-still-in-result' : ''}`}
+            >
               <div className="user-info">
                 <span className="user-nickname">{user.displayName || user.nickname}</span>
                 {user.id === userId && <span className="you-badge">나</span>}
                 {user.isMaster && <span className="master-badge">방장</span>}
                 {/* Show badges to help master identify who has returned */}
-                {gameState === 'completed' && !user.hasReturnedToWaiting && (
+                {(gameState === 'completed' || gameState === 'liarResult') && !user.hasReturnedToWaiting && (
                   <span className="viewing-results-badge" title="결과 화면을 보고 있습니다">결과 확인 중</span>
                 )}
-                {gameState === 'completed' && user.hasReturnedToWaiting && (
+                {(gameState === 'completed' || gameState === 'liarResult') && user.hasReturnedToWaiting && (
                   <span className="returned-badge" title="대기실로 돌아왔습니다">대기실</span>
                 )}
                 {/* Also show "대기실" badge when gameState is waiting but user just returned (helps with visibility) */}
@@ -2352,7 +2399,10 @@ function App() {
         <h3>관전자 목록</h3>
         <div className="users-grid">
           {users.filter(user => user.role === 'observer').map(user => (
-            <div key={user.id} className="user-card observer-card">
+            <div
+              key={user.id}
+              className={`user-card observer-card ${user.id === userId ? 'user-card-you' : ''}`}
+            >
               <div className="user-info">
                 <span className="user-nickname">{user.displayName || user.nickname}</span>
                 {user.id === userId && <span className="you-badge">나</span>}
