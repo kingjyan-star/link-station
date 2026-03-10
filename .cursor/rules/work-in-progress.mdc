@@ -1,0 +1,22 @@
+---
+description: Link Station work in progress – mandatory task list. Read before coding.
+globs:
+  - "client/src/**/*"
+  - "CONTEXT.md"
+  - "*.mdc"
+alwaysApply: false
+---
+
+# Work in Progress – Link Station
+
+**MANDATORY:** Before starting any Link Station coding task, read the **"Current work in progress"** section in `CONTEXT.md`. Use it as the primary task list.
+
+- Complete items step by step. Check them off `[ ]` → `[x]` in CONTEXT.md when done.
+- When all items are complete, delete the "Current work in progress" content per UPDATE_DOCS.md Rule 2.
+- Do not ignore or forget remaining work when taking on new tasks.
+
+**Summary of remaining work (see CONTEXT.md for full detail):**
+1. Overall – UI colors, message spacing
+2. Make room – capacity styling, separate ▲/▼
+3. In room – user count, badges, heavier grey
+4. Liar game – word input, debate, voting, guessing, result UI

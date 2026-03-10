@@ -1,12 +1,35 @@
 # 🔗 Link Station - Complete Context
 
 **Live URL:** https://lsta.app  
-**Last Updated:** March 2026  
-**Status:** ✅ v3.0.3 – UX updates: user cards, room capacity, Telepathy/Liar polish, result snapshot.
+**Last Updated:** March 10, 2026  
+**Status:** ✅ v3.0.4 – Liar UI: voting self highlight, MM:SS timer, result [라이어] badge, mosaic, 3-col table.
 
 ### Current work in progress
 
-*(Leave empty when nothing in progress. Delete items as soon as cleared.)*
+**Done:** Version badge (bottom-right); space black background + random glitches; game bg light grey, user box white; 4-feature architecture (user, room, telepathy, liar).
+
+**Remaining:**
+
+1. **Overall**
+   - [x] UI color adjustments for visibility (after background changes)
+   - [x] Message line spacing – make/join room, liar custom word input, etc. (distances too small)
+
+2. **Make room**
+   - [x] Capacity number: remove bold
+   - [x] Room capacity: remove up/down buttons beside textbox; remove spinner in textbox; add separate ▲/▼ arrows only (where spinner was)
+
+3. **In room**
+   - [x] Fix user count display: show "1/8" not "1/" (API: add roomName, memberLimit to room payload)
+   - [x] Remove "나" badge (user distinguished by UI)
+   - [x] "결과 확인중" user box: heavier grey
+   - [x] Remove "대기실" badge (distinguished by UI)
+
+4. **Liar game**
+   - [x] **Word input (custom):** "아직 외치지 않은 사람들" under textbox; badge-style box; delete ":"; self name bold + different color
+   - [x] **Debate:** On "이 단어는 선 넘었지" click → hide button and timer; message below card same as normal user
+   - [x] **Voting:** User self box distinguished (outline, color like room)
+   - [x] **Guessing:** Timer "00:00" format, not "00초"
+   - [x] **Result:** [라이어] emphasized; sentence wrapping; sentences in moving mosaic (2s or click); remove bullet below "투표 결과"; 3-column table (voted person | voters | count) with badges; self in voters bold+color; vote count bold
 
 ---
 
@@ -14,6 +37,7 @@
 
 | Version | Short description |
 |---------|-------------------|
+| v3.0.4 | Liar UI: voting self highlight, MM:SS timer, result badge/mosaic/table |
 | v3.0.3 | UX: user cards, room capacity, Telepathy/Liar polish, result snapshot |
 | v3.0.2 | Liar spec messages, keep-alive pings, voter display |
 | v3.0.1 | Liar Game 14 fixes, version/docs, API test script |
@@ -209,11 +233,15 @@ link-station/
 ├── index.html, static/         # Built React assets
 ├── api/game.js, storage.js     # Serverless API
 ├── client/src/
-│   ├── App.js                  # Orchestrator (migration in progress)
+│   ├── App.js                  # Orchestrator
 │   ├── shared/                 # API client, session, utils
-│   └── features/               # VSA slices (auth extracted)
-│       ├── auth/               # RegisterName
-│       └── ...                 # Other slices scaffolded
+│   └── features/               # 4 domain features
+│       ├── user/               # RegisterName, identity
+│       ├── room/               # MakeOrJoinRoom, MakeRoom, JoinRoom, CheckPassword, JoinRoomWithQR, WaitingRoom
+│       ├── telepathy/          # TelepathyPlay, TelepathyResult
+│       ├── liar/               # LiarWordInput, Play, Vote, Argument, Identify, Result
+│       ├── admin/              # Admin dashboard
+│       └── warnings/           # Timeout modals
 ├── ARCHITECTURE.md             # VSA routing guide
 ├── CONTEXT.md                  # This file
 └── project_config.md           # Global directives
@@ -223,7 +251,7 @@ link-station/
 
 ## 🔧 API Endpoints (Summary)
 
-**Auth:** `POST /api/check-username`  
+**User:** `POST /api/check-username`  
 **Room:** `POST /api/create-room`, `join-room`, `join-room-qr`, `check-password`  
 **Game:** `POST /api/start-game`, `select`, `GET /api/room/:roomId`, `return-to-waiting`  
 **User:** `POST /api/kick-user`, `leave-room`, `remove-user`, `ping`  
@@ -236,6 +264,18 @@ Full details in `api/API_ROUTES.md`.
 ---
 
 ## 🐛 Recent Sessions (Condensed)
+
+### Architecture Consolidation (March 2026)
+- **Focus:** 4-feature domain structure (user, room, telepathy, liar).
+- **Changes:** (1) Renamed auth → user; (2) Created features/room/ with MakeOrJoinRoom, MakeRoom, JoinRoom, CheckPassword, JoinRoomWithQR, WaitingRoom; (3) Deleted scaffold folders (room-hub, room-create, room-join, room-join-qr, waiting-room, game-linking, game-results); (4) Updated ARCHITECTURE.md feature map and migration status.
+- **Status:** RESOLVED
+
+### v3.0.3 (March 2026) - UX Updates
+- **User cards:** Current user highlighted (bold outline, light tint, bold font); still-in-result users (gray box, italic badge). Applied to Waiting Room and Telepathy Play.
+- **Room capacity:** Separate ▲/▼ arrow buttons; typable input (2–99); green extend / red shorten styling.
+- **Telepathy:** Result messages updated (텔레파시가 통했습니다 / 텔레파시 신호가 약했습니다); transition sound no longer repeats.
+- **Liar game:** Card redesign (dark back, diagonal label, white front); time buttons with arrows/colors; immediate poll after extend/shorten; timer roll animation; identify messages for normals; submit/인정/노인정 button redesign; no submit after 00:00; disable submit after send; immediate end on majority 인정/노인정; result (이) josa and styled highlights; return-to-waiting no longer bounces back; vote ranking snapshot (names persist when users leave).
+- **Status:** RESOLVED
 
 ### v3.0.1 (March 2026) - Liar Game 14 Fixes
 - **Custom subject input:** Polling no longer overwrites typing (focus guard).
@@ -350,7 +390,7 @@ Full details in `api/API_ROUTES.md`.
 
 ## 🎯 For Next Session
 
-- **v3.0.3** UX updates deployed (user cards, room capacity, Telepathy/Liar polish).
+- **v3.0.3** UX updates deployed. Architecture consolidated to 4 features (user, room, telepathy, liar).
 - **Doc update trigger:** When context >85% or at session end, say: *"Read UPDATE_DOCS.md and update all documentation"*
 
 ---

@@ -57,16 +57,12 @@ link-station/
 │       │   ├── session/        # Session persistence (save/load/clear)
 │       │   └── ui/             # Shared UI (buttons, inputs, password toggle)
 │       │
-│       └── features/           # Vertical slices
-│           ├── auth/           # Username registration
-│           ├── room-hub/       # Make or Join room bridge
-│           ├── room-create/     # Create room form
-│           ├── room-join/      # Join by name + password
-│           ├── room-join-qr/   # Join via QR code
-│           ├── waiting-room/   # Pre-game lobby
-│           ├── game-linking/   # Voting phase
-│           ├── game-results/   # Match results
-│           ├── admin/          # Admin dashboard (all admin states)
+│       └── features/           # Vertical slices (4 domain features)
+│           ├── user/           # Identity: RegisterName, admin entry
+│           ├── room/            # Room lifecycle: hub, create, join, QR, waiting
+│           ├── telepathy/       # Telepathy game: play + result
+│           ├── liar/            # Liar game: word input → play → vote → argument → identify → result
+│           ├── admin/           # Admin dashboard (all admin states)
 │           └── warnings/       # Timeout warning modals
 │
 └── .cursor/
@@ -79,24 +75,27 @@ link-station/
 
 ## 4. Feature Slices (State → Feature Map)
 
-| State            | Feature        | Purpose                                    |
-|------------------|----------------|--------------------------------------------|
-| registerName     | auth           | Username entry, duplicate check            |
-| makeOrJoinRoom   | room-hub       | Bridge: choose make room, join room, exit  |
-| makeroom         | room-create    | Create room (name, password, limit)       |
-| joinroom         | room-join      | Join by room name                          |
-| checkpassword    | room-join      | Password verification for protected rooms  |
-| joinroomwithqr   | room-join-qr   | Join via QR code URL                       |
-| waitingroom      | waiting-room   | Lobby, user list, master controls, polling |
-| telepathy        | game-linking   | Telepathy game voting phase, selections, polling |
-| telepathyResult  | game-results   | Telepathy match results, next round, leave |
-| adminPassword    | admin          | Admin login                                |
-| adminDashboard   | admin          | Admin menu                                 |
-| adminStatus      | admin          | Room/user counts, lists                    |
-| adminCleanup     | admin          | Cleanup UI                                 |
-| adminShutdown    | admin          | Shutdown toggle                            |
-| adminChangePassword | admin       | Password change                            |
-| (modals)         | warnings       | User/room/admin timeout modals             |
+**Four domain features:** user, room, telepathy, liar.
+
+| State               | Feature    | Purpose                                         |
+|---------------------|------------|-------------------------------------------------|
+| registerName        | user       | Username entry, duplicate check                 |
+| makeOrJoinRoom      | room       | Bridge: make room, join room, exit              |
+| makeroom            | room       | Create room (name, password, limit)              |
+| joinroom            | room       | Join by room name                               |
+| checkpassword       | room       | Password verification for protected rooms       |
+| joinroomwithqr      | room       | Join via QR code URL                            |
+| waitingroom         | room       | Lobby, user list, master controls, game select  |
+| telepathy           | telepathy  | Voting phase, selections, polling               |
+| telepathyResult     | telepathy  | Match results, next round, leave                |
+| liar (6 phases)      | liar       | WordInput, Play, Vote, Argument, Identify, Result |
+| adminPassword       | admin      | Admin login                                     |
+| adminDashboard      | admin      | Admin menu                                      |
+| adminStatus         | admin      | Room/user counts, lists                         |
+| adminCleanup        | admin      | Cleanup UI                                      |
+| adminShutdown       | admin      | Shutdown toggle                                 |
+| adminChangePassword | admin      | Password change                                 |
+| (modals)            | warnings   | User/room/admin timeout modals                   |
 
 ---
 
@@ -115,15 +114,17 @@ Auth → Room Hub → (Create | Join | Join QR) → Waiting Room → [Telepathy 
 
 ## 6. Migration Status
 
-| Component      | Status     | Notes                                      |
-|----------------|-----------|--------------------------------------------|
-| App.js         | Partial   | Auth extracted; other features in progress |
-| api/game.js    | Monolith  | All endpoints in one file                  |
-| features/auth  | ✅ Done   | RegisterName.jsx, uses shared api/session  |
-| features/*     | Scaffolded| Other slices: `features.md` present       |
-| shared/*       | In Use    | api/client, session, checkUsername, validateUsername |
+| Component         | Status   | Notes                                                              |
+|-------------------|----------|--------------------------------------------------------------------|
+| App.js            | Partial  | Orchestrator; room/telepathy/liar imported                         |
+| api/game.js       | Monolith | All endpoints in one file                                          |
+| features/user     | ✅ Done  | RegisterName.jsx                                                   |
+| features/room     | ✅ Done  | MakeOrJoinRoom, MakeRoom, JoinRoom, CheckPassword, JoinRoomWithQR, WaitingRoom |
+| features/telepathy| ✅ Done  | TelepathyPlay, TelepathyResult                                     |
+| features/liar     | ✅ Done  | LiarWordInput, Play, Vote, Argument, Identify, Result              |
+| shared/*          | In Use   | api/client, session, checkUsername, validateUsername              |
 
-**Migration strategy:** Extract one feature at a time. Update `App.js` to import from the feature folder. Do not change behavior during extraction.
+**Architecture (2026-03):** Consolidated to 4 domain features: user, room, telepathy, liar.
 
 ---
 
@@ -131,13 +132,10 @@ Auth → Room Hub → (Create | Join | Join QR) → Waiting Room → [Telepathy 
 
 See `api/API_ROUTES.md` for the full mapping. See `CONTEXT.md` for deployment and project overview. Summary:
 
-- **auth:** `/api/check-username`
-- **room-create:** `/api/create-room`
-- **room-join:** `/api/join-room`, `/api/check-password`
-- **room-join-qr:** `/api/join-room-qr`
-- **waiting-room:** `/api/room/:id`, `/api/kick-user`, `/api/start-game`, `/api/change-role`, `/api/leave-room`
-- **game-linking:** `/api/select`, `/api/room/:id`
-- **game-results:** `/api/return-to-waiting`, `/api/room/:id`
+- **user:** `/api/check-username`
+- **room:** `/api/create-room`, `/api/join-room`, `/api/join-room-qr`, `/api/check-password`, `/api/room/:id`, `/api/kick-user`, `/api/start-game`, `/api/change-role`, `/api/leave-room`
+- **telepathy:** `/api/select`, `/api/room/:id`, `/api/return-to-waiting`
+- **liar:** `/api/liar-*` (word, extend, vote, forgive-execute, guess, identify, etc.)
 - **admin:** `/api/admin-*` (all admin endpoints)
 - **warnings:** `/api/check-warning`, `/api/keep-alive-user`, `/api/keep-alive-room`
 
@@ -166,4 +164,4 @@ See `client/src/shared/README.md` for details.
 
 ---
 
-**Last Updated:** 2026-01-22
+**Last Updated:** 2026-03

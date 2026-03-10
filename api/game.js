@@ -1383,6 +1383,8 @@ app.get('/api/room/:roomId', async (req, res) => {
     res.set('Pragma', 'no-cache');
     const roomPayload = {
       id: roomId,
+      roomName: room.roomName,
+      memberLimit: room.memberLimit,
       users: usersWithVotingStatus,
       selections: Object.fromEntries(room.selections),
       gameState: room.gameState,
@@ -1749,11 +1751,12 @@ function buildLiarVoteRankingSnapshot(room) {
     .sort((a, b) => (voteCounts[b] || 0) - (voteCounts[a] || 0))
     .map((id) => {
       const u = room.users?.get(id);
-      const voterNames = (votersByTarget[id] || []).map((vid) => {
+      const voterIds = votersByTarget[id] || [];
+      const voterNames = voterIds.map((vid) => {
         const v = room.users?.get(vid);
         return v?.displayName || v?.nickname || '?';
       });
-      return { id, name: u?.displayName || u?.nickname || '?', voteCount: voteCounts[id] || 0, voterNames };
+      return { id, name: u?.displayName || u?.nickname || '?', voteCount: voteCounts[id] || 0, voterNames, voterIds };
     });
 }
 

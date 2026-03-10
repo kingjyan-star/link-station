@@ -1,6 +1,6 @@
 {
   "name": "link-station",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "description": "Link Station - Offline Party Mini-Game Platform (오프라인 술자리 미니게임 플랫폼)",
   "main": "api/game.js",
   "scripts": {

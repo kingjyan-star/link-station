@@ -1,11 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
 import './App.css';
 import { API_URL } from './shared/api/client.js';
 import { saveSession, loadSession, clearSession } from './shared/session/index.js';
 import { checkUsernameDuplication } from './shared/api/checkUsername.js';
 import { validateUsername } from './shared/utils/validateUsername.js';
-import { RegisterName } from './features/auth';
+import { RegisterName } from './features/user';
+import {
+  MakeOrJoinRoom,
+  MakeRoom,
+  JoinRoom,
+  CheckPassword,
+  JoinRoomWithQR,
+  WaitingRoom
+} from './features/room';
 import { TelepathyPlay, TelepathyResult } from './features/telepathy/TelepathyComponents.jsx';
 import {
   LiarWordInput,
@@ -18,8 +25,22 @@ import {
 import { playStateChange, playPhaseAdvance, playResult } from './shared/sound/playSound.js';
 
 function App() {
-  // VERSION: Session 18 - 2026-01-25 (check console to verify deployment)
-  console.log('🔗 Link Station v3.0.3 loaded');
+  // VERSION: Session 19 - 2026-03-10 (check console to verify deployment)
+  const VERSION = 'v3.0.4';
+  console.log(`🔗 Link Station ${VERSION} loaded`);
+
+  // Glitches: random count (9–16) and positions per tab load
+  const [stars] = useState(() => {
+    const COUNT = 9 + Math.floor(Math.random() * 8);
+    const COLORS = ['#e8f4fc', '#fffde7', '#ffe4ec', '#b8e6ff', '#ffffff', '#fffacd', '#ffd6e8', '#d4eeff', '#fff8dc', '#e0f4ff', '#ffeef5', '#f0f9ff', '#fff5ee', '#c8f0ff', '#ffe0eb'];
+    return Array.from({ length: COUNT }, (_, i) => ({
+      id: i,
+      left: 5 + Math.random() * 88,
+      top: 5 + Math.random() * 88,
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      delay: Math.random() * 4
+    }));
+  });
   
   // State management
   const [currentState, setCurrentState] = useState('registerName'); // registerName, makeOrJoinRoom, makeroom, joinroom, checkpassword, joinroomwithqr, waitingroom, telepathy, telepathyResult, adminPassword, adminDashboard, adminStatus, adminCleanup, adminShutdown, adminChangePassword
@@ -2025,526 +2046,6 @@ function App() {
   };
 
 
-  // Render functions
-  const renderMakeOrJoinRoom = () => (
-    <div className="make-or-join-container">
-      <div className="make-or-join-header">
-        <h2>안녕하세요, {username}님!</h2>
-        <p>원하시는 작업을 선택하세요</p>
-      </div>
-      
-      <div className="make-or-join-options">
-        <button 
-          className="make-room-button"
-          onClick={handleMakeRoom}
-        >
-          🏠 방 만들기
-        </button>
-        <button 
-          className="join-room-button"
-          onClick={handleJoinRoom}
-        >
-          🚪 방 참여하기
-        </button>
-        <button 
-          className="exit-button"
-          onClick={handleExitFromMakeOrJoin}
-        >
-          🚪 나가기
-        </button>
-      </div>
-    </div>
-  );
-
-  const renderMakeRoom = () => (
-    <div className="makeroom-container">
-      <div className="makeroom-header">
-        <h2>방 만들기</h2>
-        <p>방 설정을 입력하세요</p>
-      </div>
-      
-      <div className="makeroom-form">
-          <div className="input-group">
-          <label htmlFor="roomName">방 이름 (최대 128자)</label>
-            <input
-            id="roomName"
-              type="text"
-            value={roomName}
-            onChange={(e) => setRoomName(e.target.value)}
-            placeholder="방 이름을 입력하세요"
-            maxLength={128}
-            />
-          </div>
-          
-        <div className="input-group">
-          <label htmlFor="roomPassword">방 비밀번호 (선택사항, 최대 16자)</label>
-          <div className="password-input-wrapper">
-            <input
-              id="roomPassword"
-              type={showRoomPassword ? "text" : "password"}
-              value={roomPassword}
-              onChange={(e) => setRoomPassword(e.target.value)}
-              placeholder="비밀번호를 입력하세요 (선택사항)"
-              maxLength={16}
-            />
-            <button
-              type="button"
-              className="password-toggle-btn"
-              onClick={() => setShowRoomPassword(!showRoomPassword)}
-              tabIndex={-1}
-            >
-              {showRoomPassword ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                  <line x1="1" y1="1" x2="23" y2="23"></line>
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                  <circle cx="12" cy="12" r="3"></circle>
-                </svg>
-              )}
-            </button>
-          </div>
-        </div>
-          
-          <div className="input-group">
-          <label htmlFor="memberLimit">최대 인원 (2-99명)</label>
-          <div className="member-limit-control">
-            <button
-              type="button"
-              className="member-limit-btn member-limit-up"
-              onClick={() => setMemberLimit((m) => Math.min(99, (m || 2) + 1))}
-              aria-label="인원 증가"
-            >
-              ▲
-            </button>
-            <input
-              id="memberLimit"
-              type="number"
-              value={memberLimit}
-              onChange={(e) => {
-                const v = parseInt(e.target.value, 10);
-                if (!Number.isNaN(v)) setMemberLimit(Math.min(99, Math.max(1, v)));
-                else if (e.target.value === '') setMemberLimit(1);
-              }}
-              onBlur={() => {
-                if (memberLimit < 2) setMemberLimit(2);
-                else if (memberLimit > 99) setMemberLimit(99);
-              }}
-              min={1}
-              max={99}
-              inputMode="numeric"
-            />
-            <button
-              type="button"
-              className="member-limit-btn member-limit-down"
-              onClick={() => setMemberLimit((m) => Math.max(2, (m || 8) - 1))}
-              aria-label="인원 감소"
-            >
-              ▼
-            </button>
-          </div>
-        </div>
-        
-        <div className="button-group">
-          <button 
-            className="create-room-button"
-            onClick={handleCreateRoom}
-            disabled={isLoading || !roomName.trim() || memberLimit < 2}
-          >
-            {isLoading ? '방 생성 중...' : '방 생성하기'}
-          </button>
-          <button 
-            className="cancel-button"
-            onClick={() => {
-              setCurrentState('makeOrJoinRoom');
-              setRoomName('');
-              setRoomPassword('');
-              setMemberLimit(8);
-            }}
-          >
-            취소
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderJoinRoom = () => (
-    <div className="enterroom-container">
-      <div className="enterroom-header">
-        <h2>방 참여하기</h2>
-        <p>참여할 방의 이름을 입력하세요</p>
-      </div>
-      
-      <div className="enterroom-form">
-        <div className="input-group">
-          <label htmlFor="enteredRoomName">방 이름 (최대 128자)</label>
-            <input
-            id="enteredRoomName"
-              type="text"
-            value={enteredRoomName}
-            onChange={(e) => setEnteredRoomName(e.target.value)}
-            placeholder="방 이름을 입력하세요"
-            maxLength={128}
-          />
-        </div>
-        
-        <div className="button-group">
-          <button 
-            className="join-room-button"
-            onClick={handleJoinRoomSubmit}
-            disabled={isLoading || !enteredRoomName.trim()}
-          >
-            {isLoading ? '참여 중...' : '방 참여하기'}
-          </button>
-          <button 
-            className="cancel-button"
-            onClick={() => {
-              setCurrentState('makeOrJoinRoom');
-              setEnteredRoomName('');
-            }}
-          >
-            취소
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderCheckPassword = () => (
-    <div className="checkpassword-container">
-      <div className="checkpassword-header">
-        <h2>비밀번호 확인</h2>
-        <p>방 "{enteredRoomName}"의 비밀번호를 입력하세요</p>
-      </div>
-      
-      <div className="checkpassword-form">
-        <div className="input-group">
-          <label htmlFor="enteredPassword">방 비밀번호 (최대 16자)</label>
-          <div className="password-input-wrapper">
-            <input
-              id="enteredPassword"
-              type={showEnteredPassword ? "text" : "password"}
-              value={enteredPassword}
-              onChange={(e) => setEnteredPassword(e.target.value)}
-              placeholder="비밀번호를 입력하세요"
-              maxLength={16}
-            />
-            <button
-              type="button"
-              className="password-toggle-btn"
-              onClick={() => setShowEnteredPassword(!showEnteredPassword)}
-              tabIndex={-1}
-            >
-              {showEnteredPassword ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                  <line x1="1" y1="1" x2="23" y2="23"></line>
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                  <circle cx="12" cy="12" r="3"></circle>
-                </svg>
-              )}
-            </button>
-          </div>
-        </div>
-          
-        <div className="button-group">
-          <button 
-            className="enter-button"
-            onClick={handleCheckPassword}
-            disabled={isLoading}
-          >
-            {isLoading ? '확인 중...' : '입장하기'}
-          </button>
-          <button 
-            className="cancel-button"
-            onClick={() => {
-              setCurrentState('enterroom');
-              setEnteredPassword('');
-            }}
-          >
-            취소
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderJoinRoomWithQR = () => (
-    <div className="enterroomwithqr-container">
-      <div className="enterroomwithqr-header">
-        <h2>QR 코드로 참여하기</h2>
-        <p>사용자 이름을 입력하고 방에 참여하세요</p>
-      </div>
-      
-      <div className="enterroomwithqr-form">
-        <div className="input-group">
-          <label htmlFor="qrUsername">사용자 이름 (최대 32자)</label>
-          <input
-            id="qrUsername"
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="사용자 이름을 입력하세요"
-            maxLength={32}
-          />
-        </div>
-        
-        <div className="button-group">
-          <button 
-            className="join-button"
-            onClick={handleJoinWithQR}
-            disabled={isLoading || !username.trim()}
-          >
-            {isLoading ? '참여 중...' : '참여하기'}
-          </button>
-          <button 
-            className="cancel-button"
-            onClick={() => setCurrentState('enterroom')}
-          >
-            취소
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderWaitingRoom = () => (
-    <div className="waitingroom-container">
-      <div className="waitingroom-header">
-        <h2>🔗 링크 스테이션</h2>
-        <p>방: {roomData?.roomName} | 참여자: {users.length}/{roomData?.memberLimit}명</p>
-        <p className="current-game-badge">현재 게임: {gameType === 'telepathy' ? '텔레파시 게임' : '라이어 게임'}</p>
-        {isMaster && <span className="master-badge">방장</span>}
-      </div>
-        
-        <div className="qr-section">
-          <button 
-            className="qr-button"
-            onClick={() => setShowQR(!showQR)}
-          >
-            {showQR ? 'QR코드 숨기기' : 'QR코드로 공유하기'}
-          </button>
-          {showQR && (
-            <div className="qr-container">
-            <QRCodeSVG value={`${window.location.origin}?room=${roomId}`} size={200} />
-              <p className="qr-text">QR코드를 스캔하여 같은 방에 참여하세요!</p>
-            <p className="qr-link">링크: {window.location.origin}?room={roomId}</p>
-            </div>
-          )}
-      </div>
-      
-      {/* Role Selection Boxes */}
-      <div className="role-selection">
-        <div 
-          className={`role-box attender-box ${userRole === 'attender' ? 'active' : ''}`}
-          onClick={() => handleRoleChange('attender')}
-        >
-          <h3>참가자</h3>
-        </div>
-        <div 
-          className={`role-box observer-box ${userRole === 'observer' ? 'active' : ''}`}
-          onClick={() => handleRoleChange('observer')}
-        >
-          <h3>관전자</h3>
-        </div>
-      </div>
-      
-      {/* Attender List */}
-      <div className="attenders-list">
-        <h3>참가자 목록</h3>
-        <div className="users-grid">
-          {users.filter(user => user.role === 'attender').map(user => (
-            <div
-              key={user.id}
-              className={`user-card ${user.id === userId ? 'user-card-you' : ''} ${(gameState === 'completed' || gameState === 'liarResult') && !user.hasReturnedToWaiting ? 'user-card-still-in-result' : ''}`}
-            >
-              <div className="user-info">
-                <span className="user-nickname">{user.displayName || user.nickname}</span>
-                {user.id === userId && <span className="you-badge">나</span>}
-                {user.isMaster && <span className="master-badge">방장</span>}
-                {/* Show badges to help master identify who has returned */}
-                {(gameState === 'completed' || gameState === 'liarResult') && !user.hasReturnedToWaiting && (
-                  <span className="viewing-results-badge" title="결과 화면을 보고 있습니다">결과 확인 중</span>
-                )}
-                {(gameState === 'completed' || gameState === 'liarResult') && user.hasReturnedToWaiting && (
-                  <span className="returned-badge" title="대기실로 돌아왔습니다">대기실</span>
-                )}
-                {/* Also show "대기실" badge when gameState is waiting but user just returned (helps with visibility) */}
-                {gameState === 'waiting' && user.hasReturnedToWaiting && (
-                  <span className="returned-badge" title="대기실로 돌아왔습니다">대기실</span>
-                )}
-              </div>
-              {isMaster && user.id !== userId && (
-                <button
-                  className="kick-button"
-                  onClick={() => handleKickUserClick(user)}
-                  title="사용자 추방"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-      
-      {/* Observer List */}
-      <div className="observers-list">
-        <h3>관전자 목록</h3>
-        <div className="users-grid">
-          {users.filter(user => user.role === 'observer').map(user => (
-            <div
-              key={user.id}
-              className={`user-card observer-card ${user.id === userId ? 'user-card-you' : ''}`}
-            >
-              <div className="user-info">
-                <span className="user-nickname">{user.displayName || user.nickname}</span>
-                {user.id === userId && <span className="you-badge">나</span>}
-                {user.isMaster && <span className="master-badge">방장</span>}
-        </div>
-              {isMaster && user.id !== userId && (
-                <button
-                  className="kick-button"
-                  onClick={() => handleKickUserClick(user)}
-                  title="사용자 추방"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-      
-      {isMaster && (
-        <div className="master-controls">
-          <div className="game-select-row">
-            <button 
-              className="game-select-button"
-              onClick={() => setShowGameSelect(true)}
-              title="게임 선택"
-            >
-              게임 선택: {gameType === 'telepathy' ? '텔레파시 게임' : '라이어 게임'}
-            </button>
-          </div>
-          {showGameSelect && (
-            <div className="game-select-modal-overlay" onClick={() => setShowGameSelect(false)}>
-              <div className="game-select-modal" onClick={e => e.stopPropagation()}>
-                <h3>게임 선택</h3>
-                <button 
-                  className={`game-option ${gameType === 'telepathy' ? 'active' : ''}`}
-                  onClick={() => { setShowGameSelect(false); handleSetGameType('telepathy'); }}
-                >
-                  텔레파시 게임
-                </button>
-                <button 
-                  className={`game-option ${gameType === 'liar' ? 'active' : ''}`}
-                  onClick={() => { setShowGameSelect(false); handleSetGameType('liar'); }}
-                >
-                  라이어 게임
-                </button>
-                <button className="game-select-cancel" onClick={() => setShowGameSelect(false)}>취소</button>
-              </div>
-            </div>
-          )}
-          {gameType === 'liar' && (
-            <div className="liar-settings">
-              <h4>라이어 게임 설정</h4>
-              <div className="liar-setting-row">
-                <label>주제</label>
-                <select
-                  value={liarSubject}
-                  onChange={(e) => {
-                    const newSubj = e.target.value;
-                    handleSetLiarSettings(newSubj, newSubj === '커스텀주제' ? '커스텀' : liarMethod, newSubj === '커스텀주제' ? liarCustomSubject : null);
-                  }}
-                >
-                  <option value="물건">물건</option>
-                  <option value="동물">동물</option>
-                  <option value="스포츠">스포츠</option>
-                  <option value="요리">요리</option>
-                  <option value="장소">장소</option>
-                  <option value="직업">직업</option>
-                  <option value="국가">국가</option>
-                  <option value="인물">인물</option>
-                  <option value="영화">영화</option>
-                  <option value="드라마">드라마</option>
-                  <option value="과일">과일</option>
-                  <option value="채소">채소</option>
-                  <option value="커스텀주제">커스텀주제</option>
-                </select>
-              </div>
-              {liarSubject === '커스텀주제' ? (
-                <div className="liar-setting-row">
-                  <label>커스텀 주제 (최대 16자)</label>
-                  <input
-                    type="text"
-                    value={liarCustomSubject}
-                    onChange={(e) => setLiarCustomSubject(e.target.value.slice(0, 16))}
-                    onFocus={() => { liarCustomSubjectInputFocusedRef.current = true; }}
-                    onBlur={(e) => {
-                      liarCustomSubjectInputFocusedRef.current = false;
-                      handleSetLiarSettings('커스텀주제', '커스텀', e.target.value.trim().slice(0, 16));
-                    }}
-                    placeholder="주제를 입력하세요"
-                    maxLength={16}
-                  />
-                  <p className="liar-setting-note">방식은 커스텀으로 고정됩니다</p>
-                </div>
-              ) : (
-                <div className="liar-setting-row">
-                  <label>방식</label>
-                  <select
-                    value={liarMethod}
-                    onChange={(e) => handleSetLiarSettings(liarSubject, e.target.value, null)}
-                  >
-                    <option value="랜덤">랜덤</option>
-                    <option value="커스텀">커스텀</option>
-                  </select>
-                </div>
-              )}
-              {!isMaster && (
-                <p className="liar-settings-display">주제: {liarSubject === '커스텀주제' ? (liarCustomSubject || '(입력 대기)') : liarSubject} | 방식: {liarSubject === '커스텀주제' ? '커스텀' : liarMethod}</p>
-              )}
-            </div>
-          )}
-          <button 
-            className="start-game-button"
-            onClick={handleStartGame}
-            disabled={
-              gameState !== 'waiting' || isLoading ||
-              (gameType === 'telepathy' && users.filter(u => u.role === 'attender').length < 2) ||
-              (gameType === 'liar' && users.filter(u => u.role === 'attender').length < 3)
-            }
-          >
-            {isLoading ? '게임 시작 중...' : `게임 시작 (참가자 ${users.filter(u => u.role === 'attender').length}명)`}
-          </button>
-          {gameState !== 'waiting' && (
-            <p className="waiting-message">모든 사용자가 대기실로 돌아올 때까지 기다려주세요.</p>
-          )}
-          {gameState === 'waiting' && gameType === 'telepathy' && users.filter(u => u.role === 'attender').length < 2 && (
-            <p className="waiting-message">참가자는 최소 2명 이상 필요합니다.</p>
-          )}
-          {gameState === 'waiting' && gameType === 'liar' && users.filter(u => u.role === 'attender').length < 3 && (
-            <p className="waiting-message">라이어 게임은 참가자 3명 이상 필요합니다.</p>
-          )}
-        </div>
-      )}
-      
-      <div className="room-actions">
-        <button className="leave-room-button" onClick={handleLeaveRoom}>
-          방 나가기
-        </button>
-      </div>
-    </div>
-  );
-
   const renderTelepathy = () => (
     <TelepathyPlay
       users={users}
@@ -2577,9 +2078,9 @@ function App() {
       ? (rd.liarSubmittedCount ?? 0)
       : (rd.liarUserWords ? Object.keys(rd.liarUserWords).length : 0);
     const submittedUserIds = rd.liarSubmittedUserIds || [];
-    const notSubmittedNames = attenders
+    const notSubmittedList = attenders
       .filter((a) => !submittedUserIds.includes(a.id))
-      .map((a) => a.displayName || a.nickname);
+      .map((a) => ({ id: a.id, name: a.displayName || a.nickname }));
     const votersOfCondemned = rd.liarCondemnedUserId && rd.liarVotes
       ? Object.entries(rd.liarVotes).filter(([, tid]) => tid === rd.liarCondemnedUserId).map(([uid]) => uid)
       : [];
@@ -2598,7 +2099,8 @@ function App() {
           <LiarWordInput
             attenders={attenders}
             submittedCount={submittedCount}
-            notSubmittedNames={notSubmittedNames}
+            notSubmittedList={notSubmittedList}
+            currentUserId={userId}
             userRole={userRole}
             onSubmit={handleLiarSubmitWord}
             setError={setError}
@@ -2674,6 +2176,8 @@ function App() {
             liarMethod={rd.liarMethod || liarMethod || '커스텀'}
             attenders={attenders}
             votes={rd.liarVotes || {}}
+            userId={userId}
+            liarId={rd.liarLiarUserId}
             onReturnToWaiting={handleReturnToWaitingRoom}
             onLeave={handleLeaveRoom}
           />
@@ -3314,6 +2818,21 @@ function App() {
 
   return (
       <div className="App">
+      <div className="app-stars-bg" aria-hidden="true">
+        {stars.map((s) => (
+          <span
+            key={s.id}
+            className="app-star"
+            style={{
+              left: `${s.left}%`,
+              top: `${s.top}%`,
+              color: s.color,
+              animationDelay: `${s.delay}s`
+            }}
+          />
+        ))}
+      </div>
+      <div className="app-version-badge">{VERSION}</div>
       {error && <div className="error-message">{error}</div>}
       {success && <div className="success-message">{success}</div>}
       
@@ -3340,12 +2859,99 @@ function App() {
           setLiarMyWord={setLiarMyWord}
         />
       )}
-      {currentState === 'makeOrJoinRoom' && renderMakeOrJoinRoom()}
-      {currentState === 'makeroom' && renderMakeRoom()}
-      {currentState === 'joinroom' && renderJoinRoom()}
-      {currentState === 'checkpassword' && renderCheckPassword()}
-      {currentState === 'joinroomwithqr' && renderJoinRoomWithQR()}
-      {currentState === 'waitingroom' && renderWaitingRoom()}
+      {currentState === 'makeOrJoinRoom' && (
+        <MakeOrJoinRoom
+          username={username}
+          onMakeRoom={handleMakeRoom}
+          onJoinRoom={handleJoinRoom}
+          onExit={handleExitFromMakeOrJoin}
+        />
+      )}
+      {currentState === 'makeroom' && (
+        <MakeRoom
+          roomName={roomName}
+          setRoomName={setRoomName}
+          roomPassword={roomPassword}
+          setRoomPassword={setRoomPassword}
+          showPassword={showRoomPassword}
+          setShowPassword={setShowRoomPassword}
+          memberLimit={memberLimit}
+          setMemberLimit={setMemberLimit}
+          onCreate={handleCreateRoom}
+          onCancel={() => {
+            setCurrentState('makeOrJoinRoom');
+            setRoomName('');
+            setRoomPassword('');
+            setMemberLimit(8);
+          }}
+          isLoading={isLoading}
+        />
+      )}
+      {currentState === 'joinroom' && (
+        <JoinRoom
+          enteredRoomName={enteredRoomName}
+          setEnteredRoomName={setEnteredRoomName}
+          onSubmit={handleJoinRoomSubmit}
+          onCancel={() => {
+            setCurrentState('makeOrJoinRoom');
+            setEnteredRoomName('');
+          }}
+          isLoading={isLoading}
+        />
+      )}
+      {currentState === 'checkpassword' && (
+        <CheckPassword
+          enteredRoomName={enteredRoomName}
+          enteredPassword={enteredPassword}
+          setEnteredPassword={setEnteredPassword}
+          showPassword={showEnteredPassword}
+          setShowPassword={setShowEnteredPassword}
+          onSubmit={handleCheckPassword}
+          onCancel={() => {
+            setCurrentState('joinroom');
+            setEnteredPassword('');
+          }}
+          isLoading={isLoading}
+        />
+      )}
+      {currentState === 'joinroomwithqr' && (
+        <JoinRoomWithQR
+          username={username}
+          setUsername={setUsername}
+          onSubmit={handleJoinWithQR}
+          onCancel={() => setCurrentState('joinroom')}
+          isLoading={isLoading}
+        />
+      )}
+      {currentState === 'waitingroom' && (
+        <WaitingRoom
+          roomData={roomData}
+          roomId={roomId}
+          users={users}
+          userId={userId}
+          isMaster={isMaster}
+          gameState={gameState}
+          gameType={gameType}
+          userRole={userRole}
+          showQR={showQR}
+          setShowQR={setShowQR}
+          showGameSelect={showGameSelect}
+          setShowGameSelect={setShowGameSelect}
+          liarSubject={liarSubject}
+          liarMethod={liarMethod}
+          liarCustomSubject={liarCustomSubject}
+          setLiarCustomSubject={setLiarCustomSubject}
+          liarCustomSubjectInputFocusedRef={liarCustomSubjectInputFocusedRef}
+          isLoading={isLoading}
+          attenderCount={users.filter((u) => u.role === 'attender').length}
+          onRoleChange={handleRoleChange}
+          onKickUserClick={handleKickUserClick}
+          onSetGameType={handleSetGameType}
+          onSetLiarSettings={handleSetLiarSettings}
+          onStartGame={handleStartGame}
+          onLeaveRoom={handleLeaveRoom}
+        />
+      )}
       {currentState === 'telepathy' && renderTelepathy()}
       {currentState === 'telepathyResult' && renderTelepathyResult()}
       {currentState === 'liar' && renderLiar()}

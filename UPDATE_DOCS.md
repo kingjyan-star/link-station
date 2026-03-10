@@ -4,6 +4,40 @@ Update docs when making significant changes. **There is no automatic update**—
 
 ---
 
+## 📌 Mandatory Rules (Always Follow When Applicable)
+
+### Rule 1: Version Update on Deploy (MANDATORY)
+
+**Every deployment must include a version bump.** When deploying, **always**:
+
+1. **Ask the user for the version number** (or show recent 3 versions) before updating package.json, App.js console.log, or docs.
+2. **Show at least the 3 most recent versions** with short explanations so the user can decide the next version:
+   ```
+   Recent versions:
+   - v3.0.3 – UX: user cards, room capacity, Telepathy/Liar polish, result snapshot
+   - v3.0.2 – Liar spec messages, keep-alive pings, voter display
+   - v3.0.1 – Liar Game 14 fixes, API test script
+   
+   What version for this deploy? (e.g. 3.0.2, 3.1.0)
+   ```
+3. After user confirms, update: `package.json`, `client/src/App.js` (console.log), `CONTEXT.md` status, `README.md` if applicable.
+
+---
+
+### Rule 2: Recording Current Status
+
+**During work** – record in-progress updates in documentation (e.g. CONTEXT.md "Current work in progress" section) so context is not lost across turns or context limits.
+
+**As soon as work is cleared** – delete that "Current work in progress" content. Do not leave stale in-progress items. This prevents confusion and token overuse.
+
+| When | Action |
+|------|--------|
+| Starting/fixing something | Add to "Current work in progress" in CONTEXT.md |
+| Task completed | Remove from "Current work in progress" immediately |
+| Session end | Clear or archive; do not leave dangling items |
+
+---
+
 ## 🎯 When to Update
 
 - Major features or architecture changes

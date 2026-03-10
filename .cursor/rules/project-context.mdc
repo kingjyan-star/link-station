@@ -34,3 +34,7 @@ globs:
 3. `CONTEXT.md` - Project overview, deployment, state flow, history
 
 **When asked to update docs:** Read `UPDATE_DOCS.md` and update `CONTEXT.md`.
+
+**Mandatory (when applicable):**
+- **Deploy:** ALWAYS update version first. Read UPDATE_DOCS.md Rule 1 – ask user for version (or show recent 3), then update package.json, App.js console.log, CONTEXT.md, README.md, rebuild. Never skip version bump on deploy.
+- **Work in progress:** Read UPDATE_DOCS.md Rule 2 – record in CONTEXT.md "Current work in progress", delete when cleared.
